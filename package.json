@@ -8,6 +8,7 @@
     "bun": "1.4.2"
   },
   "scripts": {
+    "start": "bun install --frozen-lockfile && bun run setup && bun run demo && bun run view",
     "setup": "bun node_modules/agent-browser/bin/agent-browser.js install",
     "app": "bun src/workflow-cli.ts app",
     "capture": "bun src/workflow-cli.ts capture",

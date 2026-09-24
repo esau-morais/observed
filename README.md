@@ -14,39 +14,37 @@ run does not establish usefulness, comprehension, or time savings for developers
 
 ## Try it
 
-Install Bun **1.4.2**, then run from the checkout:
+With Bun **1.4.2** installed, run one command from the checkout:
 
 ```bash
-bun install --frozen-lockfile
-bun run setup
-bun run demo
-bun run view
+bun start
 ```
 
-Open the localhost URL printed by `view`. Press Ctrl+C to stop the viewer.
-The demo creates its own manifests, builds the fixture, starts isolated browsers,
-captures real requests and screenshots, and closes its servers and browser
-sessions. No manifest authoring or contributor skills are required.
+It installs the pinned dependencies and browser, runs the saved comparison, and
+starts the local viewer. Open the printed localhost URL. Press Ctrl+C to stop.
 
-`demo` prints the new evidence directory. The viewer defaults to its
-duplicate-request report. To inspect another case, pass the printed report path:
+Observed creates the manifests and evidence bundles itself. You do not supply a
+manifest, assemble evidence, or run the capture steps individually. The browser
+report opens on the duplicate-request case, where one click sends two requests.
+The passing baseline, screenshots, request evidence, and named check are available
+in the report.
 
-```bash
-bun run view evidence/demo-<id>/reports/visual
-bun run view evidence/demo-<id>/reports/missing-baseline
-```
+Each run gets a new directory under `evidence/`. Earlier captures remain intact.
 
-Each run gets a new directory. An explicit `--output` directory must not exist.
-Nothing rewrites an earlier capture. `evidence/latest.json` is only a convenience
-pointer to the last selected report.
-
-On Linux, Chrome may need system libraries: `bun run setup --with-deps` uses the
-producer's documented installer. The saved local-fixture recipe launches Chrome
+The saved local-fixture recipe launches Chrome
 with `--no-sandbox`, restricts page traffic to loopback, and records its launch
 arguments. Producer version: agent-browser **0.38.1**. Browser version and actual
 viewport, locale, and timezone are recorded with every complete capture.
 
-## Run each step
+## Agent and integration interface
+
+The commands below support agents, scripts, and integrations. They are not steps
+a person needs to follow after `bun start`. An agent can prepare a trusted project
+recipe and use the same capture and comparison contracts; humans inspect the
+result in the viewer.
+
+<details>
+<summary>Lower-level commands and evidence contracts</summary>
 
 | Command | Result |
 | --- | --- |
@@ -65,6 +63,11 @@ exits nonzero and retains its failed manifest and available diagnostics.
 `compare` exits successfully when it writes a report, including a report showing
 a regression or unavailable comparison; consumers should inspect its result.
 
+`bun run setup` installs the browser separately. On Linux,
+`bun run setup --with-deps` also installs its system dependencies using the
+producer's documented installer. An explicit `--output` directory must not exist.
+`evidence/latest.json` is only a convenience pointer to the last selected report.
+
 The check counts actual `GET /api/items` requests between the saved click and
 completion followed by network idle. The expectation lives outside the candidate
 application. The HAR, raw producer output, server request ledger, screenshots,
@@ -78,7 +81,7 @@ failed, corrupted, stale (older than 24 hours), or incompatible captures make th
 affected comparison unavailable. An independently executable candidate check
 keeps its separate scope when only the baseline is unavailable.
 
-## Move or share a report
+### Portable reports
 
 Copy the entire report directory, including `base/`, `candidate/`, and `assets/`.
 Its Markdown report and artifact links are relative. On another checkout, run:
@@ -92,28 +95,21 @@ and serves those bytes with the computed result. Restart it to inspect later
 disk changes. `report.md` and `result.json` record the export-time result.
 Hashes detect changed bytes; they do not authenticate a rewritten bundle.
 
-## Import existing evidence
+### Generated-manifest import
 
 The version 1 importer remains available for existing integrations. Its behavior
 claims stay labeled **imported**; integrity checking does not turn them into
-checks executed by Observed. To try the retained TodoMVC excerpt:
+checks executed by Observed. An agent or evidence producer generates the manifest;
+it is an interchange format, not a user-authored input form.
 
-```bash
-mkdir -p evidence
-run_dir="$(mktemp -d evidence/report-example.XXXXXX)"
-cp -R tests/fixtures/todomvc/. "$run_dir/"
-bun run report "$run_dir/manifest.json" "$run_dir/report.md"
-```
+The integration entry point is
+`bun run report <generated-manifest.json> <new-report.md>`. The output parent must
+exist and the output file must be new. Missing evidence is reported as unknown.
+Exit success means written, not behavior verified. The retained
+[TodoMVC excerpt](tests/fixtures/todomvc/README.md) demonstrates the
+[version 1 contract](src/schema.ts).
 
-Expect **1 imported passed, 0 imported failed, and 1 unknown check** from the
-[TodoMVC excerpt](tests/fixtures/todomvc/README.md). Revision comparison is unknown.
-
-For your evidence, place a version 1 manifest and artifacts in one directory, then
-run `bun run report path/to/manifest.json path/to/new-report.md`. The output parent
-must exist and the output file must be new. Missing evidence is reported as unknown.
-Exit success means written, not behavior verified. See the
-[schema](src/schema.ts) and [example manifest](tests/fixtures/todomvc/manifest.json).
-Keep the input bundle immutable during generation and review.
+</details>
 
 ## Development checks
 
