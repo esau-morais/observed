@@ -95,8 +95,7 @@ Contributor skills stay in this repository. Product users must be able to run sa
 | Review comments in the current change | .agents/skills/no-comments/SKILL.md |
 | Edit documentation or interface copy | .agents/skills/unslop/SKILL.md |
 | Capture explicitly requested working preferences | .agents/skills/automate-me/SKILL.md |
-| Implement an Observed roadmap slice autonomously | .agents/skills/develop-observed/SKILL.md |
-| Verify an Observed repository change | .agents/skills/verify-changes/SKILL.md |
+| Apply Observed's working conventions | .agents/skills/observed-mode/SKILL.md |
 | Open, review, and maintain an Observed implementation PR | .agents/skills/babysit-pr/SKILL.md |
 
 Edit canonical files in `.agents/skills`. `.claude/skills` points there. Do not duplicate skills or add editor-specific dependencies. Normal verification needs no preference interview.

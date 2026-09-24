@@ -25,6 +25,22 @@ for those routine actions.
    Local evidence paths are not downloadable GitHub attachments. Keep routine
    captures gitignored; attach or curate evidence only when the task calls for it.
 
+For skill and instruction changes, check the diff, local links, and canonical
+skill discovery path:
+
+```bash
+git diff --check
+git diff --cached --check
+test -L .claude/skills
+test "$(realpath .claude/skills)" = "$(realpath .agents/skills)"
+git check-ignore evidence/verification-probe.log
+git ls-files evidence
+```
+
+Expect no routine capture files in the last command's output. Review untracked
+files explicitly; they are not covered by the diff checks. These repository checks
+do not verify application behavior.
+
 ## Inspect GitHub feedback
 
 Resolve the repository and PR from GitHub, then inspect:
@@ -68,8 +84,10 @@ Inspect reviews and their commit IDs if GitHub has no configured approval rule;
 an empty review decision does not mean approved. Do not approve your own PR or
 treat a bot suggestion, self-review, or passing CI as maintainer approval.
 
-Use GitHub's merge operation with `--match-head-commit` set to the reviewed SHA
-and a repository-supported merge method. Never use `--admin` to bypass blockers.
+Use `gh pr merge --squash --match-head-commit REVIEWED_SHA`, replacing
+`REVIEWED_SHA` with the approved head commit. Use squash merging for Observed PRs.
+If the repository disables it, report the blocker rather than switching methods.
+Never use `--admin` to bypass blockers.
 Use native auto-merge only when repository rules enforce the approval and check
 requirements. Otherwise leave the PR open until approval is present, then merge
 during an active run. Confirm the resulting GitHub state before claiming a merge.
