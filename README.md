@@ -4,10 +4,6 @@ Observed shows what a software change did, using evidence from the running syste
 
 Planned as an open-source, self-hostable tool for any coding agent and application framework, with local operation, portable reports, and optional AI. Browser applications come first.
 
-> **Status: controlled browser-capture prototype.** The saved React fixture runs
-> through capture, comparison, Markdown, and a local viewer. General application
-> setup and repair are not implemented.
-
 ## Try it
 
 With Bun **1.4.2** installed, run from the checkout:
