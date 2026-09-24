@@ -23,13 +23,19 @@ const command = Command.make(
     output,
   }) {
     const fs = yield* FileSystem.FileSystem;
+
     const manifestPath = yield* fs.realPath(manifestArgument);
+
     const input = yield* fs.readFileString(manifestPath);
+
     const manifest = yield* parseManifestJson(input);
+
     const report = yield* inspectEvidence(manifest, path.dirname(manifestPath));
+
     const outputDirectory = yield* fs.realPath(
       path.dirname(path.resolve(output)),
     );
+
     const outputPath = path.join(outputDirectory, path.basename(output));
 
     yield* fs.writeFileString(
@@ -37,6 +43,7 @@ const command = Command.make(
       renderReport(report, outputDirectory),
       { flag: 'wx' },
     );
+
     yield* Console.log(outputPath);
   }),
 ).pipe(

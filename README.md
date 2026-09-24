@@ -1,20 +1,104 @@
 # Observed
 
-Observed shows what a software change did, using evidence from the running system. Compare revisions, inspect changed behavior, and follow findings back to code. When a check fails, an existing coding agent can use the evidence to fix it, then Observed runs verification again.
+Observed compares application behavior using browser evidence, named checks, and
+source snapshots. It runs locally without a model or account.
 
-Planned as an open-source, self-hostable tool for any coding agent and application framework, with local operation, portable reports, and optional AI. Browser applications come first.
+The current capture path uses a controlled React application and one saved
+journey: **Load items must send exactly one successful request**. It captures a
+baseline, unchanged behavior, a seeded duplicate request, and an intentional
+visual change. Connecting another application requires a trusted project recipe
+in code; general application setup is not implemented yet.
 
-> **Status: Phase 0 report CLI.** Observed generates Markdown from imported evidence,
-> validates artifact references, and checks supplied hashes. Behavior results remain
-> labeled as imported. The flow below describes the intended final system,
-> including unimplemented capture, comparison, viewer, and repair paths.
+The Phase 0 developer-adoption gate remains **unverified**. A successful fixture
+run does not establish usefulness, comprehension, or time savings for developers.
 
-## Generate a report
+## Try it
 
-Install the Bun version declared in `package.json`, then run:
+Install Bun **1.4.2**, then run from the checkout:
 
 ```bash
 bun install --frozen-lockfile
+bun run setup
+bun run demo
+bun run view
+```
+
+Open the localhost URL printed by `view`. Press Ctrl+C to stop the viewer.
+The demo creates its own manifests, builds the fixture, starts isolated browsers,
+captures real requests and screenshots, and closes its servers and browser
+sessions. No manifest authoring or contributor skills are required.
+
+`demo` prints the new evidence directory. The viewer defaults to its
+duplicate-request report. To inspect another case, pass the printed report path:
+
+```bash
+bun run view evidence/demo-<id>/reports/visual
+bun run view evidence/demo-<id>/reports/missing-baseline
+```
+
+Each run gets a new directory. An explicit `--output` directory must not exist.
+Nothing rewrites an earlier capture. `evidence/latest.json` is only a convenience
+pointer to the last selected report.
+
+On Linux, Chrome may need system libraries: `bun run setup --with-deps` uses the
+producer's documented installer. The saved local-fixture recipe launches Chrome
+with `--no-sandbox`, restricts page traffic to loopback, and records its launch
+arguments. Producer version: agent-browser **0.38.1**. Browser version and actual
+viewport, locale, and timezone are recorded with every complete capture.
+
+## Run each step
+
+| Command | Result |
+| --- | --- |
+| `bun run app` | Start the baseline application for manual use; prints its URL |
+| `bun run app duplicate` | Start the deliberately broken application |
+| `bun run capture base` | Capture a new baseline source snapshot |
+| `bun run capture duplicate` | Capture the duplicate-request variant |
+| `bun run capture visual` | Capture the intentional heading change |
+| `bun run compare <base-dir> <candidate-dir>` | Evaluate evidence and export a new report bundle |
+| `bun run compare none <candidate-dir>` | Evaluate the candidate's absolute check with no baseline |
+| `bun run view [report-dir]` | Recheck and serve the selected report locally |
+
+`capture`, `compare`, and `demo` support `--output <new-directory>` and `--json`.
+JSON output uses the same schema-backed result shown to a person. A failed capture
+exits nonzero and retains its failed manifest and available diagnostics.
+`compare` exits successfully when it writes a report, including a report showing
+a regression or unavailable comparison; consumers should inspect its result.
+
+The check counts actual `GET /api/items` requests between the saved click and
+completion followed by network idle. The expectation lives outside the candidate
+application. The HAR, raw producer output, server request ledger, screenshots,
+source files, and hashes remain available for inspection. The source identity is
+a hash of the selected entry and sorted source-file hashes, including build and
+dependency inputs.
+
+A regression requires a comparable passing baseline followed by a failing
+candidate. Screenshot byte changes are observations, not regressions. Missing,
+failed, corrupted, stale (older than 24 hours), or incompatible captures make the
+affected comparison unavailable. An independently executable candidate check
+keeps its separate scope when only the baseline is unavailable.
+
+## Move or share a report
+
+Copy the entire report directory, including `base/`, `candidate/`, and `assets/`.
+Its Markdown report and artifact links are relative. On another checkout, run:
+
+```bash
+bun run view /path/to/copied-report
+```
+
+The local viewer verifies the selected manifest hashes and artifacts at startup
+and serves those bytes with the computed result. Restart it to inspect later
+disk changes. `report.md` and `result.json` record the export-time result.
+Hashes detect changed bytes; they do not authenticate a rewritten bundle.
+
+## Import existing evidence
+
+The version 1 importer remains available for existing integrations. Its behavior
+claims stay labeled **imported**; integrity checking does not turn them into
+checks executed by Observed. To try the retained TodoMVC excerpt:
+
+```bash
 mkdir -p evidence
 run_dir="$(mktemp -d evidence/report-example.XXXXXX)"
 cp -R tests/fixtures/todomvc/. "$run_dir/"
@@ -31,15 +115,20 @@ Exit success means written, not behavior verified. See the
 [schema](src/schema.ts) and [example manifest](tests/fixtures/todomvc/manifest.json).
 Keep the input bundle immutable during generation and review.
 
-Development checks:
+## Development checks
 
 ```bash
 bun run check
 ```
 
-Reports and captures stay local under gitignored `evidence/`.
+Reports and captures stay local under gitignored `evidence/`. Tests use Vitest
+under Bun; `bun test` is not the project test command.
 
-## The complete flow
+## Planned integrations
+
+The implemented slice covers local fixture capture, deterministic comparison,
+the viewer, portable reports, and version 1 imports. The broader flow below still
+includes unimplemented application adapters, delivery, and repair:
 
 ```mermaid
 flowchart TD
@@ -67,9 +156,10 @@ flowchart TD
     L -. "Accepted recipe" .-> R
 ```
 
-Every run checks permissions, records its revision and recipe, and retains the original artifacts. A repair loop stops when it succeeds, reaches its limits, makes no progress, or needs a decision. Changed expectations require a separate review.
+Future repair must preserve the named expectations and create a new run. Changed
+expectations require separate review.
 
-## More than screenshots
+### Later evidence types
 
 | Evidence | What you can inspect |
 | --- | --- |
@@ -77,7 +167,9 @@ Every run checks permissions, records its revision and recipe, and retains the o
 | Backend | API contracts, database changes, job events, distributed traces |
 | Formal checks, optional | A specified property, its assumptions, checker result, and connection to the implementation |
 
-GitHub and Slack present the same report and offer authorized follow-up actions. Remote actions need a reachable runner. AI explanations stay labeled as interpretations; an unavailable check never becomes a pass. A passing result covers its named checks, not the entire application or permission to merge.
+GitHub and Slack delivery, remote actions, and AI explanations remain unimplemented.
+A passing result covers its named checks, not the entire application or permission
+to merge.
 
 ## Project documents
 

@@ -1,17 +1,22 @@
 import { DateTime, Option, Schema } from 'effect';
 
 const text = Schema.NonEmptyString.check(Schema.isTrimmed());
+
 const id = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/));
+
 const sha256 = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+
 const unknown = Schema.Struct({
   kind: Schema.Literal('unknown'),
   reason: text,
 });
+
 const timestamp = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/),
   Schema.makeFilter(
     (value) => {
       const parsed = DateTime.make(value);
+
       return (
         Option.isSome(parsed) &&
         DateTime.formatIso(parsed.value).startsWith(value.slice(0, -1))
@@ -87,7 +92,9 @@ export const manifestSchema = Schema.Struct({
 }).check(
   Schema.makeFilter((manifest) => {
     const issues: Schema.FilterIssue[] = [];
+
     const artifactIds = new Set(manifest.artifacts.map((item) => item.id));
+
     const checkIds = new Set(manifest.checks.map((item) => item.id));
 
     if (artifactIds.size !== manifest.artifacts.length) {
@@ -125,7 +132,9 @@ export const manifestSchema = Schema.Struct({
 );
 
 export type Manifest = typeof manifestSchema.Type;
+
 export type Artifact = Manifest['artifacts'][number];
+
 export type Check = Manifest['checks'][number];
 
 export const parseManifest = Schema.decodeUnknownEffect(manifestSchema, {

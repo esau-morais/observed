@@ -1,0 +1,236 @@
+import type { Comparison, Side } from './comparison-model';
+
+function escapeText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/[\\`*_{}[\]()#+!|~.=-]/g, '\\$&')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ');
+}
+
+function link(label: string, path: string): string {
+  const destination = path.replace(/[<>\s\\]/g, (character) =>
+    encodeURIComponent(character),
+  );
+
+  return `[${escapeText(label)}](<${destination}>)`;
+}
+
+function list(values: readonly string[]): string {
+  return values.map((value) => `- ${escapeText(value)}`).join('\n');
+}
+
+function renderIdentity(side: Side, label: string): string {
+  const capture = side.manifest;
+
+  if (capture === null) {
+    return `### ${label}\n\nCapture unavailable.\n\nExecution: ${side.execution}.`;
+  }
+
+  return [
+    `### ${label}`,
+    `- Label: ${escapeText(capture.label)}`,
+    `- Full snapshot SHA-256: ${escapeText(capture.source.sha256)}`,
+    `- Capture started (UTC): ${escapeText(capture.startedAt)}`,
+    `- Capture finished (UTC): ${escapeText(capture.finishedAt)}`,
+    `- Execution: ${side.execution}`,
+  ].join('\n\n');
+}
+
+function renderCheck(side: Side, label: string): string {
+  const check = side.check;
+
+  return [
+    `### ${label}: ${escapeText(check.name)}`,
+    `**${check.outcome}** · ${escapeText(check.authority)}`,
+    escapeText(check.detail),
+    [
+      `- Expectation: ${escapeText(check.expectation)}`,
+      `- Scope: ${escapeText(check.scope)}`,
+      `- Actual: ${check.actual === null ? 'Unknown' : check.actual}`,
+      `- Check ID: ${escapeText(check.id)}`,
+    ].join('\n'),
+  ].join('\n\n');
+}
+
+function renderAvailability(result: Comparison): string {
+  const comparison = result.comparison;
+
+  if (comparison.kind === 'unavailable') {
+    return `Unavailable.\n\n${list(comparison.reasons)}`;
+  }
+
+  return [
+    `Available. ${escapeText(comparison.basis)}`,
+    `- Request count difference (candidate minus base): ${comparison.requestDifference}`,
+    `- Screenshot bytes: ${comparison.visual}`,
+  ].join('\n\n');
+}
+
+function renderLedger(side: Side, label: string): string {
+  const observations = side.observations;
+
+  if (observations === null) {
+    return `### ${label}\n\nRequest evidence unavailable.`;
+  }
+
+  const requests =
+    observations.requests.length === 0
+      ? 'No requests recorded in this window.'
+      : [
+          '| Method | Path | Status | Timestamp (UTC) |',
+          '| --- | --- | --- | --- |',
+          ...observations.requests.map(
+            (request) =>
+              `| ${escapeText(request.method)} | ${escapeText(request.path)} | ${request.status} | ${escapeText(request.startedAt)} |`,
+          ),
+        ].join('\n');
+
+  const errors =
+    observations.browserErrors.length === 0
+      ? 'No browser errors recorded in this window.'
+      : `Recorded browser errors:\n\n${list(observations.browserErrors)}`;
+
+  return [
+    `### ${label}`,
+    `Recorded window: ${escapeText(observations.window.startedAt)} to ${escapeText(observations.window.finishedAt)}.`,
+    requests,
+    errors,
+  ].join('\n\n');
+}
+
+function renderArtifacts(side: Side, label: string): string {
+  const artifacts = side.artifacts.map((artifact) => {
+    const reference =
+      artifact.path === null
+        ? escapeText(artifact.id)
+        : link(artifact.id, artifact.path);
+
+    const reason =
+      artifact.reason === null ? '' : ` ${escapeText(artifact.reason)}`;
+
+    return `- ${reference}: ${escapeText(artifact.description)}\n  - Artifact integrity: ${artifact.integrity}.${reason}`;
+  });
+
+  const screenshot =
+    side.screenshot === null
+      ? 'Screenshot unavailable.'
+      : link(
+          `Open ${label.toLowerCase()} screenshot at full size`,
+          side.screenshot,
+        );
+
+  return [
+    `### ${label}`,
+    screenshot,
+    artifacts.length === 0 ? 'No artifacts available.' : artifacts.join('\n'),
+  ].join('\n\n');
+}
+
+function renderProvenance(side: Side, label: string): string {
+  const capture = side.manifest;
+
+  if (capture === null) {
+    return `### ${label}\n\nCapture metadata unavailable.`;
+  }
+
+  const conditions = capture.conditions;
+
+  let recordedConditions: string;
+
+  if (conditions.kind === 'unavailable') {
+    recordedConditions = `- Conditions unavailable: ${escapeText(conditions.reason)}`;
+  } else {
+    const value = conditions.value;
+
+    recordedConditions = [
+      `- Browser: ${escapeText(value.browser)}`,
+      `- Platform: ${escapeText(value.platform)}`,
+      `- Bun: ${escapeText(value.bun)}`,
+      `- Viewport: ${value.viewport.width} × ${value.viewport.height} CSS px; scale ${value.viewport.scale}`,
+      `- Color scheme: ${value.colorScheme}`,
+      `- Locale: ${escapeText(value.locale)}`,
+      `- Timezone: ${escapeText(value.timezone)}`,
+      `- Fixture SHA-256: ${escapeText(value.fixtureHash)}`,
+      `- Lockfile SHA-256: ${escapeText(value.lockfileHash)}`,
+    ].join('\n');
+  }
+
+  const failure =
+    capture.execution.kind === 'failed'
+      ? `- Capture failure: ${capture.execution.category}: ${escapeText(capture.execution.reason)}`
+      : '';
+
+  return [
+    `### ${label}`,
+    [
+      `- Application: ${escapeText(capture.application)}`,
+      `- Capture ID: ${escapeText(capture.id)}`,
+      `- Manifest SHA-256: ${side.manifestHash ?? 'Unavailable'}`,
+      `- Producer: ${escapeText(capture.producer.name)}; version ${escapeText(capture.producer.version)}`,
+      `- Recipe: ${escapeText(capture.recipe.id)}`,
+      `- Recipe SHA-256: ${escapeText(capture.recipe.sha256)}`,
+      `- Source entry: ${escapeText(capture.source.entry)}`,
+      failure,
+      recordedConditions,
+    ]
+      .filter((line) => line !== '')
+      .join('\n'),
+    'Source files:',
+    capture.source.files
+      .map(
+        (file) =>
+          `- ${escapeText(file.path)}\n  - SHA-256: ${escapeText(file.sha256)}`,
+      )
+      .join('\n'),
+  ].join('\n\n');
+}
+
+export function renderComparison(result: Comparison): string {
+  const conclusionLabels = {
+    regression: 'Regression',
+    'no-regression': 'No regression',
+    unavailable: 'Conclusion unavailable',
+  };
+
+  const unresolved = [
+    ...result.base.unresolved.map((reason) => `Base: ${reason}`),
+    ...result.candidate.unresolved.map((reason) => `Candidate: ${reason}`),
+    ...result.limitations,
+  ];
+
+  return [
+    `# ${escapeText(result.title)}`,
+    '## Conclusion',
+    `**${conclusionLabels[result.conclusion.kind]}**`,
+    escapeText(result.conclusion.text),
+    `Evaluated at: ${escapeText(result.evaluatedAt)}`,
+    '## Unresolved evidence and limits',
+    unresolved.length === 0
+      ? 'No unresolved items reported. Coverage is limited to the named checks and recorded capture windows.'
+      : list(unresolved),
+    '## Selected captures',
+    renderIdentity(result.base, 'Base · before'),
+    renderIdentity(result.candidate, 'Candidate · after'),
+    '## Comparison availability',
+    renderAvailability(result),
+    '## Absolute named checks',
+    "Executed by Observed against each capture's evidence. Each result covers its stated expectation and scope; comparison availability is separate.",
+    renderCheck(result.base, 'Base · before'),
+    renderCheck(result.candidate, 'Candidate · after'),
+    '## Request ledger',
+    'Collector measurements from the recorded windows. A recorded response status is not a named check result.',
+    renderLedger(result.base, 'Base · before'),
+    renderLedger(result.candidate, 'Candidate · after'),
+    '## Screenshots and original artifacts',
+    'Screenshots are collector measurements. Artifact integrity describes availability and hash verification, not application correctness.',
+    renderArtifacts(result.base, 'Base · before'),
+    renderArtifacts(result.candidate, 'Candidate · after'),
+    '## Producer, conditions and recipe',
+    renderProvenance(result.base, 'Base · before'),
+    renderProvenance(result.candidate, 'Candidate · after'),
+    'Observed renders the saved comparison result. Imported Phase 0 evidence reports are generated separately by the CLI.',
+    '',
+  ].join('\n\n');
+}

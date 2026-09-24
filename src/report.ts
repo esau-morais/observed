@@ -38,6 +38,7 @@ function evidenceLink(result: ArtifactResult, outputDirectory: string): string {
   const relative = path
     .relative(outputDirectory, result.absolutePath)
     .split(path.sep);
+
   const href = relative
     .map((segment) =>
       encodeURIComponent(segment).replace(
@@ -56,6 +57,7 @@ function renderCheck(
 ): string {
   const detail =
     check.result.kind === 'unknown' ? check.result.reason : check.result.detail;
+
   const incomplete = reasons
     .map((reason) => `- Incomplete: ${escapeMarkdownText(reason)}`)
     .join('\n');
@@ -74,6 +76,7 @@ ${incomplete}`.trimEnd();
 
 function renderArtifact(result: ArtifactResult, link: string): string {
   let integrity: string;
+
   if (result.kind === 'unavailable') {
     integrity = `Unknown: ${escapeMarkdownText(result.reason)}`;
   } else {
@@ -81,6 +84,7 @@ function renderArtifact(result: ArtifactResult, link: string): string {
       result.integrity === 'matched'
         ? 'matched supplied hash'
         : 'computed; no supplied hash to verify';
+
     integrity = `SHA-256 ${label}: \`${result.hash}\``;
   }
 
@@ -93,37 +97,47 @@ export function renderReport(
   outputDirectory: string,
 ): string {
   const { manifest, artifacts, checks } = report;
+
   const passed = checks.filter(
     (result) => result.outcome === 'imported passed',
   ).length;
+
   const failed = checks.filter(
     (result) => result.outcome === 'imported failed',
   ).length;
+
   const incomplete = checks.filter((result) => result.outcome === 'unknown');
+
   const unavailable = artifacts.filter(
     (result) => result.kind === 'unavailable',
   ).length;
+
   const linkedArtifacts = artifacts.map((result, index) => ({
     result,
     index,
     link: evidenceLink(result, outputDirectory),
   }));
+
   const byId = new Map(
     linkedArtifacts.map((item) => [item.result.artifact.id, item]),
   );
+
   const namedChecks = checks
     .map((result) => {
       const references = [...new Set(result.check.artifactIds)]
         .map((id) => byId.get(id))
         .filter((item) => item !== undefined)
         .sort((left, right) => left.index - right.index);
+
       const evidence =
         references.length === 0
           ? 'none'
           : references.map((item) => item.link).join(', ');
+
       return renderCheck(result, evidence);
     })
     .join('\n\n');
+
   const incompleteChecks =
     incomplete.length === 0
       ? 'None among the supplied checks. This does not establish complete application coverage.'
@@ -133,12 +147,15 @@ export function renderReport(
               `- ${escapeMarkdownText(result.check.name)}: ${result.reasons.map(escapeMarkdownText).join('; ')}`,
           )
           .join('\n');
+
   const conditions = manifest.capture.conditions
     .map((condition) => `- Condition: ${escapeMarkdownText(condition)}`)
     .join('\n');
+
   const integrity = linkedArtifacts
     .map(({ result, link }) => renderArtifact(result, link))
     .join('\n');
+
   const limitations = [
     ...manifest.missingPrerequisites.map(
       (item) => `- Missing: ${escapeMarkdownText(item)}`,

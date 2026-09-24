@@ -1,4 +1,7 @@
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
+import stylex from '@stylexjs/eslint-plugin';
+import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -13,6 +16,26 @@ export default tseslint.config(
   },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
+  {
+    files: ['**/*.{ts,tsx}'],
+    plugins: {
+      '@stylistic': stylistic,
+      '@stylexjs': stylex,
+      'react-hooks': reactHooks,
+    },
+    rules: {
+      '@stylistic/padding-line-between-statements': [
+        'error',
+        { blankLine: 'always', prev: '*', next: '*' },
+        { blankLine: 'any', prev: 'import', next: 'import' },
+      ],
+      '@stylexjs/valid-styles': 'error',
+      '@stylexjs/no-unused': 'error',
+      '@stylexjs/valid-shorthands': 'error',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+    },
+  },
   {
     linterOptions: {
       reportUnusedDisableDirectives: 'error',

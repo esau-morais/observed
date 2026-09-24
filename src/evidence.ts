@@ -29,13 +29,14 @@ export type EvidenceReport = {
   checks: CheckResult[];
 };
 
-const inspectArtifact = Effect.fnUntraced(
+export const inspectArtifact = Effect.fnUntraced(
   function* (root: string, artifact: Artifact) {
     const unavailable = (reason: string): ArtifactResult => ({
       kind: 'unavailable',
       artifact,
       reason,
     });
+
     const segments = artifact.path.split('/');
 
     if (
@@ -54,6 +55,7 @@ const inspectArtifact = Effect.fnUntraced(
 
     for (const segment of segments) {
       absolutePath = path.join(absolutePath, segment);
+
       const stat = yield* nodeIo(() => lstat(absolutePath));
 
       if (stat.isSymbolicLink()) {
@@ -64,6 +66,7 @@ const inspectArtifact = Effect.fnUntraced(
     }
 
     const resolved = yield* nodeIo(() => realpath(absolutePath));
+
     const relative = path.relative(root, resolved);
 
     if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
@@ -80,6 +83,7 @@ const inspectArtifact = Effect.fnUntraced(
       ),
       (handle) => nodeIo(() => handle.close()).pipe(Effect.orDie),
     );
+
     const stat = yield* nodeIo(() => handle.stat());
 
     if (!stat.isFile()) {
@@ -87,9 +91,11 @@ const inspectArtifact = Effect.fnUntraced(
     }
 
     const hash = createHash('sha256');
+
     yield* nodeIo((signal) =>
       pipeline(handle.createReadStream({ autoClose: false }), hash, { signal }),
     );
+
     const digest = hash.digest('hex');
 
     if (artifact.sha256 !== undefined && digest !== artifact.sha256) {
@@ -130,8 +136,10 @@ function checkOutcome(
   switch (check.result.kind) {
     case 'passed':
       return 'imported passed';
+
     case 'failed':
       return 'imported failed';
+
     case 'unknown':
       return 'unknown';
   }
@@ -142,12 +150,15 @@ export const inspectEvidence = Effect.fn('inspectEvidence')(function* (
   bundleRoot: string,
 ) {
   const root = yield* nodeIo(() => realpath(bundleRoot));
+
   const artifacts = yield* Effect.forEach(
     manifest.artifacts,
     (artifact) => inspectArtifact(root, artifact),
     { concurrency: 4 },
   );
+
   const byId = new Map(artifacts.map((result) => [result.artifact.id, result]));
+
   const checks = manifest.checks.map((check): CheckResult => {
     const reasons = [...check.missingPrerequisites];
 
