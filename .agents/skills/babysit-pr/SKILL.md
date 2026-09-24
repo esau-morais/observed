@@ -25,6 +25,13 @@ for those routine actions.
    Local evidence paths are not downloadable GitHub attachments. Keep routine
    captures gitignored; attach or curate evidence only when the task calls for it.
 
+Use Conventional Commits for commit subjects and PR titles:
+`type(scope): description`, with an optional scope and `!` for a breaking change.
+Choose the type for the actual change, such as `feat`, `fix`, or `docs`. For example,
+`docs: add observed verification skills`. Check the PR title when opening or
+updating it; a squash merge can use that title even when every branch commit
+already follows the convention.
+
 For skill and instruction changes, check the diff, local links, and canonical
 skill discovery path:
 
@@ -86,8 +93,16 @@ Inspect reviews and their commit IDs if GitHub has no configured approval rule;
 an empty review decision does not mean approved. Do not approve your own PR or
 treat a bot suggestion, self-review, or passing CI as maintainer approval.
 
-Use `gh pr merge --squash --match-head-commit REVIEWED_SHA`, replacing
-`REVIEWED_SHA` with the approved head commit. Use squash merging for Observed PRs.
+Re-check the PR title before merging and correct it if needed. Pass its
+Conventional Commit subject explicitly:
+
+```bash
+gh pr merge PR_NUMBER --squash --match-head-commit REVIEWED_SHA --subject "$SUBJECT"
+```
+
+Replace `PR_NUMBER` and `REVIEWED_SHA` with the approved PR and head commit, and set
+`SUBJECT` to the checked title. Use squash merging for Observed PRs. After merging,
+inspect the resulting commit subject as well as the PR state.
 If the repository disables it, report the blocker rather than switching methods.
 Never use `--admin` to bypass blockers.
 Use native auto-merge only when repository rules enforce the approval and check
