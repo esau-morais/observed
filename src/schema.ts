@@ -1,4 +1,4 @@
-import { DateTime, Schema } from 'effect';
+import { DateTime, Option, Schema } from 'effect';
 
 const text = Schema.NonEmptyString.check(Schema.isTrimmed());
 const id = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/));
@@ -9,6 +9,16 @@ const unknown = Schema.Struct({
 });
 const timestamp = Schema.String.check(
   Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/),
+  Schema.makeFilter(
+    (value) => {
+      const parsed = DateTime.make(value);
+      return (
+        Option.isSome(parsed) &&
+        DateTime.formatIso(parsed.value).startsWith(value.slice(0, -1))
+      );
+    },
+    { message: 'Expected a valid UTC calendar timestamp without rollover' },
+  ),
 ).pipe(Schema.decodeTo(Schema.DateTimeUtcFromString));
 
 const recorded = <S extends Schema.Constraint>(value: S) =>

@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { DateTime, Effect } from 'effect';
 import { execFile } from 'node:child_process';
 import {
   cp,
@@ -96,6 +96,47 @@ test('rejects malformed, ambiguous, and dangling manifests instead of accepting 
 
   for (const input of invalidInputs) {
     await expect(Effect.runPromise(parseManifest(input))).rejects.toThrow();
+  }
+});
+
+test('rejects calendar rollover and accepts valid UTC timestamps without losing precision', async () => {
+  const captureAt = (value: string) => ({
+    ...fixtureManifest,
+    capture: {
+      ...fixtureManifest.capture,
+      startedAt: { kind: 'known', value },
+      finishedAt: { kind: 'known', value },
+    },
+  });
+
+  for (const value of [
+    '2026-02-30T00:00:00Z',
+    '2026-02-29T00:00:00Z',
+    '2026-04-31T00:00:00Z',
+    '2026-09-24T24:00:00Z',
+    '2026-09-24T00:00:60Z',
+    '2026-09-24T00:00:00.1234Z',
+    '2026-09-24T00:00:00+01:00',
+    '2026-09-24T00:00:00',
+  ]) {
+    await expect(
+      Effect.runPromise(parseManifest(captureAt(value))),
+    ).rejects.toThrow();
+  }
+
+  for (const [input, expected] of [
+    ['2024-02-29T00:00:00Z', '2024-02-29T00:00:00.000Z'],
+    ['2026-09-24T00:00:00.1Z', '2026-09-24T00:00:00.100Z'],
+    ['2026-09-24T00:00:00.12Z', '2026-09-24T00:00:00.120Z'],
+    ['2026-09-24T00:00:00.123Z', '2026-09-24T00:00:00.123Z'],
+  ] as const) {
+    const { capture } = await Effect.runPromise(
+      parseManifest(captureAt(input)),
+    );
+    expect(
+      capture.startedAt.kind === 'known' &&
+        DateTime.formatIso(capture.startedAt.value),
+    ).toBe(expected);
   }
 });
 
