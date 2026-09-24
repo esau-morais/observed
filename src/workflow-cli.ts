@@ -3,124 +3,166 @@ import { Cause, Console, Effect, FileSystem, Option, Schema } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { startApplication } from './capture/application';
 import { captureApplication } from './capture/coordinator';
-import { processOutput } from './capture/process';
-import { json } from './capture/recipe';
-import { snapshotApplication } from './capture/snapshot';
+import { json } from './encoding';
 import { exportComparison } from './export';
+import { loadProject } from './project';
 import { serveReport } from './view';
+import { buildViewer, runProject } from './workflow';
 
-const projectRoot = path.resolve(import.meta.dirname, '..');
+const toolRoot = path.resolve(import.meta.dirname, '..');
 const outputFlag = Flag.String('output').pipe(Flag.optional);
 const machineFlag = Flag.Boolean('json').pipe(Flag.withDefault(false));
+const timeoutFlag = Flag.Int('timeout').pipe(
+  Flag.withSchema(Schema.Int.check(Schema.isGreaterThan(0))),
+  Flag.withDefault(120_000),
+);
 
-const variantArgument = Argument.Literals('variant', [
-  'base',
-  'duplicate',
-  'visual',
-]).pipe(Argument.withDefault('base'));
+const printJson = (value: unknown) =>
+  Effect.sync(() => process.stdout.write(json(value)));
 
-const chooseDirectory = Effect.fn('chooseDirectory')(function* (
+const chooseDirectory = Effect.fnUntraced(function* (
   output: Option.Option<string>,
   prefix: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-
   const directory = path.resolve(
     Option.getOrElse(output, () =>
-      path.join(projectRoot, 'evidence', `${prefix}-${randomUUID()}`),
+      path.join(toolRoot, 'evidence', `${prefix}-${randomUUID()}`),
     ),
   );
-
   yield* fs.makeDirectory(path.dirname(directory), { recursive: true });
 
   return directory;
 });
 
-const buildViewer = Effect.fn('buildViewer')(function* () {
+const saveLatest = Effect.fnUntraced(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
-
-  yield* fs.makeDirectory(path.join(projectRoot, 'evidence'), {
-    recursive: true,
-  });
-
-  yield* processOutput({
-    command: process.execPath,
-    args: [path.join(projectRoot, 'node_modules/vite/bin/vite.js'), 'build'],
-    cwd: projectRoot,
-    transcript: path.join(
-      projectRoot,
-      'evidence',
-      `viewer-build-${randomUUID()}.jsonl`,
-    ),
-    timeoutMs: 60_000,
-  });
-});
-
-const saveLatest = Effect.fn('saveLatest')(function* (directory: string) {
-  const fs = yield* FileSystem.FileSystem;
-
-  yield* fs.makeDirectory(path.join(projectRoot, 'evidence'), {
-    recursive: true,
-  });
-
+  yield* fs.makeDirectory(path.join(toolRoot, 'evidence'), { recursive: true });
   yield* fs.writeFileString(
-    path.join(projectRoot, 'evidence/latest.json'),
+    path.join(toolRoot, 'evidence/latest.json'),
     json({ directory }),
   );
 });
 
-const capture = Command.make(
-  'capture',
+const openViewer = Effect.fnUntraced(function* (
+  directory: string,
+  port: number = 4173,
+) {
+  const url = yield* serveReport({ directory, port });
+  yield* Console.log(
+    `Observed: ${String(url)}\nEvidence: ${directory}\nPress Ctrl+C to stop.`,
+  );
+  yield* Effect.never;
+});
+
+const run = Command.make(
+  'run',
   {
-    variant: variantArgument,
+    project: Argument.String('project').pipe(Argument.withDefault('.')),
+    base: Flag.String('base').pipe(Flag.optional),
+    candidate: Flag.String('candidate').pipe(Flag.optional),
     output: outputFlag,
     machine: machineFlag,
-    timeout: Flag.Int('timeout').pipe(
-      Flag.withSchema(Schema.Int.check(Schema.isGreaterThan(0))),
-      Flag.withDefault(120_000),
-    ),
-    stall: Flag.Boolean('stall').pipe(
-      Flag.withDescription(
-        'Controlled failure reproduction: leave the items response pending',
-      ),
-      Flag.withDefault(false),
-    ),
+    headless: Flag.Boolean('headless').pipe(Flag.withDefault(false)),
+    timeout: timeoutFlag,
   },
-  Effect.fn('captureCommand')(function* ({
-    variant,
+  Effect.fn('runCommand')(function* ({
+    project,
+    base,
+    candidate,
     output,
     machine,
+    headless,
     timeout,
-    stall,
   }) {
-    const directory = yield* chooseDirectory(output, 'capture');
-
-    const result = yield* captureApplication({
-      projectRoot,
+    const directory = yield* chooseDirectory(output, 'run');
+    const requestedBase = Option.getOrNull(base);
+    const exported = yield* runProject({
+      projectRoot: path.resolve(project),
+      toolRoot,
       directory,
-      variant,
+      baseRevision: requestedBase === 'none' ? null : requestedBase,
+      candidateRevision: Option.getOrNull(candidate),
       timeoutMs: timeout,
-      stall,
+      quiet: machine,
     });
+    yield* saveLatest(exported.directory);
 
     if (machine) {
-      yield* Console.log(json(result));
+      yield* printJson(exported);
     } else {
       yield* Console.log(
-        `Capture ${result.manifest.execution.kind}: ${directory}\nSource snapshot: ${result.manifest.source.sha256}`,
+        `${exported.result.title}\n${exported.result.conclusion.text}`,
       );
     }
 
-    if (result.manifest.execution.kind === 'failed') {
+    if (machine || headless) {
+      if (exported.result.candidate.check.outcome === 'failed') {
+        process.exitCode = 2;
+      } else if (
+        exported.result.candidate.execution !== 'complete' ||
+        exported.result.comparison.kind === 'unavailable' ||
+        exported.result.candidate.check.outcome === 'unknown'
+      ) {
+        process.exitCode = 1;
+      }
+
+      return;
+    }
+
+    yield* openViewer(exported.directory);
+  }),
+).pipe(
+  Command.withDescription(
+    'Show the running application; use --base to compare a revision',
+  ),
+);
+
+const capture = Command.make(
+  'capture',
+  {
+    project: Argument.String('project'),
+    revision: Flag.String('revision').pipe(Flag.optional),
+    output: outputFlag,
+    machine: machineFlag,
+    timeout: timeoutFlag,
+  },
+  Effect.fn('captureCommand')(function* ({
+    project: directory,
+    revision,
+    output,
+    machine,
+    timeout,
+  }) {
+    const { root, project, recipe } = yield* loadProject(
+      path.resolve(directory),
+    );
+    const destination = yield* chooseDirectory(output, 'capture');
+    const captured = yield* captureApplication({
+      projectRoot: root,
+      toolRoot,
+      directory: destination,
+      project,
+      recipe,
+      revision: Option.getOrNull(revision),
+      label: Option.getOrElse(revision, () => 'Worktree'),
+      timeoutMs: timeout,
+    });
+    if (machine) {
+      yield* printJson(captured);
+    } else {
+      yield* Console.log(
+        `Capture ${captured.manifest.execution.kind}: ${destination}`,
+      );
+    }
+
+    if (captured.manifest.execution.kind === 'failed') {
       process.exitCode = 1;
     }
   }),
 ).pipe(
-  Command.withDescription(
-    'Run the saved request journey against an identified fixture source snapshot',
-  ),
+  Command.withDescription('Capture one project revision for agent workflows'),
 );
 
 const compare = Command.make(
@@ -133,125 +175,24 @@ const compare = Command.make(
   },
   Effect.fn('compareCommand')(function* ({ base, candidate, output, machine }) {
     const directory = yield* chooseDirectory(output, 'comparison');
-
-    yield* buildViewer();
-
+    yield* buildViewer(toolRoot, path.dirname(directory));
     const exported = yield* exportComparison({
       baseDirectory: base === 'none' ? null : path.resolve(base),
       candidateDirectory: path.resolve(candidate),
       directory,
-      projectRoot,
+      projectRoot: toolRoot,
     });
-
-    yield* saveLatest(directory);
-
+    yield* saveLatest(exported.directory);
     if (machine) {
-      yield* Console.log(json(exported));
+      yield* printJson(exported);
     } else {
       yield* Console.log(
-        `${exported.result.conclusion.text}\nReport: ${directory}/report.md\nOpen: bun run view`,
+        `${exported.result.conclusion.text}\nEvidence: ${directory}`,
       );
     }
   }),
 ).pipe(
-  Command.withDescription(
-    'Check captured requests and export a portable comparison; use none for a missing baseline',
-  ),
-);
-
-const demo = Command.make(
-  'demo',
-  {
-    output: outputFlag,
-    machine: machineFlag,
-  },
-  Effect.fn('demoCommand')(function* ({ output, machine }) {
-    const fs = yield* FileSystem.FileSystem;
-    const directory = yield* chooseDirectory(output, 'demo');
-
-    yield* fs.makeDirectory(directory);
-
-    yield* fs.makeDirectory(path.join(directory, 'captures'));
-
-    yield* fs.makeDirectory(path.join(directory, 'reports'));
-
-    const cases = [
-      { name: 'base', variant: 'base' },
-      { name: 'unchanged', variant: 'base' },
-      { name: 'duplicate', variant: 'duplicate' },
-      { name: 'visual', variant: 'visual' },
-    ] as const;
-
-    for (const item of cases) {
-      const captured = yield* captureApplication({
-        projectRoot,
-        directory: path.join(directory, 'captures', item.name),
-        variant: item.variant,
-      });
-
-      if (!machine) {
-        yield* Console.log(
-          `${item.name}: capture ${captured.manifest.execution.kind}`,
-        );
-      }
-
-      if (captured.manifest.execution.kind === 'failed') {
-        process.exitCode = 1;
-      }
-    }
-
-    yield* buildViewer();
-
-    const results = [];
-
-    for (const name of [
-      'unchanged',
-      'duplicate',
-      'visual',
-      'missing-baseline',
-    ] as const) {
-      const reportDirectory = path.join(directory, 'reports', name);
-
-      const exported = yield* exportComparison({
-        baseDirectory:
-          name === 'missing-baseline'
-            ? null
-            : path.join(directory, 'captures/base'),
-        candidateDirectory: path.join(
-          directory,
-          'captures',
-          name === 'missing-baseline' ? 'unchanged' : name,
-        ),
-        directory: reportDirectory,
-        projectRoot,
-      });
-
-      results.push({
-        name,
-        directory: reportDirectory,
-        conclusion: exported.result.conclusion,
-        comparison: exported.result.comparison.kind,
-      });
-    }
-
-    yield* saveLatest(path.join(directory, 'reports/duplicate'));
-
-    if (machine) {
-      yield* Console.log(json({ directory, results }));
-    } else {
-      for (const result of results) {
-        yield* Console.log(`${result.name}: ${result.conclusion.text}`);
-      }
-
-      yield* Console.log(
-        `\nEvidence: ${directory}\nOpen the duplicate-request report: bun run view\nThe developer-adoption gate remains unverified.`,
-      );
-    }
-  }),
-).pipe(
-  Command.withDescription(
-    'Capture base, unchanged, duplicate-request, and visual variants; generate four reports',
-  ),
+  Command.withDescription('Compare captured evidence and export the viewer'),
 );
 
 const view = Command.make(
@@ -267,84 +208,32 @@ const view = Command.make(
   },
   Effect.fn('viewCommand')(function* ({ directory, port }) {
     const fs = yield* FileSystem.FileSystem;
-    let selected: string;
+    let selected = Option.getOrNull(directory);
 
-    if (Option.isSome(directory)) {
-      selected = path.resolve(directory.value);
-    } else {
-      const latest = yield* fs.readFileString(
-        path.join(projectRoot, 'evidence/latest.json'),
-      );
-
-      const parsed = yield* Schema.decodeUnknownEffect(
+    if (selected === null) {
+      const latest = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(
           Schema.Struct({ directory: Schema.NonEmptyString }),
         ),
-      )(latest);
-
-      selected = parsed.directory;
+      )(yield* fs.readFileString(path.join(toolRoot, 'evidence/latest.json')));
+      selected = latest.directory;
     }
 
-    const url = yield* serveReport({ directory: selected, port });
-
-    yield* Console.log(
-      `Observed: ${String(url)}\nReport: ${selected}\nPress Ctrl+C to stop.`,
-    );
-
-    yield* Effect.never;
+    yield* openViewer(path.resolve(selected), port);
   }),
-).pipe(
-  Command.withDescription(
-    'Open the latest comparison locally, or supply a portable report directory',
-  ),
-);
-
-const app = Command.make(
-  'app',
-  {
-    variant: variantArgument,
-  },
-  Effect.fn('appCommand')(function* ({ variant }) {
-    const fs = yield* FileSystem.FileSystem;
-    const directory = yield* chooseDirectory(Option.none(), 'application');
-
-    yield* fs.makeDirectory(directory);
-
-    yield* snapshotApplication({ projectRoot, directory, variant });
-
-    yield* processOutput({
-      command: process.execPath,
-      args: [
-        path.join(projectRoot, 'src/capture/fixture-build.ts'),
-        path.join(directory, 'source/fixtures/request-lab'),
-        path.join(directory, 'app'),
-        variant,
-        path.join(projectRoot, 'node_modules'),
-      ],
-      cwd: projectRoot,
-      transcript: path.join(directory, 'transcript.jsonl'),
-    });
-
-    const url = yield* startApplication({
-      directory: path.join(directory, 'app'),
-      evidenceDirectory: directory,
-    });
-
-    yield* Console.log(
-      `Request lab (${variant}): ${url}\nPress Ctrl+C to stop.`,
-    );
-
-    yield* Effect.never;
-  }),
-).pipe(
-  Command.withDescription(
-    'Run a controlled application variant for manual inspection',
-  ),
-);
+).pipe(Command.withDescription('View a saved comparison'));
 
 Command.make('observed').pipe(
-  Command.withSubcommands([app, capture, compare, demo, view]),
-  Command.run({ version: '0.2.0', renderErrors: false }),
+  Command.withSubcommands([run, capture, compare, view]),
+  Command.run({ version: '0.2.0' }),
+  Effect.provideService(
+    Console.Console,
+    process.argv.some(
+      (argument) => argument === '--json' || argument === '--json=true',
+    )
+      ? { ...console, log: console.error }
+      : console,
+  ),
   Effect.scoped,
   Effect.provide(BunServices.layer),
   Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),

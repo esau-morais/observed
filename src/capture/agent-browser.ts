@@ -1,8 +1,16 @@
 import { DateTime, Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
-import { observationsSchema, type Conditions } from './model';
+import {
+  observationsSchema,
+  type Conditions,
+  type Observations,
+} from './model';
 import { processOutput } from './process';
-import { fixtureHash, json, producer, recipe, sha256 } from './recipe';
+import { json } from '../encoding';
+import { redact, redactText } from '../redact';
+import type { Recipe, Step } from './recipe';
+
+export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
 
 export class BrowserFailure extends Schema.TaggedError<BrowserFailure>()(
   'BrowserFailure',
@@ -89,10 +97,14 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   session: string;
   url: string;
   addArtifact: (id: string, filename: string, description: string) => void;
+  recipe: Recipe;
+  inputsHash: string;
+  dependenciesHash: string | null;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: 'obs-' });
   const config = path.join(options.directory, 'browser-config.json');
+  const recipe = options.recipe;
 
   yield* fs.writeFileString(config, '{}\n', { flag: 'wx' });
 
@@ -150,17 +162,49 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     options.addArtifact(
       id,
       filename,
-      `Original agent-browser ${args.join(' ')} output`,
+      `agent-browser ${args.join(' ')} output; credentials redacted`,
     );
 
     const output = yield* command(args);
 
-    yield* fs.writeFileString(path.join(options.directory, filename), output, {
-      flag: 'wx',
-    });
+    yield* fs.writeFileString(
+      path.join(options.directory, filename),
+      redactText(output),
+      {
+        flag: 'wx',
+      },
+    );
 
     return output;
   });
+
+  const step = (action: Step) => {
+    switch (action.kind) {
+      case 'navigate':
+        return command(['open', new URL(action.path, options.url).toString()]);
+      case 'click':
+        return command(['click', action.selector]);
+      case 'click-role':
+        return command([
+          'find',
+          'role',
+          action.role,
+          'click',
+          '--name',
+          action.name,
+        ]);
+      case 'fill':
+        return command(['fill', action.selector, action.value]);
+      case 'press':
+        return command(['press', action.key]);
+      case 'wait-text':
+        return command(['wait', '--text', action.text]);
+      case 'wait-selector':
+        return command(['wait', action.selector]);
+      case 'network-idle':
+        return command(['wait', '--load', 'networkidle']);
+    }
+  };
 
   const version = yield* command(['--version']);
 
@@ -199,7 +243,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     }).pipe(Effect.orDie),
   );
 
-  yield* command(['open', options.url]);
+  yield* command(['open', new URL(recipe.path, options.url).toString()]);
 
   yield* command([
     'set',
@@ -211,9 +255,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* command(['set', 'media', 'light', 'reduced-motion']);
 
-  yield* command(['wait', '--text', recipe.readyText]);
-
-  yield* command(['wait', '--load', 'networkidle']);
+  yield* Effect.forEach(recipe.ready, step, { discard: true });
 
   const observedEnvironment = yield* decode(
     environmentSchema,
@@ -242,18 +284,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* command(['network', 'har', 'start', '--content', 'none']);
 
-  yield* command([
-    'find',
-    'role',
-    recipe.action.role,
-    'click',
-    '--name',
-    recipe.action.name,
-  ]);
-
-  yield* command(['wait', '--text', recipe.completionText]);
-
-  yield* command(['wait', '--load', 'networkidle']);
+  yield* Effect.forEach(recipe.steps, step, { discard: true });
 
   const requests = yield* decode(
     requestsSchema,
@@ -273,7 +304,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   options.addArtifact(
     'requests',
     'requests.har',
-    'Original browser HAR for the measured action',
+    'Browser HAR for the recorded window; credentials redacted',
   );
 
   yield* command([
@@ -285,10 +316,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   const finishedAt = DateTime.formatIso(yield* DateTime.now);
 
-  const har = yield* decode(
-    harSchema,
-    yield* fs.readFileString(path.join(options.directory, 'requests.har')),
-  );
+  const harFile = path.join(options.directory, 'requests.har');
+  const harText = yield* fs.readFileString(harFile);
+  yield* fs.writeFileString(harFile, redactText(harText));
+  const har = yield* decode(harSchema, harText);
 
   const origin = new URL(options.url).origin;
 
@@ -323,24 +354,59 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     });
   }
 
+  yield* saveOutput('snapshot', 'snapshot.json', ['snapshot']);
+
+  let text: Observations['text'];
+
+  if (recipe.check?.kind === 'text') {
+    const selector = recipe.check.selector;
+    const count = yield* decode(
+      response(
+        Schema.Struct({
+          count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        }),
+      ),
+      yield* saveOutput('text-count', 'text-count.json', [
+        'get',
+        'count',
+        selector,
+      ]),
+    );
+    let value: string | null = null;
+
+    if (count.data.count === 1) {
+      const observed = yield* decode(
+        response(Schema.Struct({ text: Schema.String })),
+        yield* saveOutput('text', 'text.json', ['get', 'text', selector]),
+      );
+      value = observed.data.text;
+
+      if (redact(value) !== value) {
+        return yield* new BrowserFailure({
+          message:
+            'Text observation contains credentials. Exact-text evaluation and screenshot capture are unavailable.',
+        });
+      }
+    }
+
+    text = { selector, count: count.data.count, value };
+  }
+
   options.addArtifact(
     'screenshot',
     'screenshot.png',
-    'Browser screenshot after the load action',
+    'Browser screenshot after the configured actions',
   );
-
   yield* command([
     'screenshot',
     path.join(options.directory, 'screenshot.png'),
   ]);
 
-  yield* saveOutput('snapshot', 'snapshot.json', ['snapshot']);
-
   const observations = yield* Schema.decodeUnknownEffect(observationsSchema)({
     schemaVersion: 1,
     requests: har.log.entries.map((entry) => ({
       method: entry.request.method,
-      path: `${entry.request.url.pathname}${entry.request.url.search}`,
+      path: entry.request.url.pathname,
       status: entry.response.status,
       startedAt: DateTime.formatIso(entry.startedDateTime),
     })),
@@ -351,6 +417,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         .map((message) => message.text),
     ],
     window: { startedAt, finishedAt },
+    ...(text === undefined ? {} : { text }),
   });
 
   options.addArtifact(
@@ -361,12 +428,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* fs.writeFileString(
     path.join(options.directory, 'observations.json'),
-    json(observations),
+    redactText(json(observations)),
     { flag: 'wx' },
-  );
-
-  const lockfile = yield* fs.readFile(
-    path.join(options.directory, 'source/bun.lock'),
   );
 
   return {
@@ -377,7 +440,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     colorScheme: 'light',
     locale: observedEnvironment.data.result.locale,
     timezone: observedEnvironment.data.result.timezone,
-    fixtureHash,
-    lockfileHash: sha256(lockfile),
+    inputsHash: options.inputsHash,
+    dependenciesHash: options.dependenciesHash,
   } satisfies Conditions;
 });

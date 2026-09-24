@@ -1,48 +1,79 @@
-import { createHash } from 'node:crypto';
+import { Schema } from 'effect';
+import { text } from './model';
 
-export function sha256(value: string | Uint8Array): string {
-  return createHash('sha256').update(value).digest('hex');
-}
+const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const positive = Schema.Int.check(Schema.isGreaterThan(0));
 
-export function json(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
+export const routeSchema = text.check(
+  Schema.makeFilter(
+    (value) =>
+      value.startsWith('/') &&
+      !value.startsWith('//') &&
+      !/[\\\p{Cc}]/u.test(value),
+  ),
+);
 
-export const recipe = {
-  id: 'items-once-v1',
-  application: 'Observed request lab',
-  action: { role: 'button', name: 'Load items' },
-  readyText: 'Load items',
-  completionText: 'Items loaded',
-  check: {
-    id: 'one-items-request',
-    name: 'One request per load action',
-    method: 'GET',
-    path: '/api/items',
-    expectedCount: 1,
-    scope:
-      'One Load items click, from an empty isolated browser session, through completion and network idle. Later activity is outside scope.',
-  },
-  viewport: { width: 1120, height: 800, scale: 1 },
-  browserArguments: [
-    '--no-sandbox',
-    '--disable-gpu',
-    '--force-color-profile=srgb',
-  ],
-  fixture: {
-    items: [
-      { id: 'notebook', name: 'Notebook' },
-      { id: 'pencil', name: 'Pencil' },
-      { id: 'ruler', name: 'Ruler' },
-    ],
-  },
-  maxAgeMs: 86_400_000,
-} as const;
+export const stepSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('navigate'), path: routeSchema }),
+  Schema.Struct({ kind: Schema.Literal('click'), selector: text }),
+  Schema.Struct({ kind: Schema.Literal('click-role'), role: text, name: text }),
+  Schema.Struct({
+    kind: Schema.Literal('fill'),
+    selector: text,
+    value: Schema.String,
+  }),
+  Schema.Struct({ kind: Schema.Literal('press'), key: text }),
+  Schema.Struct({ kind: Schema.Literal('wait-text'), text }),
+  Schema.Struct({ kind: Schema.Literal('wait-selector'), selector: text }),
+  Schema.Struct({ kind: Schema.Literal('network-idle') }),
+]);
 
-export const recipeText = json(recipe);
+const checkIdentity = { id: text, name: text, scope: text };
 
-export const recipeHash = sha256(recipeText);
+export const checkSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('request-count'),
+    ...checkIdentity,
+    method: text.check(Schema.isPattern(/^[A-Z]+$/)),
+    path: routeSchema.check(
+      Schema.isPattern(/^[^?#]+$/, {
+        message:
+          'Request checks match a pathname without query strings or fragments',
+      }),
+    ),
+    expectedCount: count,
+    status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('text'),
+    ...checkIdentity,
+    selector: text,
+    expectedText: Schema.String,
+  }),
+]);
 
-export const fixtureHash = sha256(json(recipe.fixture));
+export const recipeSchema = Schema.Struct({
+  schemaVersion: Schema.Literal(1),
+  id: text,
+  name: text,
+  path: routeSchema,
+  ready: Schema.Array(stepSchema),
+  steps: Schema.Array(stepSchema),
+  check: Schema.NullOr(checkSchema),
+  viewport: Schema.Struct({
+    width: positive,
+    height: positive,
+    scale: positive,
+  }),
+  browserArguments: Schema.Array(text),
+  maxAgeMs: positive,
+});
 
-export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
+export type Recipe = typeof recipeSchema.Type;
+export type Step = typeof stepSchema.Type;
+export type CheckDefinition = typeof checkSchema.Type;
+
+export const parseRecipe = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(recipeSchema),
+  { onExcessProperty: 'error' },
+);

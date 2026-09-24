@@ -158,7 +158,7 @@ function Field({
 
 function Check({ side, label }: { side: Side; label: string }) {
   const check = side.check;
-  const symbols = { passed: '✓', failed: '!', unknown: '?' };
+  const symbols = { passed: '✓', failed: '!', unknown: '?', 'not-run': '–' };
 
   return (
     <section
@@ -251,11 +251,12 @@ function CaptureDetails({ side }: { side: Side }) {
               {capture.conditions.value.locale} ·{' '}
               {capture.conditions.value.timezone}
             </Field>
-            <Field label="Fixture SHA-256" mono>
-              {capture.conditions.value.fixtureHash}
+            <Field label="Startup inputs SHA-256" mono>
+              {capture.conditions.value.inputsHash}
             </Field>
-            <Field label="Lockfile SHA-256" mono>
-              {capture.conditions.value.lockfileHash}
+            <Field label="Dependency files SHA-256" mono>
+              {capture.conditions.value.dependenciesHash ??
+                'No dependency files selected'}
             </Field>
           </>
         )}
@@ -305,6 +306,14 @@ function Identity({ side, label }: { side: Side; label: string }) {
 function Availability({ result }: { result: Comparison }) {
   const comparison = result.comparison;
 
+  if (comparison.kind === 'preview') {
+    return (
+      <p {...stylex.props(styles.text)}>
+        Single capture. No comparison requested.
+      </p>
+    );
+  }
+
   return (
     <section {...stylex.props(styles.stack)} aria-labelledby="availability">
       <h2 id="availability" {...stylex.props(styles.heading)}>
@@ -341,7 +350,23 @@ export function ComparisonReport({ result }: { result: Comparison }) {
     regression: 'Regression',
     'no-regression': 'No regression',
     unavailable: 'Conclusion unavailable',
+    'not-checked': 'Visual comparison',
+    preview: 'Preview',
+    'check-failed': 'Check failed',
   };
+  const sides =
+    result.mode === 'preview'
+      ? [{ side: result.candidate, label: 'Current capture' }]
+      : [
+          { side: result.base, label: 'Before' },
+          { side: result.candidate, label: 'After' },
+        ];
+  const unresolved = sides.flatMap(({ side, label }) =>
+    side.unresolved.map((reason) => `${label}: ${reason}`),
+  );
+  const failed =
+    result.conclusion.kind === 'regression' ||
+    result.conclusion.kind === 'check-failed';
 
   return (
     <div {...stylex.props(styles.canvas)}>
@@ -351,7 +376,11 @@ export function ComparisonReport({ result }: { result: Comparison }) {
       <div {...stylex.props(styles.container)}>
         <header {...stylex.props(styles.masthead)}>
           <span {...stylex.props(styles.wordmark)}>observed</span>
-          <span {...stylex.props(styles.small)}>Local comparison report</span>
+          <span {...stylex.props(styles.small)}>
+            {result.mode === 'preview'
+              ? 'Application preview'
+              : 'Application comparison'}
+          </span>
         </header>
         <main id="report" tabIndex={-1} {...stylex.props(styles.main)}>
           <section
@@ -361,145 +390,162 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             <h1 id="report-title" {...stylex.props(styles.title)}>
               {result.title}
             </h1>
-            <div {...stylex.props(styles.stack)}>
-              <span
-                {...stylex.props(
-                  styles.badge,
-                  result.conclusion.kind === 'regression' && styles.regression,
-                  result.conclusion.kind === 'unavailable' && styles.unknown,
-                  result.conclusion.kind === 'no-regression' && styles.neutral,
-                )}
-              >
-                {result.conclusion.kind === 'no-regression' ? null : (
-                  <span aria-hidden="true">
-                    {result.conclusion.kind === 'regression' ? '!' : '?'}
-                  </span>
-                )}
-                {conclusionLabels[result.conclusion.kind]}
-              </span>
+            {failed || result.conclusion.kind === 'unavailable' ? (
               <p {...stylex.props(styles.text)}>{result.conclusion.text}</p>
-              <p {...stylex.props(styles.small)}>
-                Evaluated at{' '}
-                <time dateTime={result.evaluatedAt}>{result.evaluatedAt}</time>
-              </p>
-            </div>
-            <nav aria-label="Report sections" {...stylex.props(styles.nav)}>
-              <EvidenceLink href="#checks">Named checks</EvidenceLink>
-              <EvidenceLink href="#screenshots">Screenshots</EvidenceLink>
-              <EvidenceLink href="#requests">Request ledger</EvidenceLink>
-              <EvidenceLink href="#artifacts">Original artifacts</EvidenceLink>
-              <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
-              <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
-            </nav>
-          </section>
-
-          <section {...stylex.props(styles.stack)} aria-labelledby="unresolved">
-            <h2 id="unresolved" {...stylex.props(styles.heading)}>
-              Unresolved evidence and limits
-            </h2>
-            <ul {...stylex.props(styles.list)}>
-              {result.base.unresolved.map((reason, index) => (
-                <li key={`base-${index}`}>Base: {reason}</li>
-              ))}
-              {result.candidate.unresolved.map((reason, index) => (
-                <li key={`candidate-${index}`}>Candidate: {reason}</li>
-              ))}
-              {result.limitations.map((limitation, index) => (
-                <li key={`limit-${index}`}>{limitation}</li>
-              ))}
-            </ul>
-            {result.base.unresolved.length +
-              result.candidate.unresolved.length +
-              result.limitations.length ===
-            0 ? (
-              <p {...stylex.props(styles.text)}>
-                No unresolved items reported. Coverage is limited to the named
-                checks and recorded capture windows.
-              </p>
             ) : null}
           </section>
 
-          <section {...stylex.props(styles.section)} aria-labelledby="captures">
-            <h2 id="captures" {...stylex.props(styles.heading)}>
-              Selected captures
-            </h2>
-            <div {...stylex.props(styles.grid)}>
-              <Identity side={result.base} label="Base · before" />
-              <Identity side={result.candidate} label="Candidate · after" />
-            </div>
-          </section>
-
-          <Availability result={result} />
-
-          <section {...stylex.props(styles.section)} aria-labelledby="checks">
-            <h2 id="checks" {...stylex.props(styles.heading)}>
-              Absolute named checks
-            </h2>
-            <p {...stylex.props(styles.text)}>
-              Executed by Observed against each capture's evidence. Each result
-              covers its stated expectation and scope; comparison availability
-              is separate.
-            </p>
-            <div {...stylex.props(styles.grid)}>
-              <Check side={result.base} label="Base · before" />
-              <Check side={result.candidate} label="Candidate · after" />
-            </div>
-          </section>
-
           <section
+            id="screenshots"
             {...stylex.props(styles.section)}
-            aria-labelledby="screenshots"
+            aria-label={
+              result.mode === 'preview'
+                ? 'Application capture'
+                : 'Before and after'
+            }
           >
-            <h2 id="screenshots" {...stylex.props(styles.heading)}>
-              Screenshots
-            </h2>
-            <p {...stylex.props(styles.text)}>
-              Collector measurements. Open either image to inspect the original
-              at full size.
-            </p>
-            <div {...stylex.props(styles.grid)}>
-              <Screenshot side={result.base} label="Base · before" />
-              <Screenshot side={result.candidate} label="Candidate · after" />
+            <div {...stylex.props(result.mode === 'comparison' && styles.grid)}>
+              {sides.map(({ side, label }) => (
+                <Screenshot key={label} side={side} label={label} />
+              ))}
             </div>
           </section>
 
-          <section {...stylex.props(styles.section)} aria-labelledby="requests">
-            <h2 id="requests" {...stylex.props(styles.heading)}>
-              Request ledger
-            </h2>
-            <p {...stylex.props(styles.text)}>
-              Collector measurements from the recorded windows. A recorded
-              response status is not a named check result.
-            </p>
-            <div {...stylex.props(styles.grid)}>
-              <RequestLedger side={result.base} label="Base · before" />
-              <RequestLedger
-                side={result.candidate}
-                label="Candidate · after"
-              />
-            </div>
-          </section>
+          <details>
+            <summary {...stylex.props(styles.summary)}>
+              Checks and capture details
+            </summary>
+            <div {...stylex.props(styles.main)}>
+              <div {...stylex.props(styles.stack)}>
+                <span
+                  {...stylex.props(
+                    styles.badge,
+                    failed && styles.regression,
+                    result.conclusion.kind === 'unavailable' && styles.unknown,
+                    (result.conclusion.kind === 'no-regression' ||
+                      result.conclusion.kind === 'not-checked' ||
+                      result.conclusion.kind === 'preview') &&
+                      styles.neutral,
+                  )}
+                >
+                  {failed || result.conclusion.kind === 'unavailable' ? (
+                    <span aria-hidden="true">{failed ? '!' : '?'}</span>
+                  ) : null}
+                  {conclusionLabels[result.conclusion.kind]}
+                </span>
+                <p {...stylex.props(styles.text)}>{result.conclusion.text}</p>
+                <p {...stylex.props(styles.small)}>
+                  Evaluated at{' '}
+                  <time dateTime={result.evaluatedAt}>
+                    {result.evaluatedAt}
+                  </time>
+                </p>
+              </div>
+              <nav aria-label="Evidence" {...stylex.props(styles.nav)}>
+                <EvidenceLink href="#checks">Checks</EvidenceLink>
+                <EvidenceLink href="#requests">Requests</EvidenceLink>
+                <EvidenceLink href="#artifacts">Artifacts</EvidenceLink>
+                <EvidenceLink href="./report.md">Markdown</EvidenceLink>
+                <EvidenceLink href="./result.json">JSON</EvidenceLink>
+              </nav>
+              <section
+                {...stylex.props(styles.stack)}
+                aria-labelledby="unresolved"
+              >
+                <h2 id="unresolved" {...stylex.props(styles.heading)}>
+                  Unresolved evidence and limits
+                </h2>
+                <ul {...stylex.props(styles.list)}>
+                  {unresolved.map((reason, index) => (
+                    <li key={`capture-${index}`}>{reason}</li>
+                  ))}
+                  {result.limitations.map((limitation, index) => (
+                    <li key={`limit-${index}`}>{limitation}</li>
+                  ))}
+                </ul>
+                {unresolved.length + result.limitations.length === 0 ? (
+                  <p {...stylex.props(styles.text)}>
+                    No unresolved items reported. Coverage is limited to the
+                    named checks and recorded capture windows.
+                  </p>
+                ) : null}
+              </section>
 
-          <section
-            {...stylex.props(styles.section)}
-            aria-labelledby="artifacts"
-          >
-            <h2 id="artifacts" {...stylex.props(styles.heading)}>
-              Original artifacts
-            </h2>
-            <p {...stylex.props(styles.text)}>
-              Integrity describes artifact availability and hash verification,
-              not application correctness.
-            </p>
-            <div {...stylex.props(styles.grid)}>
-              <Artifacts side={result.base} label="Base · before" />
-              <Artifacts side={result.candidate} label="Candidate · after" />
+              <section
+                {...stylex.props(styles.section)}
+                aria-labelledby="captures"
+              >
+                <h2 id="captures" {...stylex.props(styles.heading)}>
+                  Selected captures
+                </h2>
+                <div {...stylex.props(styles.grid)}>
+                  {sides.map(({ side, label }) => (
+                    <Identity key={label} side={side} label={label} />
+                  ))}
+                </div>
+              </section>
+
+              <Availability result={result} />
+
+              <section
+                {...stylex.props(styles.section)}
+                aria-labelledby="checks"
+              >
+                <h2 id="checks" {...stylex.props(styles.heading)}>
+                  Absolute named checks
+                </h2>
+                <p {...stylex.props(styles.text)}>
+                  Executed by Observed against each capture's evidence. Each
+                  result covers its stated expectation and scope; comparison
+                  availability is separate.
+                </p>
+                <div {...stylex.props(styles.grid)}>
+                  {sides.map(({ side, label }) => (
+                    <Check key={label} side={side} label={label} />
+                  ))}
+                </div>
+              </section>
+
+              <section
+                {...stylex.props(styles.section)}
+                aria-labelledby="requests"
+              >
+                <h2 id="requests" {...stylex.props(styles.heading)}>
+                  Request ledger
+                </h2>
+                <p {...stylex.props(styles.text)}>
+                  Collector measurements from the recorded windows. A recorded
+                  response status is not a named check result.
+                </p>
+                <div {...stylex.props(styles.grid)}>
+                  {sides.map(({ side, label }) => (
+                    <RequestLedger key={label} side={side} label={label} />
+                  ))}
+                </div>
+              </section>
+
+              <section
+                {...stylex.props(styles.section)}
+                aria-labelledby="artifacts"
+              >
+                <h2 id="artifacts" {...stylex.props(styles.heading)}>
+                  Original artifacts
+                </h2>
+                <p {...stylex.props(styles.text)}>
+                  Integrity describes artifact availability and hash
+                  verification, not application correctness.
+                </p>
+                <div {...stylex.props(styles.grid)}>
+                  {sides.map(({ side, label }) => (
+                    <Artifacts key={label} side={side} label={label} />
+                  ))}
+                </div>
+              </section>
             </div>
-          </section>
+          </details>
         </main>
         <footer {...stylex.props(styles.footer)}>
-          Observed renders the saved comparison result. Imported Phase 0
-          evidence reports are generated separately by the CLI.
+          Captured evidence · Open an image at full size.
         </footer>
       </div>
     </div>

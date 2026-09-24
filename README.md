@@ -1,8 +1,13 @@
 # Observed
 
-Observed shows what a software change did, using evidence from the running system. Compare revisions, inspect changed behavior, and follow findings back to code. When a check fails, an existing coding agent can use the evidence to fix it, then Observed runs verification again.
+See what you just built.
 
-Planned as an open-source, self-hostable tool for any coding agent and application framework, with local operation, portable reports, and optional AI. Browser applications come first.
+Observed captures the result of a code change in the running app. Preview a new
+screen, put two versions side by side, or inspect the requests behind a click.
+Your coding agent can prepare the project configuration and run captures. You
+open the result.
+
+Everything runs locally. No model or account is required to capture or view it.
 
 ## Try it
 
@@ -12,15 +17,26 @@ With Bun **1.4.2** installed, run from the checkout:
 bun start
 ```
 
-This installs dependencies and the browser, runs the saved demonstration, and
-starts the viewer. Open the printed localhost URL. Press Ctrl+C to stop.
+This installs dependencies and the browser, captures the Request lab example,
+and starts the viewer. Open the printed localhost URL. Press Ctrl+C to stop.
 
-Observed generates its own manifests and evidence bundles. Users do not need to
-write a manifest or assemble captures. The lower-level `capture`, `compare`,
-`view`, and `report` commands are interfaces for agents and integrations.
+Observed creates the evidence files. You don't write a manifest or collect
+screenshots by hand.
 
 <details>
-<summary>Agent import interface</summary>
+<summary>Agent capture and import interfaces</summary>
+
+Create `observed.json` using the [project contract](src/project.ts). It supplies
+the source paths, setup/start commands, readiness, and page actions. Checks are
+optional. The [React example](examples/request-lab/observed.json) and
+[plain browser example](examples/shop/observed.json) use the same entry point.
+
+Use `bun run observe /path/to/app --json` for a preview, or add `--base HEAD` to
+compare the worktree with a commit. The JSON result includes the viewer directory
+and check outcomes. Exit codes: `0` completed, `1` unavailable, `2` a named check
+failed. A completed capture is not a claim that the whole application is correct.
+
+`capture`, `compare`, and `view` support individual steps and saved evidence.
 
 The version 1 importer accepts generated evidence bundles through
 `bun run report <manifest.json> <new-report.md>`. The output parent must exist and
@@ -38,6 +54,7 @@ Development checks:
 bun run check
 ```
 
+`bun run verify` exercises capture and the viewer against both example projects.
 Reports and captures stay local under gitignored `evidence/`.
 
 ## The planned complete flow

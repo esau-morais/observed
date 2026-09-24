@@ -1,7 +1,7 @@
 import { DateTime, Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { parseCapture } from './capture/model';
-import { json } from './capture/recipe';
+import { json } from './encoding';
 import { inspectComparison } from './comparison';
 import { selectionSchema, type Selection } from './comparison-model';
 import { readVerifiedArtifact, viewerIntegritySchema } from './export';

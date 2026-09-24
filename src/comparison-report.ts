@@ -48,7 +48,7 @@ function renderCheck(side: Side, label: string): string {
     [
       `- Expectation: ${escapeText(check.expectation)}`,
       `- Scope: ${escapeText(check.scope)}`,
-      `- Actual: ${check.actual === null ? 'Unknown' : check.actual}`,
+      `- Actual: ${check.actual === null ? 'Unknown' : escapeText(String(check.actual))}`,
       `- Check ID: ${escapeText(check.id)}`,
     ].join('\n'),
   ].join('\n\n');
@@ -56,6 +56,10 @@ function renderCheck(side: Side, label: string): string {
 
 function renderAvailability(result: Comparison): string {
   const comparison = result.comparison;
+
+  if (comparison.kind === 'preview') {
+    return 'Single capture. No comparison requested.';
+  }
 
   if (comparison.kind === 'unavailable') {
     return `Unavailable.\n\n${list(comparison.reasons)}`;
@@ -151,8 +155,8 @@ function renderProvenance(side: Side, label: string): string {
       `- Color scheme: ${value.colorScheme}`,
       `- Locale: ${escapeText(value.locale)}`,
       `- Timezone: ${escapeText(value.timezone)}`,
-      `- Fixture SHA-256: ${escapeText(value.fixtureHash)}`,
-      `- Lockfile SHA-256: ${escapeText(value.lockfileHash)}`,
+      `- Startup inputs SHA-256: ${escapeText(value.inputsHash)}`,
+      `- Dependency files SHA-256: ${escapeText(value.dependenciesHash ?? 'No dependency files selected')}`,
     ].join('\n');
   }
 
@@ -187,20 +191,45 @@ function renderProvenance(side: Side, label: string): string {
 }
 
 export function renderComparison(result: Comparison): string {
+  const candidateLabel =
+    result.mode === 'preview' ? 'Current capture' : 'Candidate · after';
+  const screenshots =
+    result.mode === 'preview'
+      ? [{ side: result.candidate, label: 'Current capture' }]
+      : [
+          { side: result.base, label: 'Before' },
+          { side: result.candidate, label: 'After' },
+        ];
   const conclusionLabels = {
     regression: 'Regression',
     'no-regression': 'No regression',
     unavailable: 'Conclusion unavailable',
+    'not-checked': 'Visual comparison',
+    preview: 'Preview',
+    'check-failed': 'Check failed',
   };
 
   const unresolved = [
-    ...result.base.unresolved.map((reason) => `Base: ${reason}`),
+    ...(result.mode === 'preview'
+      ? []
+      : result.base.unresolved.map((reason) => `Base: ${reason}`)),
     ...result.candidate.unresolved.map((reason) => `Candidate: ${reason}`),
     ...result.limitations,
   ];
 
   return [
     `# ${escapeText(result.title)}`,
+    ...screenshots.map(({ side, label }) =>
+      [
+        `## ${label}`,
+        side.manifest === null
+          ? 'Capture unavailable.'
+          : `Source: ${escapeText(side.manifest.source.revision ?? 'snapshot')} · ${side.manifest.source.sha256}`,
+        side.screenshot === null
+          ? 'Screenshot unavailable.'
+          : `!${link(`${label} captured application`, side.screenshot)}`,
+      ].join('\n\n'),
+    ),
     '## Conclusion',
     `**${conclusionLabels[result.conclusion.kind]}**`,
     escapeText(result.conclusion.text),
@@ -210,25 +239,35 @@ export function renderComparison(result: Comparison): string {
       ? 'No unresolved items reported. Coverage is limited to the named checks and recorded capture windows.'
       : list(unresolved),
     '## Selected captures',
-    renderIdentity(result.base, 'Base · before'),
-    renderIdentity(result.candidate, 'Candidate · after'),
+    ...(result.mode === 'preview'
+      ? []
+      : [renderIdentity(result.base, 'Base · before')]),
+    renderIdentity(result.candidate, candidateLabel),
     '## Comparison availability',
     renderAvailability(result),
     '## Absolute named checks',
     "Executed by Observed against each capture's evidence. Each result covers its stated expectation and scope; comparison availability is separate.",
-    renderCheck(result.base, 'Base · before'),
-    renderCheck(result.candidate, 'Candidate · after'),
+    ...(result.mode === 'preview'
+      ? []
+      : [renderCheck(result.base, 'Base · before')]),
+    renderCheck(result.candidate, candidateLabel),
     '## Request ledger',
     'Collector measurements from the recorded windows. A recorded response status is not a named check result.',
-    renderLedger(result.base, 'Base · before'),
-    renderLedger(result.candidate, 'Candidate · after'),
+    ...(result.mode === 'preview'
+      ? []
+      : [renderLedger(result.base, 'Base · before')]),
+    renderLedger(result.candidate, candidateLabel),
     '## Screenshots and original artifacts',
     'Screenshots are collector measurements. Artifact integrity describes availability and hash verification, not application correctness.',
-    renderArtifacts(result.base, 'Base · before'),
-    renderArtifacts(result.candidate, 'Candidate · after'),
+    ...(result.mode === 'preview'
+      ? []
+      : [renderArtifacts(result.base, 'Base · before')]),
+    renderArtifacts(result.candidate, candidateLabel),
     '## Producer, conditions and recipe',
-    renderProvenance(result.base, 'Base · before'),
-    renderProvenance(result.candidate, 'Candidate · after'),
+    ...(result.mode === 'preview'
+      ? []
+      : [renderProvenance(result.base, 'Base · before')]),
+    renderProvenance(result.candidate, candidateLabel),
     'Observed renders the saved comparison result. Imported Phase 0 evidence reports are generated separately by the CLI.',
     '',
   ].join('\n\n');

@@ -1,19 +1,14 @@
 import { Cause, DateTime, Effect, Exit, FileSystem, Schema } from 'effect';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { ApplicationFailure, startApplication, listFiles } from './application';
-import { captureBrowser } from './agent-browser';
+import { ApplicationFailure, startApplication } from './application';
+import { captureBrowser, producer } from './agent-browser';
 import { captureSchema, type Capture, type CaptureArtifact } from './model';
 import { processOutput } from './process';
-import {
-  json,
-  producer,
-  recipe,
-  recipeHash,
-  recipeText,
-  sha256,
-} from './recipe';
-import { snapshotApplication, type Variant } from './snapshot';
+import { json, sha256 } from '../encoding';
+import type { Project } from '../project';
+import type { Recipe } from './recipe';
+import { snapshotApplication } from './snapshot';
 
 class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
   'CaptureFailure',
@@ -27,10 +22,13 @@ class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
 export const captureApplication = Effect.fn('captureApplication')(
   function* (options: {
     projectRoot: string;
+    toolRoot: string;
     directory: string;
-    variant: Variant;
+    project: Project;
+    recipe: Recipe;
+    revision: string | null;
+    label: string;
     timeoutMs?: number;
-    stall?: boolean;
   }) {
     const fs = yield* FileSystem.FileSystem;
     const directory = path.resolve(options.directory);
@@ -39,6 +37,9 @@ export const captureApplication = Effect.fn('captureApplication')(
 
     const id = randomUUID();
     const startedAt = DateTime.formatIso(yield* DateTime.now);
+    const recipe = options.recipe;
+    const recipeText = json(recipe);
+    const recipeHash = sha256(recipeText);
 
     yield* fs.writeFileString(
       path.join(directory, 'owner.json'),
@@ -54,7 +55,8 @@ export const captureApplication = Effect.fn('captureApplication')(
     const source = yield* snapshotApplication({
       projectRoot: options.projectRoot,
       directory,
-      variant: options.variant,
+      source: options.project.source,
+      revision: options.revision,
     });
 
     const artifacts = new Map<string, { path: string; description: string }>();
@@ -83,9 +85,9 @@ export const captureApplication = Effect.fn('captureApplication')(
     );
 
     addArtifact(
-      'server-requests',
-      'server-requests.json',
-      'Application server request ledger',
+      'project',
+      'project.json',
+      'Project startup and source selection',
     );
 
     addArtifact(
@@ -106,6 +108,14 @@ export const captureApplication = Effect.fn('captureApplication')(
       'Run-owned session and process identity',
     );
 
+    addArtifact(
+      'source-transcript',
+      'source-transcript.jsonl',
+      'Source revision selection',
+    );
+    addArtifact('application', 'application.json', 'Owned application process');
+    addArtifact('application-log', 'application.log', 'Application output');
+
     let conditions: Capture['conditions'] = {
       kind: 'unavailable',
       reason: 'Browser conditions were not captured',
@@ -119,47 +129,76 @@ export const captureApplication = Effect.fn('captureApplication')(
         recipeText,
         { flag: 'wx' },
       );
-
-      yield* processOutput({
-        command: process.execPath,
-        args: [
-          '--eval',
-          yield* fs.readFileString(
-            path.join(directory, 'source/src/capture/fixture-build.ts'),
-          ),
-          'snapshot-builder',
-          path.join(directory, 'source/fixtures/request-lab'),
-          path.join(directory, 'app'),
-          options.variant,
-          path.join(options.projectRoot, 'node_modules'),
-        ],
-        cwd: options.projectRoot,
-        transcript: path.join(directory, 'transcript.jsonl'),
-        timeoutMs: 60_000,
+      yield* fs.writeFileString(
+        path.join(directory, 'project.json'),
+        json(options.project),
+        { flag: 'wx' },
+      );
+      const workspace = yield* fs.makeTempDirectoryScoped({
+        prefix: 'observed-app-',
       });
 
-      const built = yield* listFiles(path.join(directory, 'app'));
-
-      for (const file of built) {
-        addArtifact(
-          `app-${artifacts.size}`,
-          `app/${file}`,
-          `Executed application asset: ${file}`,
+      for (const file of source.files) {
+        const destination = path.join(workspace, file.path);
+        yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
+        yield* fs.copyFile(
+          path.join(directory, 'source', file.path),
+          destination,
         );
+        yield* fs.chmod(destination, file.executable === true ? 0o755 : 0o644);
+      }
+
+      for (const [command, ...args] of options.project.setup) {
+        yield* processOutput({
+          command,
+          args,
+          cwd: workspace,
+          env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            LANG: 'en_US.UTF-8',
+            TZ: 'UTC',
+          },
+          transcript: path.join(directory, 'transcript.jsonl'),
+          timeoutMs: options.timeoutMs ?? 120_000,
+        });
       }
 
       const url = yield* startApplication({
-        directory: path.join(directory, 'app'),
+        workspace,
         evidenceDirectory: directory,
-        ...(options.stall === undefined ? {} : { stall: options.stall }),
+        project: options.project,
       });
 
       const browserConditions = yield* captureBrowser({
-        projectRoot: options.projectRoot,
+        projectRoot: options.toolRoot,
         directory,
         session: `observed-${id}`,
         url,
         addArtifact,
+        recipe,
+        inputsHash: sha256(
+          json({
+            setup: options.project.setup,
+            start: options.project.start,
+            ready: options.project.ready,
+          }),
+        ),
+        dependenciesHash: source.files.some((file) =>
+          /(?:^|\/)(?:bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|requirements\.txt|Cargo\.lock)$/.test(
+            file.path,
+          ),
+        )
+          ? sha256(
+              json(
+                source.files.filter((file) =>
+                  /(?:^|\/)(?:bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|requirements\.txt|Cargo\.lock)$/.test(
+                    file.path,
+                  ),
+                ),
+              ),
+            )
+          : null,
       });
 
       conditions = { kind: 'recorded', value: browserConditions };
@@ -257,11 +296,11 @@ export const captureApplication = Effect.fn('captureApplication')(
           }
 
           manifest = yield* Schema.decodeUnknownEffect(captureSchema)({
-            schemaVersion: 2,
+            schemaVersion: 3,
             kind: 'capture',
             id,
-            label: options.variant,
-            application: recipe.application,
+            label: options.label,
+            application: options.project.name,
             source,
             recipe: { id: recipe.id, sha256: recipeHash },
             producer,

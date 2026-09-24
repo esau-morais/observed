@@ -6,6 +6,9 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { expect, test } from 'vitest';
 import { ProcessFailure, processOutput } from '../src/capture/process';
+import { startApplication } from '../src/capture/application';
+import { projectSchema } from '../src/project';
+import shop from '../examples/shop/observed.json';
 
 const parsePid = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Int.check(Schema.isGreaterThan(1))),
@@ -51,6 +54,100 @@ if (role === 'parent') {
   });
 }
 `;
+
+test.each([0, 17])(
+  'application cleanup stops descendants after their startup wrapper exits with %s',
+  async (code) => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'observed-wrapper-'));
+    const helper = path.join(directory, 'wrapper.ts');
+    await writeFile(
+      helper,
+      `
+    import { writeFileSync } from 'node:fs';
+    if (process.argv[2] === 'child') {
+      process.on('SIGTERM', () => {});
+      writeFileSync('child.pid', JSON.stringify(process.pid));
+      setInterval(() => console.log('child output'), 25);
+    } else {
+      Bun.spawn([process.execPath, import.meta.path, 'child'], { stdout: 'inherit', stderr: 'inherit' }).unref();
+      while (!(await Bun.file('child.pid').exists())) { await Bun.sleep(10); }
+      process.exit(${code});
+    }
+  `,
+    );
+    let pid: number | undefined;
+    let emergency = false;
+    const watchdog = setTimeout(() => {
+      emergency = true;
+
+      if (pid !== undefined) {
+        stopOwnedProcess(pid);
+      }
+    }, 6000);
+    const pending = Effect.runPromiseExit(
+      startApplication({
+        workspace: directory,
+        evidenceDirectory: directory,
+        project: Schema.decodeUnknownSync(projectSchema)({
+          ...shop,
+          start: [process.execPath, helper],
+        }),
+      }).pipe(
+        Effect.scoped,
+        Effect.timeout('500 millis'),
+        Effect.provide(BunServices.layer),
+      ),
+    );
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            pid = await readPid(path.join(directory, 'child.pid'));
+
+            return pid;
+          },
+          { timeout: 1500 },
+        )
+        .toBeDefined();
+      await pending;
+      expect(emergency).toBe(false);
+
+      if (pid === undefined) {
+        throw new Error('Owned descendant PID is missing');
+      }
+
+      expect(await processIsLive(pid)).toBe(false);
+      const cleanup = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            stopped: Schema.Boolean,
+            exit: Schema.Struct({
+              kind: Schema.Literal('exited'),
+              code: Schema.Number,
+            }),
+          }),
+        ),
+      )(await readFile(path.join(directory, 'server-cleanup.json'), 'utf8'));
+      expect(cleanup).toEqual({
+        stopped: true,
+        exit: { kind: 'exited', code },
+      });
+      expect(
+        await readFile(path.join(directory, 'application.log'), 'utf8'),
+      ).toContain('child output');
+    } finally {
+      clearTimeout(watchdog);
+
+      if (pid !== undefined && (await processIsLive(pid))) {
+        stopOwnedProcess(pid);
+      }
+
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  8000,
+);
 
 async function readPid(filename: string): Promise<number | undefined> {
   try {

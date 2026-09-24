@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import { recipeSchema } from './capture/recipe';
 import {
   captureSchema,
   digest,
@@ -21,8 +22,13 @@ const check = Schema.Struct({
   authority: Schema.Literal('Executed by Observed'),
   scope: text,
   expectation: text,
-  outcome: Schema.Literals(['passed', 'failed', 'unknown']),
-  actual: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  outcome: Schema.Literals(['passed', 'failed', 'unknown', 'not-run']),
+  actual: Schema.NullOr(
+    Schema.Union([
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      Schema.String,
+    ]),
+  ),
   detail: text,
 });
 
@@ -31,6 +37,7 @@ export const sideSchema = Schema.Struct({
   manifestHash: Schema.NullOr(digest),
   execution: Schema.Literals(['complete', 'capture-failed', 'unavailable']),
   check,
+  recipe: Schema.NullOr(recipeSchema),
   observations: Schema.NullOr(observationsSchema),
   artifacts: Schema.Array(artifact),
   screenshot: Schema.NullOr(text),
@@ -38,12 +45,14 @@ export const sideSchema = Schema.Struct({
 });
 
 export const comparisonSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
+  schemaVersion: Schema.Literal(2),
+  mode: Schema.Literals(['preview', 'comparison']),
   title: text,
   evaluatedAt: timestamp,
   base: sideSchema,
   candidate: sideSchema,
   comparison: Schema.Union([
+    Schema.Struct({ kind: Schema.Literal('preview') }),
     Schema.Struct({
       kind: Schema.Literal('available'),
       basis: text,
@@ -56,7 +65,14 @@ export const comparisonSchema = Schema.Struct({
     }),
   ]),
   conclusion: Schema.Struct({
-    kind: Schema.Literals(['regression', 'no-regression', 'unavailable']),
+    kind: Schema.Literals([
+      'regression',
+      'no-regression',
+      'unavailable',
+      'not-checked',
+      'preview',
+      'check-failed',
+    ]),
     text,
   }),
   limitations: Schema.Array(text),
@@ -69,6 +85,7 @@ export type Side = typeof sideSchema.Type;
 export const selectionSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   evaluatedAt: timestamp,
+  mode: Schema.optionalKey(Schema.Literals(['preview', 'comparison'])),
   baseIssue: Schema.optionalKey(text),
   candidateIssue: Schema.optionalKey(text),
   base: Schema.NullOr(

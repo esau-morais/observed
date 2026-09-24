@@ -2,8 +2,13 @@ import { DateTime, Effect, FileSystem, Schema } from 'effect';
 import { constants } from 'node:fs';
 import { open, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { digest, parseCapture, text } from './capture/model';
-import { json, sha256 } from './capture/recipe';
+import {
+  digest,
+  parseCapture,
+  sourceFailureSchema,
+  text,
+} from './capture/model';
+import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
 import { selectionSchema, type Selection } from './comparison-model';
 import { renderComparison } from './comparison-report';
@@ -114,6 +119,22 @@ const loadCapture = Effect.fnUntraced(function* (directory: string) {
   });
 
   if (manifest.kind === 'unavailable') {
+    const failure = yield* readVerifiedArtifact(root, {
+      id: 'source-failure',
+      path: 'source-failure.json',
+      description: 'Source selection failure',
+    });
+
+    if (failure.kind === 'available') {
+      const details = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(sourceFailureSchema),
+      )(new TextDecoder().decode(failure.bytes));
+
+      return yield* new ExportFailure({
+        message: `Requested source ${JSON.stringify(details.revision)} could not be captured: ${details.reason}`,
+      });
+    }
+
     return yield* new ExportFailure({
       message: `Capture unavailable: ${manifest.reason}`,
     });
@@ -204,11 +225,13 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   candidateDirectory,
   directory,
   projectRoot,
+  mode = 'comparison',
 }: {
   baseDirectory: string | null;
   candidateDirectory: string;
   directory: string;
   projectRoot: string;
+  mode?: 'preview' | 'comparison';
 }) {
   const fs = yield* FileSystem.FileSystem;
   let candidateIssue: string | undefined;
@@ -319,6 +342,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
   const selection = yield* Schema.decodeUnknownEffect(selectionSchema)({
     schemaVersion: 1,
+    mode,
     evaluatedAt,
     ...(baseIssue === undefined ? {} : { baseIssue }),
     ...(candidateIssue === undefined ? {} : { candidateIssue }),

@@ -9,7 +9,8 @@ import {
   type Capture,
   type Observations,
 } from './capture/model';
-import { json, producer, recipe, recipeHash, sha256 } from './capture/recipe';
+import { parseRecipe, type Recipe } from './capture/recipe';
+import { json, sha256 } from './encoding';
 import type { Comparison, Selection, Side } from './comparison-model';
 import { inspectArtifact, type ArtifactResult } from './evidence';
 import { nodeIo } from './node-io';
@@ -35,16 +36,127 @@ type InspectSideOptions = {
   expected?: Expected;
 };
 
-function unknownCheck(detail: string): Side['check'] {
+function expectation(recipe: Recipe | null): string {
+  const definition = recipe?.check;
+
+  if (definition === undefined || definition === null) {
+    return 'No named expectation available.';
+  }
+
+  if (definition.kind === 'request-count') {
+    return `Exactly ${definition.expectedCount} ${definition.method} ${definition.path} request(s) with status ${definition.status}.`;
+  }
+
+  return `Exactly one ${definition.selector} element with text ${JSON.stringify(definition.expectedText)}.`;
+}
+
+function unknownCheck(
+  detail: string,
+  recipe: Recipe | null = null,
+): Side['check'] {
+  const definition = recipe?.check;
+
   return {
-    id: recipe.check.id,
-    name: recipe.check.name,
+    id: definition?.id ?? 'capture-evidence',
+    name: definition?.name ?? 'Capture evidence',
     authority: 'Executed by Observed',
-    scope: recipe.check.scope,
-    expectation: `Exactly ${recipe.check.expectedCount} ${recipe.check.method} ${recipe.check.path} request with status 200.`,
+    scope:
+      definition?.scope ?? 'The configured page and recorded capture window.',
+    expectation: expectation(recipe),
     outcome: 'unknown',
     actual: null,
     detail,
+  };
+}
+
+function evaluateCheck(
+  recipe: Recipe,
+  observations: Observations,
+): Side['check'] {
+  const definition = recipe.check;
+  const common = unknownCheck('Required check observation unavailable', recipe);
+
+  if (definition === null) {
+    return {
+      ...common,
+      name: 'No check configured',
+      outcome: 'not-run',
+      detail:
+        'These captures show the application. No correctness check was configured.',
+    };
+  }
+
+  if (definition.kind === 'text') {
+    const observed = observations.text;
+
+    if (observed === undefined || observed.selector !== definition.selector) {
+      return common;
+    }
+
+    return {
+      ...common,
+      outcome:
+        observed.count === 1 && observed.value === definition.expectedText
+          ? 'passed'
+          : 'failed',
+      actual: observed.value,
+      detail: `Matched ${observed.count} element(s); text: ${JSON.stringify(observed.value)}.`,
+    };
+  }
+
+  const requests = observations.requests.filter(
+    (request) =>
+      request.method === definition.method && request.path === definition.path,
+  );
+  const successful = requests.every(
+    (request) => request.status === definition.status,
+  );
+  const statuses =
+    requests.length === 0
+      ? 'none'
+      : requests.map((request) => request.status).join(', ');
+
+  return {
+    ...common,
+    outcome:
+      requests.length === definition.expectedCount && successful
+        ? 'passed'
+        : 'failed',
+    actual: requests.length,
+    detail: `Observed ${requests.length} matching ${definition.method} ${definition.path} request(s); statuses: ${statuses}.`,
+  };
+}
+
+function comparableConditions(capture: Capture) {
+  if (capture.conditions.kind === 'unavailable') {
+    return capture.conditions;
+  }
+
+  return { ...capture.conditions.value, dependenciesHash: null };
+}
+
+function conclusion(
+  base: Side,
+  candidate: Side,
+  regression: boolean,
+): Comparison['conclusion'] {
+  if (candidate.check.outcome === 'not-run') {
+    return {
+      kind: 'not-checked',
+      text: 'Before and after captured. No named check was configured.',
+    };
+  }
+
+  if (regression) {
+    return {
+      kind: 'regression',
+      text: `${candidate.check.name} regressed. Base: ${String(base.check.actual)}; candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
+    };
+  }
+
+  return {
+    kind: 'no-regression',
+    text: `No passing-to-failed transition in ${candidate.check.name}. Base: ${base.check.outcome}; candidate: ${candidate.check.outcome}.`,
   };
 }
 
@@ -54,6 +166,7 @@ function unavailable(reason: string): Side {
     manifestHash: null,
     execution: 'unavailable',
     check: unknownCheck(reason),
+    recipe: null,
     observations: null,
     artifacts: [],
     screenshot: null,
@@ -75,7 +188,11 @@ function artifactLink(prefix: string, artifactPath: string): string {
     .join('/');
 }
 
-function captureProblems(capture: Capture, evaluatedAt: string): string[] {
+function captureProblems(
+  capture: Capture,
+  evaluatedAt: string,
+  recipe: Recipe | null,
+): string[] {
   const reasons: string[] = [];
 
   if (capture.execution.kind === 'failed') {
@@ -90,31 +207,22 @@ function captureProblems(capture: Capture, evaluatedAt: string): string[] {
     );
   }
 
-  if (capture.recipe.id !== recipe.id || capture.recipe.sha256 !== recipeHash) {
-    reasons.push('Unsupported recipe identity or SHA-256 digest');
-  }
-
-  if (
-    capture.producer.name !== producer.name ||
-    capture.producer.version !== producer.version
-  ) {
-    reasons.push(
-      `Unsupported producer; required ${producer.name} ${producer.version}`,
-    );
-  }
-
   const age =
     DateTime.toEpochMillis(DateTime.makeUnsafe(evaluatedAt)) -
     DateTime.toEpochMillis(DateTime.makeUnsafe(capture.finishedAt));
 
   if (age < 0) {
     reasons.push('Capture timestamp is in the future relative to evaluatedAt');
-  } else if (age > recipe.maxAgeMs) {
+  } else if (recipe !== null && age > recipe.maxAgeMs) {
     reasons.push(`Capture is stale: older than ${recipe.maxAgeMs} ms`);
   }
 
   const files = capture.source.files
-    .map((file) => ({ path: file.path, sha256: file.sha256 }))
+    .map((file) => ({
+      path: file.path,
+      sha256: file.sha256,
+      ...(file.executable === undefined ? {} : { executable: file.executable }),
+    }))
     .sort((left, right) => {
       if (left.path < right.path) {
         return -1;
@@ -231,7 +339,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     }
 
     const capture = parsed.capture;
-    const reasons = captureProblems(capture, evaluatedAt);
+    const reasons: string[] = [];
 
     if (
       expected !== undefined &&
@@ -276,15 +384,37 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     }
 
     const recipeArtifact = byId.get('recipe');
+    let recipe: Recipe | null = null;
 
     if (
       recipeArtifact?.kind === 'available' &&
-      recipeArtifact.hash !== recipeHash
+      recipeArtifact.hash !== capture.recipe.sha256
     ) {
       reasons.push(
         'Recipe artifact bytes do not match the protected recipe SHA-256',
       );
     }
+
+    if (
+      recipeArtifact?.kind === 'available' &&
+      recipeArtifact.hash === capture.recipe.sha256
+    ) {
+      const saved = yield* readVerifiedText(recipeArtifact);
+
+      if (saved.kind === 'available') {
+        recipe = yield* parseRecipe(saved.text).pipe(
+          Effect.catchTag('SchemaError', () => Effect.succeed(null)),
+        );
+      }
+
+      if (recipe === null || recipe.id !== capture.recipe.id) {
+        reasons.push(
+          'Protected recipe is malformed or its identity does not match the capture',
+        );
+      }
+    }
+
+    reasons.push(...captureProblems(capture, evaluatedAt, recipe));
 
     for (const file of capture.source.files) {
       const artifact = byPath.get(`source/${file.path}`);
@@ -326,37 +456,20 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       reasons.length === 0
         ? 'Verified observations unavailable'
         : reasons.join('; '),
+      recipe,
     );
 
     let execution: Side['execution'] = 'unavailable';
 
     if (capture.execution.kind === 'failed') {
       execution = 'capture-failed';
-    } else if (reasons.length === 0 && observations !== null) {
+    } else if (
+      reasons.length === 0 &&
+      observations !== null &&
+      recipe !== null
+    ) {
       execution = 'complete';
-
-      const requests = observations.requests.filter(
-        (request) =>
-          request.method === recipe.check.method &&
-          request.path === recipe.check.path,
-      );
-
-      const allSuccessful = requests.every((request) => request.status === 200);
-
-      const statuses =
-        requests.length === 0
-          ? 'none'
-          : requests.map((request) => request.status).join(', ');
-
-      check = {
-        ...check,
-        outcome:
-          requests.length === recipe.check.expectedCount && allSuccessful
-            ? 'passed'
-            : 'failed',
-        actual: requests.length,
-        detail: `Observed ${requests.length} matching ${recipe.check.method} ${recipe.check.path} request(s); statuses: ${statuses}.`,
-      };
+      check = evaluateCheck(recipe, observations);
     }
 
     const screenshot = artifacts.find(
@@ -368,6 +481,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       manifestHash: manifestArtifact.hash,
       execution,
       check,
+      recipe,
       observations: reasons.length === 0 ? observations : null,
       artifacts,
       screenshot: screenshot?.path ?? null,
@@ -393,7 +507,7 @@ function sideAt(side: Side, evaluatedAt: string): Side {
     return side;
   }
 
-  const reasons = captureProblems(side.manifest, evaluatedAt);
+  const reasons = captureProblems(side.manifest, evaluatedAt, side.recipe);
 
   if (reasons.length === 0) {
     return side;
@@ -402,7 +516,7 @@ function sideAt(side: Side, evaluatedAt: string): Side {
   return {
     ...side,
     execution: 'unavailable',
-    check: unknownCheck(reasons.join('; ')),
+    check: unknownCheck(reasons.join('; '), side.recipe),
     observations: null,
     unresolved: [...side.unresolved, ...reasons],
   };
@@ -444,8 +558,8 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
 
     if (
       !isDeepStrictEqual(
-        base.manifest.conditions,
-        candidate.manifest.conditions,
+        comparableConditions(base.manifest),
+        comparableConditions(candidate.manifest),
       )
     ) {
       reasons.push('Capture conditions differ');
@@ -463,10 +577,12 @@ export function compareCaptures({
   base: inspectedBase,
   candidate: inspectedCandidate,
   evaluatedAt,
+  mode = 'comparison',
 }: {
   base: Side;
   candidate: Side;
   evaluatedAt: string;
+  mode?: 'preview' | 'comparison';
 }): Comparison {
   const base = sideAt(inspectedBase, evaluatedAt);
   const candidate = sideAt(inspectedCandidate, evaluatedAt);
@@ -474,18 +590,52 @@ export function compareCaptures({
   const firstReason = reasons[0];
 
   const common = {
-    schemaVersion: 1,
-    title: 'Load items request comparison',
+    schemaVersion: 2,
+    mode,
+    title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
     evaluatedAt,
     base,
     candidate,
     limitations: [
-      recipe.check.scope,
-      'Only the named request count and status check was evaluated. Browser errors remain unresolved evidence.',
+      candidate.recipe?.check?.scope ??
+        'Only the configured page and recorded capture window were captured.',
+      'Checks cover only their stated expectations. Browser errors remain available as evidence.',
       'Screenshot SHA-256 differences show changed bytes, not a visual regression.',
       'Artifact hashes detect changed bytes; they do not establish collector honesty or source causation.',
     ],
   } as const;
+
+  if (
+    mode === 'preview' &&
+    candidate.execution === 'complete' &&
+    candidate.screenshot !== null
+  ) {
+    return {
+      ...common,
+      comparison: { kind: 'preview' },
+      conclusion: {
+        kind: candidate.check.outcome === 'failed' ? 'check-failed' : 'preview',
+        text:
+          candidate.check.outcome === 'not-run'
+            ? 'Current application capture.'
+            : `${candidate.check.name}: ${candidate.check.outcome}.`,
+      },
+    };
+  }
+
+  if (mode === 'preview') {
+    return {
+      ...common,
+      comparison: {
+        kind: 'unavailable',
+        reasons: [`Capture unavailable: ${candidate.check.detail}`],
+      },
+      conclusion: {
+        kind: 'unavailable',
+        text: `Capture unavailable: ${candidate.check.detail}`,
+      },
+    };
+  }
 
   if (firstReason !== undefined) {
     return {
@@ -496,7 +646,7 @@ export function compareCaptures({
       },
       conclusion: {
         kind: 'unavailable',
-        text: `Revision comparison unavailable. Candidate named request check: ${candidate.check.outcome}.`,
+        text: `Revision comparison unavailable. Candidate check: ${candidate.check.outcome}.`,
       },
     };
   }
@@ -512,12 +662,12 @@ export function compareCaptures({
     (item) => item.id === 'screenshot',
   );
 
-  const baseCount = base.check.actual;
-  const candidateCount = candidate.check.actual;
+  const baseCount = base.observations?.requests.length;
+  const candidateCount = candidate.observations?.requests.length;
 
   if (
-    baseCount === null ||
-    candidateCount === null ||
+    baseCount === undefined ||
+    candidateCount === undefined ||
     baseScreenshot === undefined ||
     candidateScreenshot === undefined
   ) {
@@ -546,12 +696,7 @@ export function compareCaptures({
           ? 'unchanged'
           : 'changed',
     },
-    conclusion: {
-      kind: regression ? 'regression' : 'no-regression',
-      text: regression
-        ? `Request regression: ${baseCount} request before, ${candidateCount} after. ${recipe.check.name} requires exactly ${recipe.check.expectedCount} successful ${recipe.check.method} ${recipe.check.path} request. The base passed; the candidate failed.`
-        : `No passing-to-failed transition in ${recipe.check.name}. Base: ${base.check.outcome}; candidate: ${candidate.check.outcome}.`,
-    },
+    conclusion: conclusion(base, candidate, regression),
   };
 }
 
@@ -590,5 +735,10 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
         })
       : unavailable(selection.candidateIssue);
 
-  return compareCaptures({ base, candidate, evaluatedAt });
+  return compareCaptures({
+    base,
+    candidate,
+    evaluatedAt,
+    mode: selection?.mode ?? 'comparison',
+  });
 });

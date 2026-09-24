@@ -1,157 +1,193 @@
-import { DateTime, Effect, FileSystem, Schema } from 'effect';
-import { readdir } from 'node:fs/promises';
+import {
+  DateTime,
+  Effect,
+  FileSystem,
+  Fiber,
+  Predicate,
+  Schema,
+  Scope,
+  Stream,
+} from 'effect';
+import { ChildProcess } from 'effect/unstable/process';
 import path from 'node:path';
-import { nodeIo } from '../node-io';
-import { json, recipe } from './recipe';
+import { json } from '../encoding';
+import type { Project } from '../project';
+import { redactText } from '../redact';
 
 export class ApplicationFailure extends Schema.TaggedError<ApplicationFailure>()(
   'ApplicationFailure',
   { message: Schema.String },
 ) {}
 
-export const listFiles = Effect.fn('listFiles')(function* (directory: string) {
-  const visit = Effect.fnUntraced(function* (
-    relative: string,
-  ): Effect.fn.Return<string[], import('../node-io').EvidenceIoError> {
-    const entries = yield* nodeIo(() =>
-      readdir(path.join(directory, relative), { withFileTypes: true }),
-    );
-
-    const files: string[] = [];
-
-    for (const entry of entries) {
-      const name = path.posix.join(relative, entry.name);
-
-      if (entry.isDirectory()) {
-        files.push(...(yield* visit(name)));
-      } else if (entry.isFile()) {
-        files.push(name);
-      } else {
-        return yield* Effect.die(
-          new Error(`Unsupported source entry: ${name}`),
-        );
-      }
-    }
-
-    return files.sort();
-  });
-
-  return yield* visit('');
-});
-
-const contentTypes: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.woff2': 'font/woff2',
-  '.svg': 'image/svg+xml',
-};
-
 export const startApplication = Effect.fn('startApplication')(
   function* (options: {
-    directory: string;
+    workspace: string;
     evidenceDirectory: string;
-    stall?: boolean;
+    project: Project;
   }) {
     const fs = yield* FileSystem.FileSystem;
-    const files = yield* listFiles(options.directory);
+    const reservation = yield* Effect.sync(() =>
+      Bun.serve({
+        hostname: '127.0.0.1',
+        port: 0,
+        fetch: () => new Response(null, { status: 503 }),
+      }),
+    );
+    const port = reservation.port;
+    yield* Effect.promise(() => reservation.stop(true));
 
-    const assets = new Map<
-      string,
-      { bytes: Uint8Array<ArrayBuffer>; type: string }
-    >();
-
-    for (const file of files) {
-      const bytes = yield* fs.readFile(path.join(options.directory, file));
-
-      assets.set(`/${file}`, {
-        bytes: new Uint8Array(bytes),
-        type: contentTypes[path.extname(file)] ?? 'application/octet-stream',
+    if (port === undefined) {
+      return yield* new ApplicationFailure({
+        message: 'Could not allocate an application port',
       });
     }
 
-    const requests: { method: string; path: string; receivedAt: string }[] = [];
+    const url = `http://127.0.0.1:${port}/`;
+    const args = options.project.start.map((part) =>
+      part.replaceAll('{port}', String(port)),
+    );
+    const command = args[0];
 
-    const server = yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        Bun.serve({
-          hostname: '127.0.0.1',
-          port: 0,
-          fetch(request) {
-            const pathname = new URL(request.url).pathname;
+    if (command === undefined) {
+      return yield* new ApplicationFailure({
+        message: 'Application start command is empty',
+      });
+    }
 
-            if (pathname === '/health') {
-              return new Response('ready');
-            }
+    const processScope = yield* Scope.fork(yield* Scope.Scope);
+    const handle = yield* ChildProcess.make(command, args.slice(1), {
+      cwd: options.workspace,
+      env: {
+        PATH: process.env.PATH,
+        HOME: options.workspace,
+        PORT: String(port),
+        HOST: '127.0.0.1',
+        LANG: 'en_US.UTF-8',
+        TZ: 'UTC',
+      },
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      forceKillAfter: '2 seconds',
+    }).pipe(Effect.provideService(Scope.Scope, processScope));
 
-            if (pathname === '/api/items') {
-              requests.push({
-                method: request.method,
-                path: pathname,
-                receivedAt: DateTime.formatIso(DateTime.nowUnsafe()),
-              });
-
-              if (options.stall === true) {
-                return new Promise<Response>(() => {});
-              }
-
-              return Response.json(recipe.fixture.items, {
-                headers: { 'Cache-Control': 'no-store' },
-              });
-            }
-
-            const asset = assets.get(
-              pathname === '/' ? '/index.html' : pathname,
-            );
-
-            if (asset === undefined) {
-              return new Response('Not found', { status: 404 });
-            }
-
-            return new Response(asset.bytes, {
-              headers: {
-                'Content-Type': asset.type,
-                'Cache-Control': 'no-store',
-              },
-            });
-          },
-        }),
-      ),
-      (owned) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() => owned.stop(true));
-
-          yield* fs.writeFileString(
-            path.join(options.evidenceDirectory, 'server-requests.json'),
-            json(requests),
-            { flag: 'wx' },
-          );
-
-          yield* fs.writeFileString(
-            path.join(options.evidenceDirectory, 'server-cleanup.json'),
-            json({
-              url: owned.url.toString(),
-              stopped: true,
+    const output = path.join(options.evidenceDirectory, 'application.log');
+    yield* fs.writeFileString(output, '', { flag: 'wx' });
+    let capturedOutput = '';
+    const readers = yield* Effect.forEach(
+      [handle.stdout, handle.stderr],
+      (stream) =>
+        stream.pipe(
+          Stream.decodeText(),
+          Stream.runForEach((chunk) =>
+            Effect.sync(() => {
+              capturedOutput += chunk;
             }),
-            { flag: 'wx' },
-          );
-        }).pipe(Effect.orDie),
+          ),
+          Effect.forkScoped,
+        ),
     );
 
-    const ready = yield* Effect.tryPromise({
-      try: (signal) => fetch(new URL('/health', server.url), { signal }),
-      catch: () =>
-        new ApplicationFailure({
-          message: 'Application readiness request failed',
-        }),
-    }).pipe(Effect.timeout('5 seconds'));
+    yield* fs.writeFileString(
+      path.join(options.evidenceDirectory, 'application.json'),
+      json({
+        command,
+        args: args.slice(1),
+        pid: handle.pid,
+        url,
+        startedAt: DateTime.formatIso(yield* DateTime.now),
+      }),
+      { flag: 'wx' },
+    );
 
-    if (!ready.ok || (yield* Effect.promise(() => ready.text())) !== 'ready') {
-      return yield* new ApplicationFailure({
-        message: 'Application did not become ready',
-      });
+    yield* Effect.addFinalizer((exit) =>
+      Effect.gen(function* () {
+        // Scoped release in rc.117 only sends SIGTERM after a nonzero leader exit.
+        yield* handle
+          .kill({ killSignal: 'SIGTERM', forceKillAfter: '2 seconds' })
+          .pipe(
+            Effect.catchTag('PlatformError', (error) =>
+              Effect.gen(function* () {
+                const stopped = yield* Effect.sync(() => {
+                  try {
+                    process.kill(
+                      process.platform === 'win32'
+                        ? handle.pid
+                        : -Number(handle.pid),
+                      0,
+                    );
+
+                    return false;
+                  } catch (cause) {
+                    if (
+                      Predicate.hasProperty(cause, 'code') &&
+                      cause.code === 'ESRCH'
+                    ) {
+                      return true;
+                    }
+
+                    throw cause;
+                  }
+                });
+
+                if (!stopped) {
+                  return yield* error;
+                }
+              }),
+            ),
+          );
+        yield* Scope.close(processScope, exit);
+        yield* Effect.forEach(readers, (reader) => Fiber.join(reader));
+        yield* fs.writeFileString(output, redactText(capturedOutput));
+        const status = yield* handle.exitCode.pipe(
+          Effect.match({
+            onSuccess: (code) => ({ kind: 'exited', code }) as const,
+            onFailure: (error) =>
+              ({ kind: 'terminated', reason: error.message }) as const,
+          }),
+        );
+        yield* fs.writeFileString(
+          path.join(options.evidenceDirectory, 'server-cleanup.json'),
+          json({
+            pid: handle.pid,
+            url,
+            stopped: !(yield* handle.isRunning),
+            exit: status,
+          }),
+          { flag: 'wx' },
+        );
+      }).pipe(Effect.orDie),
+    );
+
+    while (true) {
+      if (!(yield* handle.isRunning)) {
+        return yield* new ApplicationFailure({
+          message: 'Application exited before readiness; see application.log',
+        });
+      }
+
+      const ready = yield* Effect.tryPromise({
+        try: (signal) =>
+          fetch(new URL(options.project.ready.path, url), {
+            signal,
+            redirect: 'manual',
+          }),
+        catch: () =>
+          new ApplicationFailure({
+            message: 'Application readiness request failed',
+          }),
+      }).pipe(
+        Effect.map(
+          (response) => response.status === options.project.ready.status,
+        ),
+        Effect.catchTag('ApplicationFailure', () => Effect.succeed(false)),
+      );
+
+      if (ready) {
+        return url;
+      }
+
+      yield* Effect.sleep('100 millis');
     }
-
-    return server.url.toString();
   },
 );

@@ -8,14 +8,13 @@
     "bun": "1.4.2"
   },
   "scripts": {
-    "start": "bun install --frozen-lockfile && bun run setup && bun run demo && bun run view",
+    "start": "bun scripts/start.ts",
     "setup": "bun node_modules/agent-browser/bin/agent-browser.js install",
-    "app": "bun src/workflow-cli.ts app",
+    "observe": "bun src/workflow-cli.ts run",
     "capture": "bun src/workflow-cli.ts capture",
     "compare": "bun src/workflow-cli.ts compare",
-    "demo": "bun src/workflow-cli.ts demo",
     "view": "bun src/workflow-cli.ts view",
-    "verify": "bun scripts/verify.ts",
+    "verify": "bun run --bun vitest run --config vitest.browser.config.ts",
     "report": "bun src/cli.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "typecheck": "bun run --bun tsc --noEmit",

@@ -27,7 +27,19 @@ export const sourceSchema = Schema.Struct({
   kind: Schema.Literal('snapshot'),
   sha256: digest,
   entry: text,
-  files: Schema.NonEmptyArray(Schema.Struct({ path: text, sha256: digest })),
+  revision: Schema.optionalKey(text),
+  files: Schema.NonEmptyArray(
+    Schema.Struct({
+      path: text,
+      sha256: digest,
+      executable: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
+});
+
+export const sourceFailureSchema = Schema.Struct({
+  revision: text,
+  reason: text,
 });
 
 const execution = Schema.Union([
@@ -57,12 +69,12 @@ export const conditionsSchema = Schema.Struct({
   colorScheme: Schema.Literal('light'),
   locale: text,
   timezone: text,
-  fixtureHash: digest,
-  lockfileHash: digest,
+  inputsHash: digest,
+  dependenciesHash: Schema.NullOr(digest),
 });
 
 export const captureSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(2),
+  schemaVersion: Schema.Literal(3),
   kind: Schema.Literal('capture'),
   id: text,
   label: text,
@@ -125,6 +137,13 @@ export const observationsSchema = Schema.Struct({
     }),
   ),
   browserErrors: Schema.Array(Schema.String),
+  text: Schema.optionalKey(
+    Schema.Struct({
+      selector: text,
+      count,
+      value: Schema.NullOr(Schema.String),
+    }),
+  ),
   window: Schema.Struct({ startedAt: timestamp, finishedAt: timestamp }),
 });
 

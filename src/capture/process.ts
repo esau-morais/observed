@@ -8,10 +8,16 @@ import {
   Stream,
 } from 'effect';
 import { ChildProcess } from 'effect/unstable/process';
+import { redact, redactText } from '../redact';
 
 export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()(
   'ProcessFailure',
-  { command: Schema.String, exitCode: Schema.Number, message: Schema.String },
+  {
+    command: Schema.String,
+    exitCode: Schema.Number,
+    message: Schema.String,
+    stderr: Schema.String,
+  },
 ) {}
 
 export const processOutput = Effect.fn('processOutput')(function* (options: {
@@ -64,6 +70,7 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
       return yield* new ProcessFailure({
         command: options.command,
         exitCode,
+        stderr: redactText(stderr),
         message: `${options.command} exited with code ${exitCode}; see transcript.jsonl for original output`,
       });
     }
@@ -78,17 +85,19 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
 
         yield* fs.writeFileString(
           options.transcript,
-          `${JSON.stringify({
-            command: options.command,
-            args: options.args,
-            startedAt,
-            finishedAt,
-            stdout,
-            stderr,
-            outcome: Exit.isSuccess(exit)
-              ? 'complete'
-              : Cause.pretty(exit.cause),
-          })}\n`,
+          `${JSON.stringify(
+            redact({
+              command: options.command,
+              args: options.args,
+              startedAt,
+              finishedAt,
+              stdout: redactText(stdout),
+              stderr: redactText(stderr),
+              outcome: Exit.isSuccess(exit)
+                ? 'complete'
+                : Cause.pretty(exit.cause),
+            }),
+          )}\n`,
           { flag: 'a' },
         );
       }),

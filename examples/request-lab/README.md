@@ -1,10 +1,13 @@
 # Request lab
 
-An original React fixture authored for Observed's controlled request comparison.
+One click, one request. This React example lets you compare that behavior with a
+duplicate request or a changed heading.
+
+The application was written for Observed's controlled request comparison.
 No application code or assets were copied from other projects.
 
-Vite serves this directory as its root, using `index.html` and `main.tsx`.
-Resolve `fixture-variant` to one source module at build or server startup:
+`App.tsx` imports `base.ts`. To try another version, change that import and add
+the selected module to `source.paths` in `observed.json`:
 
 | Module | Heading | GET /api/items requests per click |
 | --- | --- | --- |
@@ -17,9 +20,9 @@ Each module exports `title: string` and
 in `items.ts`. The duplicate variant waits for both requests to settle and
 returns the first collection, keeping its completed UI identical to base.
 
-The capture application serves the same-origin `GET /api/items` endpoint and
-owns the request ledger. Responses must be an array of `{ id, name }` items.
-The fixture makes uncached requests without credentials or external services.
+`server.ts` serves the built app and the same-origin `GET /api/items` endpoint.
+Responses are an array of `{ id, name }` items. The app makes uncached requests
+without credentials or external services.
 
 The button is named `Load items`. The `status` region becomes `Items loaded`
 after all requests finish and response data validates. The fixed expectation is

@@ -1,30 +1,45 @@
 # Observed product
 
-Decision baseline, 23 September 2026. Read this file for scope, user experience, and acceptance behavior. Read [ARCHITECTURE.md](ARCHITECTURE.md) for implementation boundaries or [ROADMAP.md](ROADMAP.md) for the next milestone. Contributor rules and stack choices live in [AGENTS.md](../AGENTS.md); visual rules live in [DESIGN.md](../DESIGN.md).
+What people should be able to see, and what the evidence can tell them.
+[Architecture](ARCHITECTURE.md) covers implementation; [Roadmap](ROADMAP.md) covers
+the next steps.
 
 ## Purpose
 
-Observed helps developers understand what a software change did. Its product unit is a portable change report connecting a behavior or operation to before/after evidence, relevant source locations, and the limits of the checks performed.
+Observed lets you see the result of a code change in the running application.
+Compare with an earlier version when useful.
 
-The target user repeatedly reconstructs environments, replays actions, collects evidence, or questions an agent's claim that work is complete. High shipping volume is optional. The product hypothesis is that a combined report saves more effort than the user's existing skills and tools. Validate that before expanding scope.
+For a new checkout, show the completed screen. For a layout fix, put the old and
+new versions side by side. If the page looks right but sends duplicate requests,
+keep those requests close enough to inspect.
+
+An existing coding agent can prepare the project configuration and run captures.
+The person opens the result. Test whether this saves people work before adding
+more features.
 
 ## First release
 
-Support one developer, one repository, two comparable application versions, and one to three saved journeys. Start with browser applications, validated initially on React. React instrumentation is optional; browser evidence must also work on a non-React sample.
+Support one developer, one repository, and one to three saved captures. Show the
+current application on its own or compare identified versions. Start with browser
+applications; capture must work with React and non-React apps.
 
-1. Reuse a verification recipe or let the current agent propose one.
-2. Identify the base revision and candidate commit or worktree snapshot.
-3. Run the same journey against isolated versions, or import a compatible baseline.
-4. Capture evidence, compare named expectations, and explain unavailable observations.
-5. Open the report locally and export the report with its evidence bundle.
+1. The existing agent captures the change through one project entry point. It can prepare the project configuration; people do not author manifests or orchestrate capture steps.
+2. Identify the changed commit or worktree snapshot and any version chosen for comparison.
+3. Capture the configured page or interaction. Use the same capture conditions when comparing versions.
+4. Evaluate any configured checks and explain unavailable evidence.
+5. Open the captured result. Keep comparisons, source details, checks, and original artifacts available on demand.
 
 Use existing agents and capture tools. Viewing reports and evaluating explicit checks require no model or account. Keep the project open source, local by default, and suitable for self-hosting. Optional model integrations must not become a cloud dependency.
+
+Project configuration supplies source selection, startup, readiness, browser actions,
+and expectations. Connecting another application must require no edits to Observed.
+A bundled demonstration is an integration test of this same public workflow.
 
 ## Evidence views
 
 | Evidence | View | Claim limit |
 | --- | --- | --- |
-| Appearance | Paired images and changed regions | A visual difference alone is not a regression |
+| Appearance | A captured page, or images side by side | A visual difference alone is not a regression |
 | Interaction and errors | Action timeline, resulting state, error record | Only the exercised path and inputs |
 | Network | Request ledger with method, route, status, count | Browser responses do not establish every backend side effect |
 | Browser performance | Named samples and spread | Local samples are not production percentiles |
@@ -36,7 +51,10 @@ Use existing agents and capture tools. Viewing reports and evaluating explicit c
 
 ## Report behavior
 
-Lead with the conclusion, important difference, and incomplete checks. Keep revision pair, recipe, environment, and capture time reachable. Expand into the appropriate evidence view, then original artifacts or native diagnostic viewers. Use source links only where evidence supports them; label inferred associations.
+Lead with the captured application. When a comparison was requested, show both
+versions and identify any missing capture. A standalone preview needs no baseline.
+Keep checks and technical details one disclosure away. Absent checks do not become
+passes. Label agent interpretations when present.
 
 Keep these dimensions separate:
 
@@ -44,7 +62,7 @@ Keep these dimensions separate:
 | --- | --- |
 | Execution | Complete, blocked, failed |
 | Difference | Unchanged, changed, unavailable |
-| Named check | Passed, failed, unknown |
+| Named check | Passed, failed, unknown, not configured |
 | Interpretation | Expected change, suspected regression, confirmed regression |
 
 A behavior can change while its checks pass. Call it a regression when a comparable passing baseline now fails the same expectation. If another explicit correctness rule establishes a failure, name that rule and disclose any missing baseline. Missing evidence never becomes a pass. AI interpretations remain labeled suggestions.
@@ -61,7 +79,13 @@ Mobile access needs an accessible report copy. Remote actions need a reachable r
 
 ## First success and exclusions
 
-On a real app, seed duplicate requests that existing tests miss while appearance remains unchanged. Show the passing base, failed candidate, request evidence, and available source association. A reader should locate the failure without reproducing it manually. Also handle intentional visual change and unavailable baseline correctly.
+Open a useful capture from a real project. A new screen works as a standalone
+preview; a requested comparison shows the selected versions. Repeat this on
+another project without editing Observed's source.
+
+Then seed a duplicate request while leaving the UI unchanged. The optional check
+should catch it and expose the requests. Intentional visual changes remain
+observations. A requested baseline that cannot be captured remains unavailable.
 
 Automatic repair follows this milestone. Defer a new agent runtime, mandatory daemon, universal graph, plugin marketplace, generic production observability, automatic merging, billing, Kubernetes, and broad framework support.
 

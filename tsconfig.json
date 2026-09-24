@@ -17,8 +17,8 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "tests/**/*.ts",
-    "fixtures/**/*.ts",
-    "fixtures/**/*.tsx",
+    "examples/**/*.ts",
+    "examples/**/*.tsx",
     "scripts/**/*.ts",
     "*.config.ts"
   ]

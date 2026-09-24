@@ -16,21 +16,16 @@ import {
   type CaptureArtifact,
   type Observations,
 } from '../src/capture/model';
-import {
-  fixtureHash,
-  json,
-  producer,
-  recipe,
-  recipeHash,
-  recipeText,
-  sha256,
-} from '../src/capture/recipe';
+import { json, sha256 } from '../src/encoding';
+import type { Recipe } from '../src/capture/recipe';
+import { fixtureHash, producer, recipe } from './support/request-recipe';
 import {
   compareCaptures,
   inspectComparison,
   inspectSide,
 } from '../src/comparison';
 import { comparisonSchema, type Selection } from '../src/comparison-model';
+import { renderComparison } from '../src/comparison-report';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
 const directories: string[] = [];
@@ -64,6 +59,7 @@ async function syntheticBundle(
     count?: number;
     image?: string;
     observations?: Observations;
+    contract?: Recipe;
   } = {},
 ) {
   const directory = await mkdtemp(
@@ -87,9 +83,11 @@ async function syntheticBundle(
 
   const sourceIdentity = { entry: 'main.ts', files: sourceFiles };
   const artifacts: CaptureArtifact[] = [];
+  const contract = options.contract ?? recipe;
+  const contractText = json(contract);
 
   const contents = [
-    { id: 'recipe', path: 'recipe.json', text: recipeText },
+    { id: 'recipe', path: 'recipe.json', text: contractText },
     {
       id: 'requests',
       path: 'requests.json',
@@ -134,17 +132,17 @@ async function syntheticBundle(
   }
 
   const capture: Capture = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     kind: 'capture',
     id: path.basename(directory),
     label: 'Synthetic unit fixture',
-    application: recipe.application,
+    application: 'Synthetic application',
     source: Schema.decodeUnknownSync(sourceSchema)({
       kind: 'snapshot',
       sha256: sha256(json(sourceIdentity)),
       ...sourceIdentity,
     }),
-    recipe: { id: recipe.id, sha256: recipeHash },
+    recipe: { id: contract.id, sha256: sha256(contractText) },
     producer,
     conditions: {
       kind: 'recorded',
@@ -156,8 +154,8 @@ async function syntheticBundle(
         colorScheme: 'light',
         locale: 'en-US',
         timezone: 'UTC',
-        fixtureHash,
-        lockfileHash: sha256('synthetic-lockfile'),
+        inputsHash: fixtureHash,
+        dependenciesHash: sha256('synthetic-lockfile'),
       },
     },
     startedAt: '2026-09-23T11:59:50.000Z',
@@ -266,6 +264,46 @@ test('reports image changes as observations while the named check continues to p
   });
 
   expect(result.conclusion.kind).toBe('no-regression');
+});
+
+test('evaluates a project-defined POST expectation without an items recipe in the comparator', async () => {
+  const contract = {
+    ...recipe,
+    id: 'checkout-submit',
+    check: {
+      ...recipe.check,
+      method: 'POST',
+      path: '/orders',
+      expectedCount: 2,
+    },
+  };
+  const contractText = json(contract);
+  const bundle = await syntheticBundle({
+    observations: {
+      ...syntheticObservations(2),
+      requests: syntheticObservations(2).requests.map((request) => ({
+        ...request,
+        method: 'POST',
+        path: '/orders',
+      })),
+    },
+  });
+
+  await writeFile(path.join(bundle.directory, 'recipe.json'), contractText);
+  await saveManifest(bundle.directory, {
+    ...bundle.capture,
+    recipe: { id: contract.id, sha256: sha256(contractText) },
+    artifacts: bundle.capture.artifacts.map((artifact) =>
+      artifact.id === 'recipe'
+        ? { ...artifact, sha256: sha256(contractText) }
+        : artifact,
+    ),
+  });
+
+  expect((await inspect(bundle.directory)).check).toMatchObject({
+    outcome: 'passed',
+    actual: 2,
+  });
 });
 
 test.each([0, 2])(
@@ -402,7 +440,125 @@ test('keeps the independent candidate check with a missing baseline', async () =
   expect(result.conclusion.kind).toBe('unavailable');
 });
 
-test.each(['application', 'conditions'] as const)(
+test('previews without a baseline or a named check, while a requested missing baseline remains unavailable', async () => {
+  const bundle = await syntheticBundle({
+    contract: { ...recipe, check: null },
+  });
+  const base = await inspect(null);
+  const candidate = await inspect(bundle.directory);
+  const preview = compareCaptures({
+    base,
+    candidate,
+    evaluatedAt,
+    mode: 'preview',
+  });
+
+  expect(preview.comparison.kind).toBe('preview');
+  expect(preview.candidate.check.outcome).toBe('not-run');
+  expect(preview.conclusion.kind).toBe('preview');
+  expect(
+    compareCaptures({ base, candidate, evaluatedAt }).comparison.kind,
+  ).toBe('unavailable');
+
+  await writeFile(
+    path.join(bundle.directory, 'images/after #1.png'),
+    'corrupt',
+  );
+  const failed = compareCaptures({
+    base,
+    candidate: await inspect(bundle.directory),
+    evaluatedAt,
+    mode: 'preview',
+  });
+
+  expect(failed.conclusion.kind).toBe('unavailable');
+  expect(json(failed.comparison)).not.toContain('Base unavailable');
+});
+
+test.each([
+  {
+    observed: { selector: '#status', count: 1, value: 'Saved' },
+    expected: 'passed',
+  },
+  {
+    observed: { selector: '#status', count: 2, value: 'Saved' },
+    expected: 'failed',
+  },
+  {
+    observed: { selector: '#status', count: 1, value: 'Pending' },
+    expected: 'failed',
+  },
+  { observed: undefined, expected: 'unknown' },
+] as const)(
+  'evaluates text expectations with outcome $expected',
+  async ({ observed, expected }) => {
+    const bundle = await syntheticBundle({
+      contract: {
+        ...recipe,
+        check: {
+          kind: 'text',
+          id: 'saved',
+          name: 'Saved status',
+          scope: 'After saving',
+          selector: '#status',
+          expectedText: 'Saved',
+        },
+      },
+      observations: {
+        ...syntheticObservations(),
+        ...(observed === undefined ? {} : { text: observed }),
+      },
+    });
+    const candidate = await inspect(bundle.directory);
+
+    expect(candidate.check.outcome).toBe(expected);
+    const preview = compareCaptures({
+      base: await inspect(null),
+      candidate,
+      evaluatedAt,
+      mode: 'preview',
+    });
+    expect(preview.conclusion.kind).toBe(
+      expected === 'failed' ? 'check-failed' : 'preview',
+    );
+  },
+);
+
+test('renders captured text literally instead of injecting Markdown headings or images', async () => {
+  const value =
+    '\n\n## Forged heading\n\n![remote](https://example.invalid/image.png)';
+  const bundle = await syntheticBundle({
+    contract: {
+      ...recipe,
+      check: {
+        kind: 'text',
+        id: 'status',
+        name: 'Status',
+        scope: 'After capture',
+        selector: '#status',
+        expectedText: 'Saved',
+      },
+    },
+    observations: {
+      ...syntheticObservations(),
+      text: { selector: '#status', count: 1, value },
+    },
+  });
+  const report = renderComparison(
+    compareCaptures({
+      base: await inspect(null),
+      candidate: await inspect(bundle.directory),
+      evaluatedAt,
+      mode: 'preview',
+    }),
+  );
+
+  expect(report).not.toContain('\n\n## Forged heading');
+  expect(report).not.toContain('![remote]');
+  expect(report).toContain('Forged heading');
+});
+
+test.each(['application', 'conditions', 'producer'] as const)(
   'rejects incompatible %s while preserving independent checks',
   async (field) => {
     const base = await syntheticBundle();
@@ -413,16 +569,20 @@ test.each(['application', 'conditions'] as const)(
       throw new Error('Synthetic fixture conditions missing');
     }
 
+    const incompatible = {
+      producer: { producer: { name: 'another-collector', version: '2' } },
+      application: { application: 'A different application' },
+      conditions: {
+        conditions: {
+          kind: 'recorded',
+          value: { ...conditions.value, browser: 'Another browser' },
+        },
+      },
+    };
+
     await saveManifest(candidate.directory, {
       ...candidate.capture,
-      ...(field === 'application'
-        ? { application: 'A different application' }
-        : {
-            conditions: {
-              kind: 'recorded',
-              value: { ...conditions.value, browser: 'Another browser' },
-            },
-          }),
+      ...incompatible[field],
     });
 
     const result = compareCaptures({
@@ -436,7 +596,9 @@ test.each(['application', 'conditions'] as const)(
     expect(result.comparison.kind).toBe('unavailable');
 
     expect(json(result.comparison)).toContain(
-      field === 'application' ? 'different applications' : 'conditions differ',
+      field === 'application'
+        ? 'different applications'
+        : `${field === 'producer' ? 'producers' : 'conditions'} differ`,
     );
   },
 );
@@ -595,7 +757,7 @@ test.each(['manifestHash', 'sourceHash'] as const)(
   },
 );
 
-test.each(['failed', 'conditions', 'producer', 'recipe'] as const)(
+test.each(['failed', 'conditions', 'recipe'] as const)(
   'rejects a capture with unavailable %s prerequisites',
   async (problem) => {
     const bundle = await syntheticBundle();
@@ -614,7 +776,6 @@ test.each(['failed', 'conditions', 'producer', 'recipe'] as const)(
           reason: 'Synthetic missing conditions',
         },
       },
-      producer: { producer: { ...producer, version: '0.38.2' } },
       recipe: {
         recipe: {
           ...bundle.capture.recipe,

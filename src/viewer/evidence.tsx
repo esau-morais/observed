@@ -96,7 +96,13 @@ export function Screenshot({ side, label }: { side: Side; label: string }) {
 
   return (
     <figure {...stylex.props(styles.figure)}>
-      <h3 {...stylex.props(styles.heading)}>{label}</h3>
+      <h2 {...stylex.props(styles.heading)}>{label}</h2>
+      <p {...stylex.props(styles.caption)}>
+        {side.manifest?.label ?? 'No capture'}
+        {side.manifest === null
+          ? ''
+          : ` · ${side.manifest.source.revision ?? 'snapshot'} · ${side.manifest.source.sha256.slice(0, 12)}`}
+      </p>
       {side.screenshot === null ? (
         <p {...stylex.props(styles.missing)}>
           Screenshot unavailable. See unresolved evidence.
@@ -115,7 +121,7 @@ export function Screenshot({ side, label }: { side: Side; label: string }) {
               <img
                 src={side.screenshot}
                 alt={`${label} captured application. Open full-size screenshot.`}
-                loading="lazy"
+                loading="eager"
                 onError={() => setFailed(true)}
                 {...stylex.props(styles.image)}
               />
