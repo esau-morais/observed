@@ -32,15 +32,6 @@ The upstream revision observed during research was `12d587dfb20741cafc376c42c696
 - [Unslop](https://github.com/cursor/plugins/blob/12d587dfb20741cafc376c42c696c5f6e2a64487/pstack/skills/unslop/SKILL.md).
 - [Feature-map examples](https://github.com/cursor/plugins/tree/12d587dfb20741cafc376c42c696c5f6e2a64487/pstack/skills/create-verification-skill/references/feature-map-example).
 
-## PR workflow
-
-The maintainer supplied [babysitting-pr](https://raw.githubusercontent.com/spencerpauly/awesome-cursor-skills/refs/heads/main/resources/babysitting-pr/SKILL.md)
-as a model for project automation. `.agents/skills/babysit-pr` adapts its
-inspect/fix/push/re-check loop and three-cycle bound for Observed. It uses declared
-Bun scripts, explicit-path commits, preserved expectations, current-head approval,
-and GitHub merge checks. It also distinguishes active-task monitoring from a
-persistent event service. No upstream scheduler or CI integration was installed.
-
 ## Official technical references
 
 - [AGENTS.md format](https://agents.md/). Project-specific instructions, relevant commands, and scoped files.

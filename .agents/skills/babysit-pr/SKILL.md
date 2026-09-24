@@ -7,8 +7,8 @@ description: Take an Observed implementation slice through GitHub PR creation, s
 
 Read AGENTS.md and the current roadmap milestone. Apply this workflow to one
 reviewable slice, using the existing implementation branch and PR when present.
-The maintainer has authorized PR publication, feedback fixes, and merging after
-GitHub approval. Do not ask again for those routine actions.
+Publish PRs, address feedback, and merge after GitHub approval. Do not ask again
+for those routine actions.
 
 ## Open and review
 
@@ -83,6 +83,3 @@ integration or runner; do not claim one exists because these instructions do.
 Report the PR URL, reviewed head, checks, addressed feedback, and merge state.
 When waiting for approval, state that explicitly. On resumption, fetch current
 GitHub state rather than relying on the previous handoff.
-
-Adapted from the supplied babysitting-pr workflow; see
-[sources and adaptation decisions](../../sources.md#pr-workflow).

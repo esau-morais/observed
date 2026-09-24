@@ -1,6 +1,6 @@
 ---
 name: develop-observed
-description: Implement a small Observed roadmap slice autonomously, using the project's verification and PR workflows. Captures the maintainer's explicit working preferences from development sessions.
+description: Implement a small Observed roadmap slice autonomously, using the project's verification and PR workflows.
 ---
 
 # Develop Observed
@@ -39,19 +39,16 @@ is connected; ask to connect it only if that fallback is actually necessary.
 
 ## Carry the slice through its PR
 
-Use [babysit-pr](../babysit-pr/SKILL.md). The maintainer explicitly authorized
-opening and updating implementation PRs during each phase, self-review, handling
-GitHub feedback, and merging through GitHub after approval and passing checks.
-Continue without asking again for those routine actions. Keep approval distinct
-from self-review and check success.
+Use [babysit-pr](../babysit-pr/SKILL.md). Open and update implementation PRs during
+each phase, review the changes, handle GitHub feedback, and merge through GitHub
+after approval and passing checks. Continue without asking again for those routine
+actions. Keep approval distinct from self-review and check success.
 
 ## Improve the project workflow
 
-When the maintainer asks to capture session lessons, update these project skills
-with automate-me. Use create-verification-skill to maintain actual project
-verification as executable entry points become available. Do not generate skills
-for temporary demos or fixtures. Keep generator skills available for later changes.
-Do not turn a one-time workaround into a project rule.
+Keep these workflows current as project entry points and verification steps
+change. Do not generate skills for temporary demos or fixtures, or turn a one-time
+workaround into a project rule.
 
 These instructions guide an active agent. They do not install a scheduler or keep
 a completed subagent watching GitHub. Report the actual PR and monitoring state.
