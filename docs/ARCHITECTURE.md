@@ -39,6 +39,55 @@ Use explicit links and adapter extension payloads. No graph database or universa
 
 Hashes detect changed artifacts; they do not establish collector honesty. A stack trace can associate a source location with an error. Temporal proximity cannot prove that a changed line caused a slowdown. Expose missing mappings and inferred relationships.
 
+### Phase 0 import contract
+
+The current implementation separates these boundaries: `src/schema.ts` parses external
+input with Effect Schema, `src/evidence.ts` inspects artifacts and determines whether an
+imported result has available evidence, `src/report.ts` renders Markdown, and
+`src/cli.ts` uses Effect Command and Bun platform services to read and write files.
+`src/node-io.ts` provides typed errors for Node-compatible filesystem operations
+that Effect FileSystem does not expose: `lstat` and numeric open flags. File handles
+use Effect scopes; artifact inspection has bounded concurrency. It does not execute recipes or compare
+application revisions.
+
+Schema version 1 accepts one capture per manifest. The manifest's directory is
+the bundle root. See the small attributable
+[example manifest](../tests/fixtures/todomvc/manifest.json) and its
+[provenance](../tests/fixtures/todomvc/README.md).
+
+| Field | Contract |
+| --- | --- |
+| `schemaVersion`, `title` | Version 1 and report title |
+| `application` | Name, location, repository; unavailable values carry an explicit unknown reason |
+| `revisions`, `capture.revision` | Base, candidate, and captured identity: commit, worktree snapshot, or unknown |
+| `recipe` | ID, known version or unknown reason, artifact ID; the recipe artifact carries its optional expected SHA-256 |
+| `capture` | ID, producer name/version, UTC start/finish or unknown reasons, conditions, execution state, required provenance artifact IDs |
+| `artifacts` | Unique ID, bundle-relative path, description, optional lowercase SHA-256 |
+| `checks` | Unique ID, name, expectation, scope, method, supplier, supplied passed/failed/unknown result, artifact IDs, missing prerequisites |
+| `missingPrerequisites`, `limitations` | Report-wide gaps and interpretation limits; check-specific blockers also belong on the check |
+
+Unknown fields, unsupported versions, malformed values, duplicate IDs, undefined
+references, and reversed known timestamps reject the manifest. Missing files,
+unsafe paths, symlinks (including parent directories), non-files, unreadable
+files, and hash mismatches appear as unavailable evidence. An affected check
+becomes unknown while preserving its supplied result. Missing recipe or capture
+provenance artifacts affect every check; a missing check-specific artifact affects
+that check. A non-complete capture, empty check evidence list, or check prerequisite
+also makes the outcome unknown. Report-wide missing baselines do not invalidate
+an imported single-capture behavior result, but comparison remains unavailable.
+
+Without an expected hash, the report labels the digest as computed and unverified.
+Even a matching hash establishes only file consistency. The importer does not
+authenticate metadata, parse assertions from logs, detect stale captures, or
+establish compatibility. Keep input bundles immutable during generation and
+review; concurrent mutation is outside this local import contract.
+
+The CLI creates a new output file exclusively and links evidence relative to its
+actual output directory. An existing output is an error. Exit 0 means a report
+was written, including reports with unknown or failed checks; exit 1 means input,
+usage, or I/O prevented generation. It is not a behavior gate. Keep the report
+with its manifest and artifacts when moving the bundle.
+
 ## Comparable and safe runs
 
 - Pin the base. Snapshot intended modified and untracked source for the candidate, excluding credentials and unrelated ignored data.

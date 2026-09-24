@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "title": "TodoMVC reload excerpt",
+  "application": {
+    "name": "React TodoMVC public demo",
+    "location": {
+      "kind": "known",
+      "value": "https://demo.playwright.dev/todomvc/"
+    },
+    "repository": {
+      "kind": "unknown",
+      "reason": "Deployment repository not recorded"
+    }
+  },
+  "revisions": {
+    "base": { "kind": "unknown", "reason": "No baseline captured" },
+    "candidate": {
+      "kind": "unknown",
+      "reason": "Deployment revision not captured"
+    }
+  },
+  "recipe": {
+    "id": "todomvc-completion-reload-excerpt",
+    "version": { "kind": "known", "value": "4 (reload excerpt only)" },
+    "artifactId": "recipe"
+  },
+  "capture": {
+    "id": "capture-04-run-1-excerpt",
+    "revision": {
+      "kind": "unknown",
+      "reason": "Deployment revision not captured"
+    },
+    "producer": {
+      "name": "agent-browser",
+      "version": { "kind": "known", "value": "0.38.1" }
+    },
+    "startedAt": { "kind": "known", "value": "2026-09-24T00:53:17Z" },
+    "finishedAt": { "kind": "known", "value": "2026-09-24T00:53:18Z" },
+    "conditions": [
+      "Linux headless Chrome 153; 1280 x 800; DPR 1; --no-sandbox",
+      "Isolated browser session; fixture title Observed Phase 0 evidence"
+    ],
+    "execution": "complete",
+    "artifactIds": ["reload"]
+  },
+  "artifacts": [
+    {
+      "id": "reload",
+      "path": "reload.log",
+      "description": "Original transcript lines 106-117",
+      "sha256": "bc24f751c94ddfe85e38ea22f6ada282322f768cfa8f7c03a091d37dd3a1eaa9"
+    },
+    {
+      "id": "recipe",
+      "path": "recipe.txt",
+      "description": "Original recipe lines 87-92",
+      "sha256": "b41ccbf0d9d6150b6e9b8d29392d818be75d839a73ea1586e8b996df395cb693"
+    }
+  ],
+  "checks": [
+    {
+      "id": "reload",
+      "name": "Reload persistence",
+      "expectation": "One matching completed todo survives reload",
+      "scope": "One disposable todo in one browser session",
+      "method": "Shell equality assertions on browser count, title, and checked state",
+      "suppliedBy": "Contributor import of agent-browser transcript",
+      "result": {
+        "kind": "passed",
+        "detail": "Count 1, matching title, checked true after reload"
+      },
+      "artifactIds": ["reload"],
+      "missingPrerequisites": []
+    },
+    {
+      "id": "comparison",
+      "name": "Revision comparison",
+      "expectation": "Comparable base and candidate execute the same expectation",
+      "scope": "Software change comparison",
+      "method": "Not executed",
+      "suppliedBy": "Contributor import",
+      "result": {
+        "kind": "unknown",
+        "reason": "No identified baseline or candidate"
+      },
+      "artifactIds": [],
+      "missingPrerequisites": ["Identified revision pair"]
+    }
+  ],
+  "missingPrerequisites": [
+    "Verified deployment revision and comparable baseline"
+  ],
+  "limitations": [
+    "Selected excerpts only; see fixture README for provenance",
+    "No backend persistence, network, performance, or accessibility conformance checked",
+    "Timestamps are from the capture host; clock accuracy is unknown"
+  ]
+}

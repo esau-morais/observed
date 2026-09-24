@@ -4,7 +4,53 @@ Observed shows what a software change did, using evidence from the running syste
 
 Planned as an open-source, self-hostable tool for any coding agent and application framework, with local operation, portable reports, and optional AI. Browser applications come first.
 
-> **Status: planning.** The flow below describes the intended final system, including later adapters and automatic repair. These capabilities are not all implemented.
+> **Status: Phase 0 report CLI.** Observed generates Markdown from imported evidence,
+> validates artifact references, and checks supplied hashes. Behavior results remain
+> labeled as imported. The flow below describes the intended final system,
+> including unimplemented capture, comparison, viewer, and repair paths.
+
+## Generate a report
+
+Use Bun **1.4.2**, pinned in `package.json`. Bun installs dependencies and executes
+the TypeScript CLI directly with `@effect/platform-bun`, plus TypeScript, ESLint,
+Prettier, and Vitest. Scripts resolve installed local tool binaries. The
+`packageManager` and `engines` fields declare versions; they do not install Bun.
+Effect v4 is a stack requirement; this slice pins `4.0.0-rc.117`. See the
+[official onboarding](https://effect.website/docs/v4/onboarding) and
+[CLI API](https://effect.website/docs/v4/api/effect/unstable/cli/Command).
+
+```bash
+bun install --frozen-lockfile
+mkdir -p evidence
+run_dir="$(mktemp -d evidence/report-example.XXXXXX)"
+cp -R tests/fixtures/todomvc/. "$run_dir/"
+bun run report "$run_dir/manifest.json" "$run_dir/report.md"
+```
+
+This example uses a small, attributable excerpt from a real TodoMVC capture. Expect
+**1 imported passed, 0 imported failed, and 1 unknown check**. Read `report.md` and
+follow its relative evidence links. The unavailable check is revision comparison;
+the public demo's deployed revision and baseline were not captured.
+
+For your evidence, place a version 1 manifest and artifacts in one directory, then
+run `bun run report path/to/manifest.json path/to/new-report.md`. The output parent
+must exist and the output file must be new. Missing evidence is reported as unknown.
+Successful generation is not a passing behavior verdict. The
+[input contract](docs/ARCHITECTURE.md#phase-0-import-contract) explains required
+fields and integrity limits. No contributor skill is needed to run the tool.
+
+Development checks:
+
+```bash
+bun run typecheck
+bun run lint
+bun run test
+bun run build
+```
+
+Reports and captures stay local under gitignored `evidence/`. The
+[verification workflow](.agents/skills/verify-observed/SKILL.md) records the command
+executed against the full retained capture and how its output was checked.
 
 ## The complete flow
 

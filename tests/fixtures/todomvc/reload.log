@@ -1,0 +1,12 @@
++ agent-browser reload
+https://demo.playwright.dev/todomvc/#/
++ agent-browser wait --text 'Observed Phase 0 evidence'
+Observed Phase 0 evidence
+++ agent-browser get count '.todo-list li'
++ test 1 = 1
+++ agent-browser find testid todo-title text
++ test 'Observed Phase 0 evidence' = 'Observed Phase 0 evidence'
+++ agent-browser is checked '.todo-list .toggle'
++ test true = true
++ echo 'PASS reload: matching completed todo persisted'
+PASS reload: matching completed todo persisted
