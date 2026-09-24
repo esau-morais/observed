@@ -11,7 +11,7 @@ Reviewed on 23 September 2026. These project skills use original, shortened word
 | Test runner | Vitest, chosen for the Vite project. Use bun run test so Bun does not select its own runner |
 | Instruction size | Root policy contains stack, commands, evidence invariants, test selection, and boundaries. Load detailed skills only for relevant tasks |
 | Skill location | Canonical .agents/skills with a relative .claude/skills link and a CLAUDE.md import |
-| Verification | Execute a recipe before marking it ready. No runnable app exists yet, so verify-observed is not generated |
+| Verification | Execute a recipe before marking it ready. verify-observed covers Phase 0 report inspection; application runtime verification remains unavailable |
 | Comments | Remove redundant prose; preserve invariants, external constraints, licenses, and justified directives |
 | Type examples | Correct the upstream examples that imply a plain number is non-negative or a non-empty array guarantees an arbitrary index |
 | Provider tests | Test our contracts and failure handling. Sanitized fixtures need provenance and do not prove current provider compatibility |

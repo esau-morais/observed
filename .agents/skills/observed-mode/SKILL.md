@@ -29,6 +29,8 @@ case in code, identifiers, file paths, commands, and quoted text when it matters
 
 ## Verify the change
 
+Use [verify-observed](../verify-observed/SKILL.md) for the current evidence workflow.
+
 Check package.json before choosing commands and run only applicable checks that
 exist. Exercise the changed behavior through its real entry point. A successful
 command is not proof of the resulting state. Preserve unknown and failed outcomes;
