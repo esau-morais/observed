@@ -4,7 +4,7 @@ The product sequence and self-verification stages live in [ROADMAP.md](../docs/R
 
 ## Project skills
 
-The six skills in .agents/skills support contributors. They have no editor-specific commands, transcript paths, or specialist-agent dependencies. The automate-me skill requires an explicit preference-capture request.
+The skills in .agents/skills support contributors. They have no editor-specific commands, transcript paths, or specialist-agent dependencies. The automate-me skill requires an explicit preference-capture request.
 
 .agents/skills is canonical. .claude/skills is a relative directory symlink to ../.agents/skills. CLAUDE.md imports @AGENTS.md for hosts that need it.
 
@@ -29,6 +29,9 @@ report is `evidence/phase-0/todomvc/report.md`. It checks an external demo, not
 Observed. The final two runs passed five named behavior checks each and restored
 the empty fixture. Earlier failed attempts remain local. No developer adoption or
 verification-time savings have been measured.
+
+Use [verify-todomvc](skills/verify-todomvc/SKILL.md) to repeat that external-demo
+journey. It references the executed recipe; it does not verify an Observed app.
 
 Use agent-browser first for browser verification. Read its installed core skill
 before driving, check its version, and prefer its built-in commands. Use custom
