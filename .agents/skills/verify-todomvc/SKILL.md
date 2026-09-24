@@ -24,7 +24,7 @@ expectations, conditions, and cleanup. Do not duplicate them here.
 
 Execute the recipe from the repository root. It covers launch, add, complete,
 reload persistence, Active and Completed filters, capture, and cleanup. Two
-isolated runs of version 4 completed with agent-browser 0.38.1 during the initial
+isolated runs of version 5 completed with agent-browser 0.38.1 during the initial
 Phase 0 exercise.
 
 Use built-in locators, queries, and condition waits. A changed URL alone is not

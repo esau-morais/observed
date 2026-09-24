@@ -1,6 +1,6 @@
 # TodoMVC completion and persistence recipe
 
-Version: 4. Producer: agent-browser 0.38.1, using headless Chrome.
+Version: 5. Producer: agent-browser 0.38.1, using headless Chrome.
 Target: <https://demo.playwright.dev/todomvc/> (public React demonstration).
 No login, credentials, local application server, or package installation is needed
 when this tool version and Chrome are installed.
@@ -37,16 +37,19 @@ failed because Chrome could not use a sandbox on this host.
 ```bash
 set -eu
 
-root="evidence/phase-0/todomvc/capture-04"
+root="evidence/phase-0/todomvc/capture-05"
 test ! -e "$root"
 mkdir -p "$root"
-agent-browser --version > "$root/producer.txt"
-test "$(cat "$root/producer.txt")" = "agent-browser 0.38.1"
+(
+  set -ex
+  agent-browser --version > "$root/producer.txt"
+  test "$(cat "$root/producer.txt")" = "agent-browser 0.38.1"
+) > "$root/setup.log" 2>&1
 
 for run in 1 2; do
   (
     set -ex
-    AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix "observed-phase0-capture04-$run")"
+    AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix "observed-phase0-capture05-$run")"
     export AGENT_BROWSER_SESSION
     trap 'agent-browser close' EXIT
     date -u +%Y-%m-%dT%H:%M:%SZ
@@ -141,7 +144,8 @@ custom application-state evaluation with built-in queries and updated the produc
 version. Version 3 tried waiting for an empty list selector to become visible;
 that timed out because an empty list has no height. Version 4 uses the documented
 condition wait for zero rows. It keeps the original zero-row expectation. Results
-across producer versions are not a controlled tool comparison.
+across producer versions are not a controlled tool comparison. Version 5 also
+retains producer-check commands, stderr, and failures in `setup.log`.
 
 ## Artifact handling
 
