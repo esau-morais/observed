@@ -403,10 +403,18 @@ test('matches a protected request origin without conflating the same path on ano
       contract: { ...recipe, allowedOrigins: [origin], check: definition },
       observations: { ...observations, requests },
     });
-    expect((await inspect(bundle.directory)).check).toMatchObject({
+    const side = await inspect(bundle.directory);
+    expect(side.check).toMatchObject({
       outcome: 'passed',
       actual: 1,
     });
+    const report = renderComparison(
+      compareCaptures({ base: side, candidate: side, evaluatedAt }),
+    );
+    expect(report).toContain('| GET | /api/items | 200 |');
+    expect(report).toContain(
+      '| GET | https://api\\.example\\.test/api/items | 202 |',
+    );
   }
 
   const unconfigured = await syntheticBundle({

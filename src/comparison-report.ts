@@ -87,7 +87,7 @@ function renderLedger(side: Side, label: string): string {
           '| --- | --- | --- | --- |',
           ...observations.requests.map(
             (request) =>
-              `| ${escapeText(request.method)} | ${escapeText(request.path)} | ${request.status} | ${escapeText(request.startedAt)} |`,
+              `| ${escapeText(request.method)} | ${escapeText(`${request.origin === 'application' ? '' : request.origin}${request.path}`)} | ${request.status} | ${escapeText(request.startedAt)} |`,
           ),
         ].join('\n');
 

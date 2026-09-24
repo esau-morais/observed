@@ -17,39 +17,48 @@ const sensitive = new Set([
   'x-api-key',
 ]);
 
-function redactUrl(value: string): string {
-  const absolute = URL.canParse(value);
-  const url = URL.parse(value, 'https://observed.invalid');
+function redactUserInfo(value: string): string {
+  const url = URL.parse(value);
 
-  if (url === null || !['http:', 'https:'].includes(url.protocol)) {
+  if (url === null || (url.username === '' && url.password === '')) {
     return value;
   }
 
-  let changed = false;
+  url.username = '[REDACTED]';
+  url.password = '';
 
-  if (url.username !== '' || url.password !== '') {
-    url.username = '[REDACTED]';
-    url.password = '';
-    changed = true;
-  }
+  return url.href;
+}
 
-  for (const key of new Set(url.searchParams.keys())) {
-    if (sensitive.has(key.toLowerCase())) {
-      url.searchParams.set(key, '[REDACTED]');
-      changed = true;
-    }
-  }
+function redactQuery(value: string): string {
+  return value
+    .split('#')
+    .map((part) => {
+      const start = part.indexOf('?');
 
-  if (!changed) {
-    return value;
-  }
+      if (start === -1) {
+        return part;
+      }
 
-  return absolute ? url.href : `${url.pathname}${url.search}${url.hash}`;
+      const query = new URLSearchParams(part.slice(start + 1));
+      let changed = false;
+
+      for (const key of new Set(query.keys())) {
+        if (sensitive.has(key.toLowerCase())) {
+          query.set(key, '[REDACTED]');
+          changed = true;
+        }
+      }
+
+      return changed ? `${part.slice(0, start + 1)}${query.toString()}` : part;
+    })
+    .join('#');
 }
 
 function redactString(value: string): string {
   return value
-    .replace(/https?:\/\/[^\s<>"']+|[^\s<>"']*\?[^\s<>"']+/gi, redactUrl)
+    .replace(/https?:\/\/[^\s<>"']+/gi, redactUserInfo)
+    .replace(/[^\s<>"']*\?[^\s<>"']*/g, redactQuery)
     .replace(
       /((?:authorization|cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/gi,
       '$1[REDACTED]',

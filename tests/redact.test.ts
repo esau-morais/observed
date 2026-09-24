@@ -1,6 +1,18 @@
 import { expect, test } from 'vitest';
 import { redact, redactText } from '../src/redact';
 
+test.each([
+  'url=https://alice:credential@example.test/orders?sort=name',
+  'URL:https://example.test/orders?token=credential&sort=name',
+  '(https://alice:credential@example.test/orders?sort=name)',
+  '/#/orders?token=credential&sort=name',
+  '/#/orders?%74oken=credential&sort=name',
+])('redacts credentials in prefixed URLs and hash routes: %s', (value) => {
+  const redacted = redactText(value);
+  expect(redacted).not.toContain('credential');
+  expect(redacted).toContain('sort=name');
+});
+
 test('redacts URL credentials by decoded key in structured values and log lines', () => {
   const urls = [
     'https://example.test/orders?%74oken=credential&sort=name',

@@ -27,27 +27,30 @@ test.each(['/orders?category=books', '/orders#submitted'])(
   },
 );
 
-test.each(['token', '%74oken', 'api%5fkey'])(
-  'rejects credential-bearing configuration with query key %s before capture',
-  async (key) => {
-    const root = await mkdtemp(path.join(tmpdir(), 'observed-project-'));
+test.each([
+  '?token',
+  '?%74oken',
+  '?api%5fkey',
+  '#/orders?token',
+  '#/orders?%74oken',
+])('rejects credential-bearing capture path /%s', async (query) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'observed-project-'));
 
-    try {
-      await writeFile(
-        path.join(root, 'observed.json'),
-        json({
-          ...shop,
-          capture: { ...shop.capture, path: `/?${key}=sensitive-value` },
-        }),
-      );
-      const result = await Effect.runPromise(
-        loadProject(root).pipe(Effect.provide(BunServices.layer), Effect.flip),
-      );
+  try {
+    await writeFile(
+      path.join(root, 'observed.json'),
+      json({
+        ...shop,
+        capture: { ...shop.capture, path: `/${query}=sensitive-value` },
+      }),
+    );
+    const result = await Effect.runPromise(
+      loadProject(root).pipe(Effect.provide(BunServices.layer), Effect.flip),
+    );
 
-      expect(result.message).toContain('credentials');
-      expect(result.message).not.toContain('sensitive-value');
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-);
+    expect(result.message).toContain('credentials');
+    expect(result.message).not.toContain('sensitive-value');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
