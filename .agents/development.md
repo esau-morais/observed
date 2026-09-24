@@ -15,3 +15,23 @@ Check the symlink after checkout. If the system does not preserve links, report 
 When setup becomes repeated work, offer an explicit action for one versioned Observed skill and a project recipe. Show planned files, respect existing files, record skill and CLI versions, and support removal. Do not silently modify user instructions or install this contributor collection.
 
 Generate verify-observed only after the app's actual launch, drive, capture, and cleanup steps work. Record blocked prerequisites instead of inventing commands.
+
+## Local evidence
+
+Keep routine screenshots, browser logs, traces, recordings, failed runs, and draft
+reports under the gitignored `evidence/` directory. Retain them for inspection at
+handoff. Commit reusable recipes and useful findings. Commit a small report
+example or sanitized, attributable fixture only when it supports evaluation or a
+regression contract. Shared CI artifacts need a retention policy when CI is added.
+
+The [TodoMVC recipe](recipes/todomvc.md) is the first Phase 0 exercise. Its local
+report is `evidence/phase-0/todomvc/report.md`. It checks an external demo, not
+Observed. The final two runs passed five named behavior checks each and restored
+the empty fixture. Earlier failed attempts remain local. No developer adoption or
+verification-time savings have been measured.
+
+Use agent-browser first for browser verification. Read its installed core skill
+before driving, check its version, and prefer its built-in commands. Use custom
+evaluation only for a demonstrated gap. Check whether the desktop browser is
+connected before calling its browser actions; if that fallback is necessary and
+disconnected, ask the user to connect it.

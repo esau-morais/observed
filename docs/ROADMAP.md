@@ -2,9 +2,16 @@
 
 ## Current state and next action
 
-Specifications and visual concepts exist. No runnable Observed application, pilot, or production integration has been verified. Stack and workflow decisions are in [AGENTS.md](../AGENTS.md).
+Specifications and visual concepts exist. Phase 0 now has an executed
+[TodoMVC verification recipe](../.agents/recipes/todomvc.md) and a local report
+assembled from real captures. No runnable Observed application, developer pilot,
+or production integration has been verified. Stack and workflow decisions are in
+[AGENTS.md](../AGENTS.md).
 
-Start with Phase 0. Assemble a report from real existing artifacts while observing repeated verification work. Do not build the full adapter list before checking whether people use the report.
+Continue Phase 0: evaluate whether the combined report helps a developer inspect
+a real change and observe their repeated verification work. The contributor-run
+demo established a capture path, not the milestone's adoption exit condition.
+Do not build the full adapter list before checking whether people use the report.
 
 Read only the document relevant to the task:
 
