@@ -34,10 +34,7 @@ Keep the input bundle immutable during generation and review.
 Development checks:
 
 ```bash
-bun run typecheck
-bun run lint
-bun run test
-bun run build
+bun run check
 ```
 
 Reports and captures stay local under gitignored `evidence/`.

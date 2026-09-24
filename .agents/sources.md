@@ -2,24 +2,6 @@
 
 Reviewed on 23 September 2026. These project skills use original, shortened wording informed by the linked workflows. They are adapted instructions, not an unmodified pstack installation.
 
-## Decisions
-
-| Topic | Project decision |
-| --- | --- |
-| Package manager and runtime | Bun installs dependencies and runs the application and tools. Versions are declared in package.json |
-| Effect | Effect v4 is required for schemas, typed failures, resources, and workflows. Effect Command uses `@effect/platform-bun` at the CLI boundary |
-| Viewer | React, Vite, and StyleX. Vite and StyleX follow the user's selections; React follows the report plan |
-| Test runner | Vitest, chosen for the Vite project. Use bun run test so Bun does not select its own runner |
-| Instruction size | Root policy contains stack, commands, evidence invariants, test selection, and boundaries. Load detailed skills only for relevant tasks |
-| Skill location | Canonical .agents/skills with a relative .claude/skills link and a CLAUDE.md import |
-| Verification | Execute a recipe before marking it ready. verify-observed covers the report CLI and inspection against retained artifacts; application capture and revision comparison remain unavailable |
-| Comments | Remove redundant prose; preserve invariants, external constraints, licenses, and justified directives |
-| Type examples | Correct the upstream examples that imply a plain number is non-negative or a non-empty array guarantees an arbitrary index |
-| Provider tests | Test our contracts and failure handling. Sanitized fixtures need provenance and do not prove current provider compatibility |
-| Distribution | Contributor skills remain project files. Product operation does not require them. Offer one optional product skill through explicit setup when needed |
-
-AGENTS.md uses the unslop editing approach. Project verification uses executed commands and scoped checks rather than exhaustive feature coverage.
-
 ## Source workflows
 
 The upstream revision observed during research was `12d587dfb20741cafc376c42c696c5f6e2a64487`. Source files retrieved from the supplied main-branch links are listed with their SHA-256 values below.

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "report": "bun src/cli.ts",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "typecheck": "bun run --bun tsc --noEmit",
     "lint": "bun run --bun eslint . && bun run --bun prettier --check .",
     "format": "bun run --bun prettier --write .",

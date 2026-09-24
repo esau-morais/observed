@@ -10,11 +10,12 @@ Use its declared Bun version and scripts:
 
 ```bash
 bun install --frozen-lockfile
-bun run typecheck
-bun run lint
-bun run test
-bun run build
+bun run check
 ```
+
+Use individual scripts for focused development checks. Documentation-only edits
+need diff, link, and instruction review. CI and tooling changes need the checks
+they affect; confirm the actual GitHub run before claiming CI works.
 
 ## Report verification
 
