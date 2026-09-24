@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { ArtifactResult, CheckResult, EvidenceReport } from './evidence';
 import type { Manifest } from './schema';
 
-function text(value: string): string {
+function escapeMarkdownText(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -12,29 +12,27 @@ function text(value: string): string {
     .replace(/\p{Cc}/gu, ' ');
 }
 
-function known(
-  value: { kind: 'known'; value: string } | { kind: 'unknown'; reason: string },
-): string {
+function known(value: Manifest['application']['location']): string {
   return value.kind === 'known'
-    ? text(value.value)
-    : `Unknown: ${text(value.reason)}`;
+    ? escapeMarkdownText(value.value)
+    : `Unknown: ${escapeMarkdownText(value.reason)}`;
 }
 
 function revision(value: Manifest['capture']['revision']): string {
   return value.kind === 'unknown'
-    ? `Unknown: ${text(value.reason)}`
-    : `${value.kind}: ${text(value.value)}`;
+    ? `Unknown: ${escapeMarkdownText(value.reason)}`
+    : `${value.kind}: ${escapeMarkdownText(value.value)}`;
 }
 
 function timestamp(value: Manifest['capture']['startedAt']): string {
   return value.kind === 'known'
     ? DateTime.formatIso(value.value)
-    : `Unknown: ${text(value.reason)}`;
+    : `Unknown: ${escapeMarkdownText(value.reason)}`;
 }
 
 function evidenceLink(result: ArtifactResult, outputDirectory: string): string {
   if (result.kind === 'unavailable') {
-    return `${text(result.artifact.id)} (unavailable)`;
+    return `${escapeMarkdownText(result.artifact.id)} (unavailable)`;
   }
 
   const relative = path
@@ -49,7 +47,7 @@ function evidenceLink(result: ArtifactResult, outputDirectory: string): string {
     )
     .join('/');
 
-  return `[${text(result.artifact.id)}](./${href})`;
+  return `[${escapeMarkdownText(result.artifact.id)}](./${href})`;
 }
 
 function renderCheck(
@@ -59,17 +57,17 @@ function renderCheck(
   const detail =
     check.result.kind === 'unknown' ? check.result.reason : check.result.detail;
   const incomplete = reasons
-    .map((reason) => `- Incomplete: ${text(reason)}`)
+    .map((reason) => `- Incomplete: ${escapeMarkdownText(reason)}`)
     .join('\n');
 
-  return `### ${text(check.name)} (${text(check.id)})
+  return `### ${escapeMarkdownText(check.name)} (${escapeMarkdownText(check.id)})
 
 - Reported outcome: **${outcome}**
-- Supplied result: ${check.result.kind}; ${text(detail)}
-- Expectation: ${text(check.expectation)}
-- Scope: ${text(check.scope)}
-- Method: ${text(check.method)}
-- Supplied by: ${text(check.suppliedBy)}
+- Supplied result: ${check.result.kind}; ${escapeMarkdownText(detail)}
+- Expectation: ${escapeMarkdownText(check.expectation)}
+- Scope: ${escapeMarkdownText(check.scope)}
+- Method: ${escapeMarkdownText(check.method)}
+- Supplied by: ${escapeMarkdownText(check.suppliedBy)}
 - Evidence: ${evidence}
 ${incomplete}`.trimEnd();
 }
@@ -77,7 +75,7 @@ ${incomplete}`.trimEnd();
 function renderArtifact(result: ArtifactResult, link: string): string {
   let integrity: string;
   if (result.kind === 'unavailable') {
-    integrity = `Unknown: ${text(result.reason)}`;
+    integrity = `Unknown: ${escapeMarkdownText(result.reason)}`;
   } else {
     const label =
       result.integrity === 'matched'
@@ -86,7 +84,7 @@ function renderArtifact(result: ArtifactResult, link: string): string {
     integrity = `SHA-256 ${label}: \`${result.hash}\``;
   }
 
-  return `- ${link}: ${text(result.artifact.description)}
+  return `- ${link}: ${escapeMarkdownText(result.artifact.description)}
   - ${integrity}`;
 }
 
@@ -132,21 +130,23 @@ export function renderReport(
       : incomplete
           .map(
             (result) =>
-              `- ${text(result.check.name)}: ${result.reasons.map(text).join('; ')}`,
+              `- ${escapeMarkdownText(result.check.name)}: ${result.reasons.map(escapeMarkdownText).join('; ')}`,
           )
           .join('\n');
   const conditions = manifest.capture.conditions
-    .map((condition) => `- Condition: ${text(condition)}`)
+    .map((condition) => `- Condition: ${escapeMarkdownText(condition)}`)
     .join('\n');
   const integrity = linkedArtifacts
     .map(({ result, link }) => renderArtifact(result, link))
     .join('\n');
   const limitations = [
-    ...manifest.missingPrerequisites.map((item) => `- Missing: ${text(item)}`),
-    ...manifest.limitations.map((item) => `- ${text(item)}`),
+    ...manifest.missingPrerequisites.map(
+      (item) => `- Missing: ${escapeMarkdownText(item)}`,
+    ),
+    ...manifest.limitations.map((item) => `- ${escapeMarkdownText(item)}`),
   ].join('\n');
 
-  return `# ${text(manifest.title)}
+  return `# ${escapeMarkdownText(manifest.title)}
 
 ## Conclusion
 
@@ -156,23 +156,25 @@ Behavior was not independently verified by Observed. Change comparison and regre
 
 Observed computed artifact availability and SHA-256 integrity only: ${artifacts.length - unavailable} available; ${unavailable} unavailable. Schema version 1 validated.
 
+Evidence: ${linkedArtifacts.map((item) => item.link).join(', ')}
+
 ## Incomplete checks
 
 ${incompleteChecks}
 
 ## Supplied application and capture context
 
-- Application: ${text(manifest.application.name)}
+- Application: ${escapeMarkdownText(manifest.application.name)}
 - Location: ${known(manifest.application.location)}
 - Repository: ${known(manifest.application.repository)}
 - Base: ${revision(manifest.revisions.base)}
 - Candidate: ${revision(manifest.revisions.candidate)}
 - Captured revision: ${revision(manifest.capture.revision)}
-- Capture: ${text(manifest.capture.id)}; execution: ${manifest.capture.execution}
+- Capture: ${escapeMarkdownText(manifest.capture.id)}; execution: ${manifest.capture.execution}
 - Started: ${timestamp(manifest.capture.startedAt)}
 - Finished: ${timestamp(manifest.capture.finishedAt)}
-- Producer: ${text(manifest.capture.producer.name)}; version: ${known(manifest.capture.producer.version)}
-- Recipe: ${text(manifest.recipe.id)}; version: ${known(manifest.recipe.version)}; artifact: ${text(manifest.recipe.artifactId)} (hash below)
+- Producer: ${escapeMarkdownText(manifest.capture.producer.name)}; version: ${known(manifest.capture.producer.version)}
+- Recipe: ${escapeMarkdownText(manifest.recipe.id)}; version: ${known(manifest.recipe.version)}; artifact: ${escapeMarkdownText(manifest.recipe.artifactId)} (hash below)
 ${conditions}
 
 ## Named checks

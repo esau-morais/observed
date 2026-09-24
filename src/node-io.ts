@@ -1,4 +1,7 @@
 import { Effect, Predicate, Schema } from 'effect';
+import { getSystemErrorMap } from 'node:util';
+
+const systemErrors = getSystemErrorMap();
 
 export class EvidenceIoError extends Schema.TaggedError<EvidenceIoError>()(
   'EvidenceIoError',
@@ -10,13 +13,20 @@ export function nodeIo<A>(
 ): Effect.Effect<A, EvidenceIoError> {
   return Effect.tryPromise({
     try: operation,
-    catch: (cause) =>
-      new EvidenceIoError({
-        code:
-          Predicate.hasProperty(cause, 'code') && Predicate.isString(cause.code)
-            ? cause.code
-            : 'UNKNOWN',
-        cause,
-      }),
-  });
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.catch((cause) => {
+      if (
+        Predicate.hasProperty(cause, 'code') &&
+        Predicate.isString(cause.code) &&
+        Predicate.hasProperty(cause, 'errno') &&
+        Predicate.isNumber(cause.errno) &&
+        systemErrors.get(cause.errno)?.[0] === cause.code
+      ) {
+        return Effect.fail(new EvidenceIoError({ code: cause.code, cause }));
+      }
+
+      return Effect.die(cause);
+    }),
+  );
 }

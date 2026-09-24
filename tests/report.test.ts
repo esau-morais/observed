@@ -1,4 +1,4 @@
-import { DateTime, Effect } from 'effect';
+import { Cause, DateTime, Effect, Exit } from 'effect';
 import { execFile } from 'node:child_process';
 import {
   cp,
@@ -14,6 +14,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, expect, test } from 'vitest';
 import { inspectEvidence as inspect } from '../src/evidence';
+import { nodeIo } from '../src/node-io';
 import { renderReport } from '../src/report';
 import { parseManifest } from '../src/schema';
 import fixtureManifest from './fixtures/todomvc/manifest.json' with { type: 'json' };
@@ -50,6 +51,14 @@ afterEach(async () => {
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true })),
   );
+});
+
+test('unexpected I/O exceptions remain defects instead of unavailable evidence', async () => {
+  const exit = await Effect.runPromiseExit(
+    nodeIo(() => Promise.reject(new TypeError('programming error'))),
+  );
+
+  expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(true);
 });
 
 test('rejects malformed, ambiguous, and dangling manifests instead of accepting a partial contract', async () => {
