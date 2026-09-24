@@ -585,12 +585,17 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
         })
       : unavailable(selection.baseIssue);
 
-  const candidate = yield* inspectSide({
-    directory: candidateDirectory,
-    prefix: 'candidate',
-    evaluatedAt,
-    ...(selection === undefined ? {} : { expected: selection.candidate }),
-  });
+  const candidate =
+    selection?.candidateIssue === undefined
+      ? yield* inspectSide({
+          directory: candidateDirectory,
+          prefix: 'candidate',
+          evaluatedAt,
+          ...(selection === undefined || selection.candidate === null
+            ? {}
+            : { expected: selection.candidate }),
+        })
+      : unavailable(selection.candidateIssue);
 
   return compareCaptures({ base, candidate, evaluatedAt });
 });

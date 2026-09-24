@@ -70,10 +70,13 @@ export const selectionSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   evaluatedAt: timestamp,
   baseIssue: Schema.optionalKey(text),
+  candidateIssue: Schema.optionalKey(text),
   base: Schema.NullOr(
     Schema.Struct({ manifestHash: digest, sourceHash: digest }),
   ),
-  candidate: Schema.Struct({ manifestHash: digest, sourceHash: digest }),
+  candidate: Schema.NullOr(
+    Schema.Struct({ manifestHash: digest, sourceHash: digest }),
+  ),
 });
 
 export type Selection = typeof selectionSchema.Type;

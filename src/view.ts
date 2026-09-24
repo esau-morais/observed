@@ -168,7 +168,15 @@ const preloadReport = Effect.fnUntraced(function* (directory: string) {
     prefix: 'observed-view-',
   });
 
-  yield* stageCapture(root, staging, 'candidate', selection.candidate, assets);
+  if (selection.candidate !== null) {
+    yield* stageCapture(
+      root,
+      staging,
+      'candidate',
+      selection.candidate,
+      assets,
+    );
+  }
 
   if (selection.base !== null) {
     yield* stageCapture(root, staging, 'base', selection.base, assets);

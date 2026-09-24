@@ -213,7 +213,27 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 }) {
   const fs = yield* FileSystem.FileSystem;
 
-  const candidate = yield* loadCapture(candidateDirectory);
+  let candidateIssue: string | undefined;
+
+  const candidate = yield* loadCapture(candidateDirectory).pipe(
+    Effect.catchTags({
+      ExportFailure: (error) => {
+        candidateIssue = `Candidate unavailable: ${error.message}`;
+
+        return Effect.succeed(null);
+      },
+      PlatformError: (error) => {
+        candidateIssue = `Candidate unavailable: ${error.message}`;
+
+        return Effect.succeed(null);
+      },
+      SchemaError: () => {
+        candidateIssue = 'Candidate manifest is malformed or unsupported';
+
+        return Effect.succeed(null);
+      },
+    }),
+  );
 
   let baseIssue: string | undefined;
 
@@ -249,7 +269,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   const viewer = path.join(project, 'dist', 'viewer');
 
   if (
-    contains(candidate.root, destination) ||
+    (candidate !== null && contains(candidate.root, destination)) ||
     (base !== null && contains(base.root, destination)) ||
     contains(viewer, destination)
   ) {
@@ -292,7 +312,9 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
   yield* fs.makeDirectory(destination, { mode: 0o700 });
 
-  yield* copyCapture(candidate, path.join(destination, 'candidate'));
+  if (candidate !== null) {
+    yield* copyCapture(candidate, path.join(destination, 'candidate'));
+  }
 
   if (base !== null) {
     yield* copyCapture(base, path.join(destination, 'base'));
@@ -304,6 +326,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     schemaVersion: 1,
     evaluatedAt,
     ...(baseIssue === undefined ? {} : { baseIssue }),
+    ...(candidateIssue === undefined ? {} : { candidateIssue }),
     base:
       base === null
         ? null
@@ -311,10 +334,13 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
             manifestHash: base.manifest.hash,
             sourceHash: base.capture.source.sha256,
           },
-    candidate: {
-      manifestHash: candidate.manifest.hash,
-      sourceHash: candidate.capture.source.sha256,
-    },
+    candidate:
+      candidate === null
+        ? null
+        : {
+            manifestHash: candidate.manifest.hash,
+            sourceHash: candidate.capture.source.sha256,
+          },
   } satisfies Selection);
 
   yield* fs.writeFileString(
