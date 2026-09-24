@@ -135,10 +135,8 @@ function checkOutcome(
   switch (check.result.kind) {
     case 'passed':
       return 'imported passed';
-
     case 'failed':
       return 'imported failed';
-
     case 'unknown':
       return 'unknown';
   }

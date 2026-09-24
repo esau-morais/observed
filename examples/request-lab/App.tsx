@@ -14,13 +14,10 @@ function statusText(state: LoadState): string {
   switch (state.kind) {
     case 'idle':
       return 'Ready to load';
-
     case 'loading':
       return 'Loading items';
-
     case 'loaded':
       return 'Items loaded';
-
     case 'failed':
       return 'Could not load items';
   }

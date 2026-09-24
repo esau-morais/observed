@@ -30,6 +30,11 @@ export default tseslint.config(
         { blankLine: 'always', prev: 'block-like', next: '*' },
         { blankLine: 'always', prev: 'import', next: '*' },
         { blankLine: 'any', prev: 'import', next: 'import' },
+        {
+          blankLine: 'any',
+          prev: ['case', 'default'],
+          next: ['case', 'default'],
+        },
       ],
       '@stylexjs/valid-styles': 'error',
       '@stylexjs/no-unused': 'error',
