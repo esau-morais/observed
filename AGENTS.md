@@ -79,7 +79,7 @@ Run focused checks during development. Before handoff, run applicable typecheck,
 
 ## Observe Observed
 
-Follow [.agents/development.md](.agents/development.md). Capture development evidence from the first runnable change with existing tools. Create `.agents/skills/verify-observed` only after its launch, drive, and cleanup instructions have run.
+Follow [.agents/development.md](.agents/development.md). Capture development evidence from the first runnable change with existing tools. Use verify-observed for the current report workflow; add application launch, drive, and cleanup instructions only after they have run.
 
 When Observed can import evidence, compare its output against independent expectations and retain raw tool artifacts. Adopt its viewer and capture path as they work. Collector, comparator, and status-rendering changes still need independent checks. Observed cannot certify itself by displaying a green result.
 
@@ -90,11 +90,12 @@ Contributor skills stay in this repository. Product users must be able to run sa
 | Task | Read |
 | --- | --- |
 | Write or review TypeScript | .agents/skills/typescript-best-practices/SKILL.md |
-| Create a runnable verification recipe | .agents/skills/create-verification-skill/SKILL.md |
 | Fix a bug with a useful regression check | .agents/skills/tdd/SKILL.md |
 | Review comments in the current change | .agents/skills/no-comments/SKILL.md |
 | Edit documentation or interface copy | .agents/skills/unslop/SKILL.md |
-| Capture explicitly requested working preferences | .agents/skills/automate-me/SKILL.md |
+| Apply Observed's working conventions | .agents/skills/observed-mode/SKILL.md |
+| Verify an Observed report against its artifacts | .agents/skills/verify-observed/SKILL.md |
+| Open, review, and maintain an Observed implementation PR | .agents/skills/babysit-pr/SKILL.md |
 
 Edit canonical files in `.agents/skills`. `.claude/skills` points there. Do not duplicate skills or add editor-specific dependencies. Normal verification needs no preference interview.
 
