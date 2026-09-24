@@ -192,6 +192,7 @@ export function RequestLedger({ side, label }: { side: Side; label: string }) {
                         {request.method}
                       </td>
                       <td {...stylex.props(styles.cell, styles.mono)}>
+                        {request.origin === 'application' ? '' : request.origin}
                         {request.path}
                       </td>
                       <td {...stylex.props(styles.cell, styles.mono)}>

@@ -2,6 +2,21 @@ import { DateTime, Option, Schema } from 'effect';
 
 export const text = Schema.NonEmptyString.check(Schema.isTrimmed());
 
+export const httpOriginSchema = text.check(
+  Schema.makeFilter(
+    (value) => {
+      const url = URL.parse(value);
+
+      return (
+        url !== null &&
+        ['http:', 'https:'].includes(url.protocol) &&
+        url.origin === value
+      );
+    },
+    { message: 'Expected an HTTP(S) origin without a path or credentials' },
+  ),
+);
+
 export const digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 
 export const timestamp = Schema.String.check(
@@ -16,7 +31,7 @@ export const timestamp = Schema.String.check(
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const positive = Schema.Int.check(Schema.isGreaterThan(0));
 
-const artifact = Schema.Struct({
+export const captureArtifactSchema = Schema.Struct({
   id: text,
   path: text,
   description: text,
@@ -92,7 +107,7 @@ export const captureSchema = Schema.Struct({
   startedAt: timestamp,
   finishedAt: timestamp,
   execution,
-  artifacts: Schema.Array(artifact),
+  artifacts: Schema.Array(captureArtifactSchema),
 }).check(
   Schema.makeFilter((capture) => {
     const issues: Schema.FilterIssue[] = [];
@@ -127,10 +142,11 @@ export const captureSchema = Schema.Struct({
 );
 
 export const observationsSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
+  schemaVersion: Schema.Literal(2),
   requests: Schema.Array(
     Schema.Struct({
       method: text,
+      origin: Schema.Union([Schema.Literal('application'), httpOriginSchema]),
       path: text,
       status: count,
       startedAt: timestamp,

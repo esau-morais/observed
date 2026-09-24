@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { text } from './model';
+import { httpOriginSchema, text } from './model';
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const positive = Schema.Int.check(Schema.isGreaterThan(0));
@@ -35,6 +35,7 @@ export const checkSchema = Schema.Union([
     kind: Schema.Literal('request-count'),
     ...checkIdentity,
     method: text.check(Schema.isPattern(/^[A-Z]+$/)),
+    origin: Schema.optionalKey(httpOriginSchema),
     path: routeSchema.check(
       Schema.isPattern(/^[^?#]+$/, {
         message:
@@ -66,8 +67,17 @@ export const recipeSchema = Schema.Struct({
     scale: positive,
   }),
   browserArguments: Schema.Array(text),
+  allowedOrigins: Schema.optionalKey(Schema.Array(httpOriginSchema)),
   maxAgeMs: positive,
-});
+}).check(
+  Schema.makeFilter(
+    (recipe) =>
+      recipe.check?.kind !== 'request-count' ||
+      recipe.check.origin === undefined ||
+      recipe.allowedOrigins?.includes(recipe.check.origin) === true,
+    { message: 'Request check origin must be listed in allowedOrigins' },
+  ),
+);
 
 export type Recipe = typeof recipeSchema.Type;
 export type Step = typeof stepSchema.Type;

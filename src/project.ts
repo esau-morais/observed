@@ -41,6 +41,7 @@ export const projectSchema = Schema.Struct({
     check: Schema.optionalKey(checkSchema),
     viewport: Schema.optionalKey(recipeSchema.fields.viewport),
     browserArguments: Schema.optionalKey(Schema.Array(text)),
+    allowedOrigins: recipeSchema.fields.allowedOrigins,
     maxAgeMs: Schema.optionalKey(recipeSchema.fields.maxAgeMs),
   }),
 });

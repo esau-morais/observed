@@ -4,6 +4,7 @@ import {
   Effect,
   Exit,
   FileSystem,
+  Predicate,
   Schema,
   Stream,
 } from 'effect';
@@ -20,6 +21,41 @@ export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()(
   },
 ) {}
 
+export const startProcess = (command: ChildProcess.StandardCommand) =>
+  Effect.acquireRelease(command, (handle) =>
+    // rc.117 scoped release only sends SIGTERM after a nonzero leader exit.
+    handle.kill({ killSignal: 'SIGTERM', forceKillAfter: '2 seconds' }).pipe(
+      Effect.catchTag('PlatformError', (error) =>
+        Effect.gen(function* () {
+          const stopped = yield* Effect.sync(() => {
+            try {
+              process.kill(
+                process.platform === 'win32' ? handle.pid : -Number(handle.pid),
+                0,
+              );
+
+              return false;
+            } catch (cause) {
+              if (
+                Predicate.hasProperty(cause, 'code') &&
+                cause.code === 'ESRCH'
+              ) {
+                return true;
+              }
+
+              throw cause;
+            }
+          });
+
+          if (!stopped) {
+            return yield* error;
+          }
+        }),
+      ),
+      Effect.orDie,
+    ),
+  );
+
 export const processOutput = Effect.fn('processOutput')(function* (options: {
   command: string;
   args: readonly string[];
@@ -34,14 +70,16 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
   let stderr = '';
 
   const execute = Effect.gen(function* () {
-    const handle = yield* ChildProcess.make(options.command, options.args, {
-      cwd: options.cwd,
-      ...(options.env === undefined ? {} : { env: options.env }),
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-      forceKillAfter: '2 seconds',
-    });
+    const handle = yield* startProcess(
+      ChildProcess.make(options.command, options.args, {
+        cwd: options.cwd,
+        ...(options.env === undefined ? {} : { env: options.env }),
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        forceKillAfter: '2 seconds',
+      }),
+    );
 
     const [exitCode] = yield* Effect.all(
       [

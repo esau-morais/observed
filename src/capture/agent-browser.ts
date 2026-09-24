@@ -105,6 +105,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: 'obs-' });
   const config = path.join(options.directory, 'browser-config.json');
   const recipe = options.recipe;
+  const origin = new URL(options.url).origin;
+  const allowedOrigins = new Set([origin, ...(recipe.allowedOrigins ?? [])]);
 
   yield* fs.writeFileString(config, '{}\n', { flag: 'wx' });
 
@@ -144,7 +146,11 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         '--idle-timeout',
         '60s',
         '--allowed-domains',
-        '127.0.0.1',
+        [
+          ...new Set(
+            [...allowedOrigins].map((value) => new URL(value).hostname),
+          ),
+        ].join(','),
         '--json',
         ...args,
       ],
@@ -286,74 +292,6 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* Effect.forEach(recipe.steps, step, { discard: true });
 
-  const requests = yield* decode(
-    requestsSchema,
-    yield* saveOutput('request-log', 'requests.json', ['network', 'requests']),
-  );
-
-  const errors = yield* decode(
-    errorsSchema,
-    yield* saveOutput('errors', 'errors.json', ['errors']),
-  );
-
-  const messages = yield* decode(
-    consoleSchema,
-    yield* saveOutput('console', 'console.json', ['console']),
-  );
-
-  options.addArtifact(
-    'requests',
-    'requests.har',
-    'Browser HAR for the recorded window; credentials redacted',
-  );
-
-  yield* command([
-    'network',
-    'har',
-    'stop',
-    path.join(options.directory, 'requests.har'),
-  ]);
-
-  const finishedAt = DateTime.formatIso(yield* DateTime.now);
-
-  const harFile = path.join(options.directory, 'requests.har');
-  const harText = yield* fs.readFileString(harFile);
-  yield* fs.writeFileString(harFile, redactText(harText));
-  const har = yield* decode(harSchema, harText);
-
-  const origin = new URL(options.url).origin;
-
-  if (
-    har.log.entries.some((entry) => entry.request.url.origin !== origin) ||
-    requests.data.requests.some((request) => request.url.origin !== origin)
-  ) {
-    return yield* new BrowserFailure({
-      message:
-        'Capture includes requests outside the controlled application origin',
-    });
-  }
-
-  const harLedger = har.log.entries
-    .map(
-      (entry) =>
-        `${entry.request.method} ${entry.request.url.href} ${entry.response.status}`,
-    )
-    .sort();
-
-  const requestLedger = requests.data.requests
-    .map((request) => `${request.method} ${request.url.href} ${request.status}`)
-    .sort();
-
-  if (
-    json(harLedger) !== json(requestLedger) ||
-    new Set(requests.data.requests.map((request) => request.requestId)).size !==
-      requests.data.requests.length
-  ) {
-    return yield* new BrowserFailure({
-      message: 'HAR and request log disagree; capture completeness is unknown',
-    });
-  }
-
   yield* saveOutput('snapshot', 'snapshot.json', ['snapshot']);
 
   let text: Observations['text'];
@@ -402,10 +340,84 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     path.join(options.directory, 'screenshot.png'),
   ]);
 
+  const requests = yield* decode(
+    requestsSchema,
+    yield* saveOutput('request-log', 'requests.json', ['network', 'requests']),
+  );
+
+  const errors = yield* decode(
+    errorsSchema,
+    yield* saveOutput('errors', 'errors.json', ['errors']),
+  );
+
+  const messages = yield* decode(
+    consoleSchema,
+    yield* saveOutput('console', 'console.json', ['console']),
+  );
+
+  options.addArtifact(
+    'requests',
+    'requests.har',
+    'Browser HAR for the recorded window; credentials redacted',
+  );
+
+  yield* command([
+    'network',
+    'har',
+    'stop',
+    path.join(options.directory, 'requests.har'),
+  ]);
+
+  const finishedAt = DateTime.formatIso(yield* DateTime.now);
+
+  const harFile = path.join(options.directory, 'requests.har');
+  const harText = yield* fs.readFileString(harFile);
+  yield* fs.writeFileString(harFile, redactText(harText));
+  const har = yield* decode(harSchema, harText);
+
+  if (
+    har.log.entries.some(
+      (entry) => !allowedOrigins.has(entry.request.url.origin),
+    ) ||
+    requests.data.requests.some(
+      (request) => !allowedOrigins.has(request.url.origin),
+    )
+  ) {
+    return yield* new BrowserFailure({
+      message:
+        'Capture includes requests outside the application and configured allowedOrigins',
+    });
+  }
+
+  const harLedger = har.log.entries
+    .map(
+      (entry) =>
+        `${entry.request.method} ${entry.request.url.href} ${entry.response.status}`,
+    )
+    .sort();
+
+  const requestLedger = requests.data.requests
+    .map((request) => `${request.method} ${request.url.href} ${request.status}`)
+    .sort();
+
+  if (
+    json(harLedger) !== json(requestLedger) ||
+    new Set(requests.data.requests.map((request) => request.requestId)).size !==
+      requests.data.requests.length
+  ) {
+    return yield* new BrowserFailure({
+      message: 'HAR and request log disagree; capture completeness is unknown',
+    });
+  }
+
   const observations = yield* Schema.decodeUnknownEffect(observationsSchema)({
-    schemaVersion: 1,
+    schemaVersion: 2,
     requests: har.log.entries.map((entry) => ({
       method: entry.request.method,
+      origin:
+        entry.request.url.origin === origin
+          ? 'application'
+          : entry.request.url.origin,
       path: entry.request.url.pathname,
       status: entry.response.status,
       startedAt: DateTime.formatIso(entry.startedDateTime),

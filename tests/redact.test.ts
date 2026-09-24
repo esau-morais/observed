@@ -1,5 +1,24 @@
 import { expect, test } from 'vitest';
-import { redactText } from '../src/redact';
+import { redact, redactText } from '../src/redact';
+
+test('redacts URL credentials by decoded key in structured values and log lines', () => {
+  const urls = [
+    'https://example.test/orders?%74oken=credential&sort=name',
+    '/orders?api%5fkey=credential&sort=name',
+    'https://credential@example.test/orders?sort=name',
+    '/orders?token=safe&%74oken=credential&sort=name',
+  ];
+
+  for (const url of urls) {
+    expect(redact({ url })).not.toEqual({ url });
+    expect(redactText(JSON.stringify({ url }))).not.toContain('credential');
+    expect(redactText(`GET ${url} HTTP/1.1`)).not.toContain('credential');
+    expect(redactText(JSON.stringify({ url }))).toContain('sort=name');
+  }
+
+  const harmless = '/orders?sort=first%20name&sort=last+name';
+  expect(redact(harmless)).toBe(harmless);
+});
 
 test('redacts credential maps, HAR header/query pairs and bodies while retaining request evidence', () => {
   const input = {

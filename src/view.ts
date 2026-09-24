@@ -1,6 +1,6 @@
 import { DateTime, Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
-import { parseCapture } from './capture/model';
+import { parseCapture, type CaptureArtifact } from './capture/model';
 import { json } from './encoding';
 import { inspectComparison } from './comparison';
 import { selectionSchema, type Selection } from './comparison-model';
@@ -92,7 +92,19 @@ const stageCapture = Effect.fnUntraced(function* (
     return;
   }
 
-  for (const artifact of capture.artifacts) {
+  yield* stageArtifacts(root, staging, prefix, capture.artifacts, assets);
+});
+
+const stageArtifacts = Effect.fnUntraced(function* (
+  root: string,
+  staging: string,
+  prefix: 'base' | 'candidate',
+  artifacts: readonly CaptureArtifact[],
+  assets: Map<string, Asset>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  for (const artifact of artifacts) {
     if (artifact.path.split('/')[0] === 'capture.json') {
       continue;
     }
@@ -178,10 +190,33 @@ const preloadReport = Effect.fnUntraced(function* (directory: string) {
     yield* stageCapture(root, staging, 'base', selection.base, assets);
   }
 
+  if (selection.candidate === null) {
+    yield* stageArtifacts(
+      root,
+      staging,
+      'candidate',
+      selection.candidateFailureArtifacts ?? [],
+      assets,
+    );
+  }
+
+  if (selection.base === null) {
+    yield* stageArtifacts(
+      root,
+      staging,
+      'base',
+      selection.baseFailureArtifacts ?? [],
+      assets,
+    );
+  }
+
   const evaluatedAt = DateTime.formatIso(yield* DateTime.now);
 
   const result = yield* inspectComparison({
-    baseDirectory: selection.base === null ? null : path.join(staging, 'base'),
+    baseDirectory:
+      selection.base === null && selection.baseIssue === undefined
+        ? null
+        : path.join(staging, 'base'),
     candidateDirectory: path.join(staging, 'candidate'),
     evaluatedAt,
     selection,

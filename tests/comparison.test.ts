@@ -32,9 +32,10 @@ const directories: string[] = [];
 
 function syntheticObservations(count = 1): Observations {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     requests: Array.from({ length: count }, () => ({
       method: 'GET',
+      origin: 'application',
       path: '/api/items',
       status: 200,
       startedAt: '2026-09-23T11:59:55.000Z',
@@ -337,12 +338,14 @@ test('counts only matching GET requests and requires their status to be 200', as
   const otherRequests = [
     {
       method: 'POST',
+      origin: 'application',
       path: '/api/items',
       status: 500,
       startedAt: observations.window.startedAt,
     },
     {
       method: 'GET',
+      origin: 'application',
       path: '/other',
       status: 500,
       startedAt: observations.window.startedAt,
@@ -375,6 +378,43 @@ test('counts only matching GET requests and requires their status to be 200', as
     outcome: 'failed',
     actual: 1,
   });
+});
+
+test('matches a protected request origin without conflating the same path on another service', async () => {
+  const origin = 'https://api.example.test';
+  const observations = syntheticObservations();
+  const requests = [
+    ...observations.requests,
+    ...observations.requests.map((request) => ({
+      ...request,
+      origin,
+      status: 202,
+    })),
+  ];
+  if (recipe.check?.kind !== 'request-count') {
+    throw new Error('Request recipe expected');
+  }
+
+  for (const definition of [
+    recipe.check,
+    { ...recipe.check, origin, status: 202 },
+  ]) {
+    const bundle = await syntheticBundle({
+      contract: { ...recipe, allowedOrigins: [origin], check: definition },
+      observations: { ...observations, requests },
+    });
+    expect((await inspect(bundle.directory)).check).toMatchObject({
+      outcome: 'passed',
+      actual: 1,
+    });
+  }
+
+  const unconfigured = await syntheticBundle({
+    observations: { ...observations, requests },
+  });
+  const check = (await inspect(unconfigured.directory)).check;
+  expect(check.outcome).toBe('unknown');
+  expect(check.detail).toContain('outside the protected recipe');
 });
 
 test('keeps browser errors as unresolved evidence without inventing another check', async () => {

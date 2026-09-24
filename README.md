@@ -36,6 +36,11 @@ compare the worktree with a commit. The JSON result includes the viewer director
 and check outcomes. Exit codes: `0` completed, `1` unavailable, `2` a named check
 failed. A completed capture is not a claim that the whole application is correct.
 
+For an app using a separate API or asset host, set `capture.allowedOrigins` to its
+HTTP(S) origins, such as `["http://127.0.0.1:4000"]`. Request checks match the
+application origin by default; set the check's `origin` to one of those allowed
+origins to check that service. Observations version 2 records each request's origin.
+
 `capture`, `compare`, and `view` support individual steps and saved evidence.
 
 The version 1 importer accepts generated evidence bundles through

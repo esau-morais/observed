@@ -7,6 +7,7 @@ import {
   parseObservations,
   timestamp,
   type Capture,
+  type CaptureArtifact,
   type Observations,
 } from './capture/model';
 import { parseRecipe, type Recipe } from './capture/recipe';
@@ -44,7 +45,7 @@ function expectation(recipe: Recipe | null): string {
   }
 
   if (definition.kind === 'request-count') {
-    return `Exactly ${definition.expectedCount} ${definition.method} ${definition.path} request(s) with status ${definition.status}.`;
+    return `Exactly ${definition.expectedCount} ${definition.method} ${definition.origin ?? ''}${definition.path} request(s) with status ${definition.status}.`;
   }
 
   return `Exactly one ${definition.selector} element with text ${JSON.stringify(definition.expectedText)}.`;
@@ -106,7 +107,9 @@ function evaluateCheck(
 
   const requests = observations.requests.filter(
     (request) =>
-      request.method === definition.method && request.path === definition.path,
+      request.method === definition.method &&
+      request.path === definition.path &&
+      request.origin === (definition.origin ?? 'application'),
   );
   const successful = requests.every(
     (request) => request.status === definition.status,
@@ -123,7 +126,7 @@ function evaluateCheck(
         ? 'passed'
         : 'failed',
     actual: requests.length,
-    detail: `Observed ${requests.length} matching ${definition.method} ${definition.path} request(s); statuses: ${statuses}.`,
+    detail: `Observed ${requests.length} matching ${definition.method} ${definition.origin ?? ''}${definition.path} request(s); statuses: ${statuses}.`,
   };
 }
 
@@ -188,6 +191,51 @@ function artifactLink(prefix: string, artifactPath: string): string {
     .join('/');
 }
 
+function describeArtifact(
+  item: ArtifactResult,
+  prefix: string,
+): Side['artifacts'][number] {
+  return {
+    id: item.artifact.id,
+    path:
+      item.kind === 'available'
+        ? artifactLink(prefix, item.artifact.path)
+        : null,
+    description: item.artifact.description,
+    integrity: item.kind === 'available' ? 'verified' : 'unavailable',
+    reason: item.kind === 'available' ? null : item.reason,
+  };
+}
+
+const inspectFailureSide = Effect.fnUntraced(function* (
+  directory: string | null,
+  prefix: string,
+  reason: string,
+  artifacts: readonly CaptureArtifact[] = [],
+) {
+  const side = unavailable(reason);
+  if (directory === null) {
+    return side;
+  }
+
+  const inspected = yield* Effect.forEach(artifacts, (artifact) =>
+    inspectArtifact(directory, artifact),
+  );
+
+  return {
+    ...side,
+    artifacts: inspected.map((item) => describeArtifact(item, prefix)),
+    unresolved: [
+      reason,
+      ...inspected.flatMap((item) =>
+        item.kind === 'unavailable'
+          ? [`${item.artifact.id}: ${item.reason}`]
+          : [],
+      ),
+    ],
+  } satisfies Side;
+});
+
 function captureProblems(
   capture: Capture,
   evaluatedAt: string,
@@ -249,8 +297,19 @@ function captureProblems(
 function observationProblems(
   capture: Capture,
   observations: Observations,
+  recipe: Recipe | null,
 ): string[] {
   const { startedAt, finishedAt } = observations.window;
+
+  if (
+    observations.requests.some(
+      (request) =>
+        request.origin !== 'application' &&
+        recipe?.allowedOrigins?.includes(request.origin) !== true,
+    )
+  ) {
+    return ['Observed request origin is outside the protected recipe'];
+  }
 
   if (
     startedAt > finishedAt ||
@@ -358,23 +417,9 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     const artifacts = inspected.map((item): Side['artifacts'][number] => {
       if (item.kind === 'unavailable') {
         reasons.push(`${item.artifact.id}: ${item.reason}`);
-
-        return {
-          id: item.artifact.id,
-          path: null,
-          description: item.artifact.description,
-          integrity: 'unavailable',
-          reason: item.reason,
-        };
       }
 
-      return {
-        id: item.artifact.id,
-        path: artifactLink(prefix, item.artifact.path),
-        description: item.artifact.description,
-        integrity: 'verified',
-        reason: null,
-      };
+      return describeArtifact(item, prefix);
     });
 
     for (const id of requiredArtifacts) {
@@ -447,7 +492,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
         if (observations === null) {
           reasons.push('Observations are malformed or unsupported');
         } else {
-          reasons.push(...observationProblems(capture, observations));
+          reasons.push(...observationProblems(capture, observations, recipe));
         }
       }
     }
@@ -590,7 +635,7 @@ export function compareCaptures({
   const firstReason = reasons[0];
 
   const common = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     mode,
     title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
     evaluatedAt,
@@ -721,7 +766,12 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
             ? {}
             : { expected: selection.base }),
         })
-      : unavailable(selection.baseIssue);
+      : yield* inspectFailureSide(
+          baseDirectory,
+          'base',
+          selection.baseIssue,
+          selection.baseFailureArtifacts,
+        );
 
   const candidate =
     selection?.candidateIssue === undefined
@@ -733,7 +783,12 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
             ? {}
             : { expected: selection.candidate }),
         })
-      : unavailable(selection.candidateIssue);
+      : yield* inspectFailureSide(
+          candidateDirectory,
+          'candidate',
+          selection.candidateIssue,
+          selection.candidateFailureArtifacts,
+        );
 
   return compareCaptures({
     base,

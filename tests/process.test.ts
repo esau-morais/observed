@@ -55,9 +55,14 @@ if (role === 'parent') {
 }
 `;
 
-test.each([0, 17])(
-  'application cleanup stops descendants after their startup wrapper exits with %s',
-  async (code) => {
+test.each([
+  { runner: 'application', code: 0 },
+  { runner: 'application', code: 17 },
+  { runner: 'command', code: 0 },
+  { runner: 'command', code: 17 },
+])(
+  '$runner cleanup stops descendants after their wrapper exits with $code',
+  async ({ runner, code }) => {
     const directory = await mkdtemp(path.join(tmpdir(), 'observed-wrapper-'));
     const helper = path.join(directory, 'wrapper.ts');
     await writeFile(
@@ -85,16 +90,28 @@ test.each([0, 17])(
       }
     }, 6000);
     const pending = Effect.runPromiseExit(
-      startApplication({
-        workspace: directory,
-        evidenceDirectory: directory,
-        project: Schema.decodeUnknownSync(projectSchema)({
-          ...shop,
-          start: [process.execPath, helper],
-        }),
+      Effect.gen(function* () {
+        if (runner === 'application') {
+          return yield* startApplication({
+            workspace: directory,
+            evidenceDirectory: directory,
+            project: Schema.decodeUnknownSync(projectSchema)({
+              ...shop,
+              start: [process.execPath, helper],
+            }),
+          });
+        }
+
+        return yield* processOutput({
+          command: process.execPath,
+          args: [helper],
+          cwd: directory,
+          transcript: path.join(directory, 'transcript.jsonl'),
+          timeoutMs: 500,
+        });
       }).pipe(
         Effect.scoped,
-        Effect.timeout('500 millis'),
+        Effect.timeout(runner === 'application' ? '500 millis' : '6 seconds'),
         Effect.provide(BunServices.layer),
       ),
     );
@@ -118,24 +135,32 @@ test.each([0, 17])(
       }
 
       expect(await processIsLive(pid)).toBe(false);
-      const cleanup = Schema.decodeUnknownSync(
-        Schema.fromJsonString(
-          Schema.Struct({
-            stopped: Schema.Boolean,
-            exit: Schema.Struct({
-              kind: Schema.Literal('exited'),
-              code: Schema.Number,
+      if (runner === 'application') {
+        const cleanup = Schema.decodeUnknownSync(
+          Schema.fromJsonString(
+            Schema.Struct({
+              stopped: Schema.Boolean,
+              exit: Schema.Struct({
+                kind: Schema.Literal('exited'),
+                code: Schema.Number,
+              }),
             }),
-          }),
-        ),
-      )(await readFile(path.join(directory, 'server-cleanup.json'), 'utf8'));
-      expect(cleanup).toEqual({
-        stopped: true,
-        exit: { kind: 'exited', code },
-      });
-      expect(
-        await readFile(path.join(directory, 'application.log'), 'utf8'),
-      ).toContain('child output');
+          ),
+        )(await readFile(path.join(directory, 'server-cleanup.json'), 'utf8'));
+        expect(cleanup).toEqual({
+          stopped: true,
+          exit: { kind: 'exited', code },
+        });
+        expect(
+          await readFile(path.join(directory, 'application.log'), 'utf8'),
+        ).toContain('child output');
+      } else {
+        const transcript = parseTranscript(
+          await readFile(path.join(directory, 'transcript.jsonl'), 'utf8'),
+        );
+        expect(transcript.stdout).toContain('child output');
+        expect(transcript.outcome).toContain('TimeoutError');
+      }
     } finally {
       clearTimeout(watchdog);
 

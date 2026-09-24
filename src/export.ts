@@ -7,6 +7,7 @@ import {
   parseCapture,
   sourceFailureSchema,
   text,
+  type CaptureArtifact,
 } from './capture/model';
 import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
@@ -108,10 +109,7 @@ export const readVerifiedArtifact = Effect.fnUntraced(
   ),
 );
 
-const loadCapture = Effect.fnUntraced(function* (directory: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.realPath(directory);
-
+const loadCapture = Effect.fnUntraced(function* (root: string) {
   const manifest = yield* readVerifiedArtifact(root, {
     id: 'capture',
     path: 'capture.json',
@@ -145,13 +143,84 @@ const loadCapture = Effect.fnUntraced(function* (directory: string) {
   return { root, manifest, capture };
 });
 
+type FailureArtifact = { artifact: CaptureArtifact; bytes: Uint8Array };
+
+const loadSide = Effect.fnUntraced(
+  function* (directory: string, label: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.realPath(directory);
+    const loaded = yield* loadCapture(root).pipe(
+      Effect.map((capture) => ({ kind: 'captured', ...capture }) as const),
+      Effect.catchTags({
+        ExportFailure: (error) =>
+          Effect.succeed({
+            kind: 'unavailable',
+            issue: `${label} unavailable: ${error.message}`,
+          } as const),
+        SchemaError: () =>
+          Effect.succeed({
+            kind: 'unavailable',
+            issue: `${label} manifest is malformed or unsupported`,
+          } as const),
+      }),
+    );
+
+    if (loaded.kind === 'captured') {
+      return loaded;
+    }
+
+    const artifacts: FailureArtifact[] = [];
+    for (const [id, filename, description] of [
+      ['source-failure', 'source-failure.json', 'Source selection failure'],
+      [
+        'source-transcript',
+        'source-transcript.jsonl',
+        'Source revision selection',
+      ],
+      ['owner', 'owner.json', 'Run ownership'],
+    ] as const) {
+      const artifact = { id, path: filename, description };
+      const read = yield* readVerifiedArtifact(root, artifact);
+      if (read.kind === 'available') {
+        artifacts.push({
+          artifact: { ...artifact, sha256: read.hash },
+          bytes: read.bytes,
+        });
+      }
+    }
+
+    return { ...loaded, root, artifacts };
+  },
+  (effect, _directory, label) =>
+    effect.pipe(
+      Effect.catchTag('PlatformError', (error) =>
+        Effect.succeed({
+          kind: 'unavailable',
+          root: null,
+          issue: `${label} unavailable: ${error.message}`,
+          artifacts: Array<FailureArtifact>(),
+        } as const),
+      ),
+    ),
+);
+
 const copyCapture = Effect.fnUntraced(function* (
-  input: Effect.Success<ReturnType<typeof loadCapture>>,
+  input: Effect.Success<ReturnType<typeof loadSide>>,
   directory: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
 
   yield* fs.makeDirectory(directory);
+
+  if (input.kind === 'unavailable') {
+    for (const { artifact, bytes } of input.artifacts) {
+      yield* fs.writeFile(path.join(directory, artifact.path), bytes, {
+        flag: 'wx',
+      });
+    }
+
+    return;
+  }
 
   yield* fs.writeFile(
     path.join(directory, 'capture.json'),
@@ -234,52 +303,9 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   mode?: 'preview' | 'comparison';
 }) {
   const fs = yield* FileSystem.FileSystem;
-  let candidateIssue: string | undefined;
-
-  const candidate = yield* loadCapture(candidateDirectory).pipe(
-    Effect.catchTags({
-      ExportFailure: (error) => {
-        candidateIssue = `Candidate unavailable: ${error.message}`;
-
-        return Effect.succeed(null);
-      },
-      PlatformError: (error) => {
-        candidateIssue = `Candidate unavailable: ${error.message}`;
-
-        return Effect.succeed(null);
-      },
-      SchemaError: () => {
-        candidateIssue = 'Candidate manifest is malformed or unsupported';
-
-        return Effect.succeed(null);
-      },
-    }),
-  );
-
-  let baseIssue: string | undefined;
-
+  const candidate = yield* loadSide(candidateDirectory, 'Candidate');
   const base =
-    baseDirectory === null
-      ? null
-      : yield* loadCapture(baseDirectory).pipe(
-          Effect.catchTags({
-            ExportFailure: (error) => {
-              baseIssue = `Baseline unavailable: ${error.message}`;
-
-              return Effect.succeed(null);
-            },
-            PlatformError: (error) => {
-              baseIssue = `Baseline unavailable: ${error.message}`;
-
-              return Effect.succeed(null);
-            },
-            SchemaError: () => {
-              baseIssue = 'Baseline manifest is malformed or unsupported';
-
-              return Effect.succeed(null);
-            },
-          }),
-        );
+    baseDirectory === null ? null : yield* loadSide(baseDirectory, 'Baseline');
 
   const parent = yield* fs.realPath(path.dirname(path.resolve(directory)));
   const destination = path.join(parent, path.basename(path.resolve(directory)));
@@ -287,8 +313,8 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   const viewer = path.join(project, 'dist', 'viewer');
 
   if (
-    (candidate !== null && contains(candidate.root, destination)) ||
-    (base !== null && contains(base.root, destination)) ||
+    (candidate.root !== null && contains(candidate.root, destination)) ||
+    (base !== null && base.root !== null && contains(base.root, destination)) ||
     contains(viewer, destination)
   ) {
     return yield* new ExportFailure({
@@ -330,9 +356,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
   yield* fs.makeDirectory(destination, { mode: 0o700 });
 
-  if (candidate !== null) {
-    yield* copyCapture(candidate, path.join(destination, 'candidate'));
-  }
+  yield* copyCapture(candidate, path.join(destination, 'candidate'));
 
   if (base !== null) {
     yield* copyCapture(base, path.join(destination, 'base'));
@@ -344,17 +368,29 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     schemaVersion: 1,
     mode,
     evaluatedAt,
-    ...(baseIssue === undefined ? {} : { baseIssue }),
-    ...(candidateIssue === undefined ? {} : { candidateIssue }),
+    ...(base?.kind === 'unavailable'
+      ? {
+          baseIssue: base.issue,
+          baseFailureArtifacts: base.artifacts.map((item) => item.artifact),
+        }
+      : {}),
+    ...(candidate.kind === 'unavailable'
+      ? {
+          candidateIssue: candidate.issue,
+          candidateFailureArtifacts: candidate.artifacts.map(
+            (item) => item.artifact,
+          ),
+        }
+      : {}),
     base:
-      base === null
+      base?.kind !== 'captured'
         ? null
         : {
             manifestHash: base.manifest.hash,
             sourceHash: base.capture.source.sha256,
           },
     candidate:
-      candidate === null
+      candidate.kind !== 'captured'
         ? null
         : {
             manifestHash: candidate.manifest.hash,

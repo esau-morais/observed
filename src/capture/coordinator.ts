@@ -170,6 +170,19 @@ export const captureApplication = Effect.fn('captureApplication')(
         project: options.project,
       });
 
+      const lockfiles = new Set([
+        'bun.lock',
+        'bun.lockb',
+        'package-lock.json',
+        'pnpm-lock.yaml',
+        'yarn.lock',
+        'requirements.txt',
+        'Cargo.lock',
+      ]);
+      const dependencies = source.files.filter((file) =>
+        lockfiles.has(path.posix.basename(file.path)),
+      );
+
       const browserConditions = yield* captureBrowser({
         projectRoot: options.toolRoot,
         directory,
@@ -184,21 +197,8 @@ export const captureApplication = Effect.fn('captureApplication')(
             ready: options.project.ready,
           }),
         ),
-        dependenciesHash: source.files.some((file) =>
-          /(?:^|\/)(?:bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|requirements\.txt|Cargo\.lock)$/.test(
-            file.path,
-          ),
-        )
-          ? sha256(
-              json(
-                source.files.filter((file) =>
-                  /(?:^|\/)(?:bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|requirements\.txt|Cargo\.lock)$/.test(
-                    file.path,
-                  ),
-                ),
-              ),
-            )
-          : null,
+        dependenciesHash:
+          dependencies.length === 0 ? null : sha256(json(dependencies)),
       });
 
       conditions = { kind: 'recorded', value: browserConditions };

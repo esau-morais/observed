@@ -3,7 +3,6 @@ import {
   Effect,
   FileSystem,
   Fiber,
-  Predicate,
   Schema,
   Scope,
   Stream,
@@ -13,6 +12,7 @@ import path from 'node:path';
 import { json } from '../encoding';
 import type { Project } from '../project';
 import { redactText } from '../redact';
+import { startProcess } from './process';
 
 export class ApplicationFailure extends Schema.TaggedError<ApplicationFailure>()(
   'ApplicationFailure',
@@ -55,21 +55,23 @@ export const startApplication = Effect.fn('startApplication')(
     }
 
     const processScope = yield* Scope.fork(yield* Scope.Scope);
-    const handle = yield* ChildProcess.make(command, args.slice(1), {
-      cwd: options.workspace,
-      env: {
-        PATH: process.env.PATH,
-        HOME: options.workspace,
-        PORT: String(port),
-        HOST: '127.0.0.1',
-        LANG: 'en_US.UTF-8',
-        TZ: 'UTC',
-      },
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-      forceKillAfter: '2 seconds',
-    }).pipe(Effect.provideService(Scope.Scope, processScope));
+    const handle = yield* startProcess(
+      ChildProcess.make(command, args.slice(1), {
+        cwd: options.workspace,
+        env: {
+          PATH: process.env.PATH,
+          HOME: options.workspace,
+          PORT: String(port),
+          HOST: '127.0.0.1',
+          LANG: 'en_US.UTF-8',
+          TZ: 'UTC',
+        },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        forceKillAfter: '2 seconds',
+      }),
+    ).pipe(Effect.provideService(Scope.Scope, processScope));
 
     const output = path.join(options.evidenceDirectory, 'application.log');
     yield* fs.writeFileString(output, '', { flag: 'wx' });
@@ -102,40 +104,6 @@ export const startApplication = Effect.fn('startApplication')(
 
     yield* Effect.addFinalizer((exit) =>
       Effect.gen(function* () {
-        // Scoped release in rc.117 only sends SIGTERM after a nonzero leader exit.
-        yield* handle
-          .kill({ killSignal: 'SIGTERM', forceKillAfter: '2 seconds' })
-          .pipe(
-            Effect.catchTag('PlatformError', (error) =>
-              Effect.gen(function* () {
-                const stopped = yield* Effect.sync(() => {
-                  try {
-                    process.kill(
-                      process.platform === 'win32'
-                        ? handle.pid
-                        : -Number(handle.pid),
-                      0,
-                    );
-
-                    return false;
-                  } catch (cause) {
-                    if (
-                      Predicate.hasProperty(cause, 'code') &&
-                      cause.code === 'ESRCH'
-                    ) {
-                      return true;
-                    }
-
-                    throw cause;
-                  }
-                });
-
-                if (!stopped) {
-                  return yield* error;
-                }
-              }),
-            ),
-          );
         yield* Scope.close(processScope, exit);
         yield* Effect.forEach(readers, (reader) => Fiber.join(reader));
         yield* fs.writeFileString(output, redactText(capturedOutput));

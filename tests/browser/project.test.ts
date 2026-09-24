@@ -429,6 +429,127 @@ test('redacted text cannot satisfy a literal text expectation', async () => {
   );
 });
 
+test('additional origins preserve previews and keep same-path request checks separate', async () => {
+  const requests: string[] = [];
+  const backend = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request) {
+      requests.push(`${request.method} ${new URL(request.url).pathname}`);
+
+      return new Response('accepted', {
+        status: 202,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    },
+  });
+  const origin = backend.url.origin;
+  try {
+    const project = await copyProject('shop', 'shop-origins');
+    const config = await readJson(
+      path.join(project, 'observed.json'),
+      projectSchema,
+    );
+    const app = await readFile(path.join(project, 'app.ts'), 'utf8');
+    await writeFile(
+      path.join(project, 'app.ts'),
+      app.replace(
+        '.then((response) => {',
+        `.then(async (response) => { await fetch(${JSON.stringify(`${origin}/orders`)}, { method: 'POST' });`,
+      ),
+    );
+    const check = {
+      kind: 'request-count',
+      id: 'order',
+      name: 'One order',
+      scope: 'One submission',
+      method: 'POST',
+      path: '/orders',
+      expectedCount: 1,
+      status: 201,
+    };
+    for (const scenario of [
+      {
+        label: 'unconfigured',
+        allowed: false,
+        check: undefined,
+        outcome: 'unknown',
+        exit: 1,
+      },
+      {
+        label: 'preview',
+        allowed: true,
+        check: undefined,
+        outcome: 'not-run',
+        exit: 0,
+      },
+      {
+        label: 'application',
+        allowed: true,
+        check,
+        outcome: 'passed',
+        exit: 0,
+      },
+      {
+        label: 'backend',
+        allowed: true,
+        check: { ...check, origin, status: 202 },
+        outcome: 'passed',
+        exit: 0,
+      },
+    ]) {
+      await writeFile(
+        path.join(project, 'observed.json'),
+        json({
+          ...config,
+          capture: {
+            ...config.capture,
+            ...(scenario.allowed ? { allowedOrigins: [origin] } : {}),
+            ...(scenario.check === undefined ? {} : { check: scenario.check }),
+          },
+        }),
+      );
+      const result = await observe(
+        project,
+        `origins-${scenario.label}`,
+        [],
+        scenario.exit,
+      );
+      expect(result.result.candidate.screenshot).not.toBeNull();
+      expect(result.result.candidate.check.outcome).toBe(scenario.outcome);
+      const har = await readJson(
+        path.join(result.directory, 'candidate/requests.har'),
+        harSchema,
+      );
+      expect(
+        har.log.entries.map((entry) => ({
+          origin:
+            entry.request.url.origin === origin ? 'backend' : 'application',
+          path: entry.request.url.pathname,
+          status: entry.response.status,
+        })),
+      ).toEqual([
+        { origin: 'application', path: '/orders', status: 201 },
+        { origin: 'backend', path: '/orders', status: 202 },
+      ]);
+      if (scenario.allowed) {
+        expect(result.result.candidate.execution).toBe('complete');
+        if (scenario.check !== undefined) {
+          expect(result.result.candidate.check.actual).toBe(1);
+        }
+      } else {
+        expect(result.result.candidate.execution).toBe('capture-failed');
+      }
+
+      await cleanup(path.join(result.directory, 'candidate'));
+    }
+
+    expect(requests).toEqual(Array.from({ length: 4 }, () => 'POST /orders'));
+  } finally {
+    await backend.stop(true);
+  }
+});
+
 test.each(['timeout', 'cancelled'] as const)(
   'retains a failed %s capture and stops the owned application',
   async (failure) => {

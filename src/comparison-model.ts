@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { recipeSchema } from './capture/recipe';
 import {
   captureSchema,
+  captureArtifactSchema,
   digest,
   observationsSchema,
   text,
@@ -45,7 +46,7 @@ export const sideSchema = Schema.Struct({
 });
 
 export const comparisonSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(2),
+  schemaVersion: Schema.Literal(3),
   mode: Schema.Literals(['preview', 'comparison']),
   title: text,
   evaluatedAt: timestamp,
@@ -88,6 +89,10 @@ export const selectionSchema = Schema.Struct({
   mode: Schema.optionalKey(Schema.Literals(['preview', 'comparison'])),
   baseIssue: Schema.optionalKey(text),
   candidateIssue: Schema.optionalKey(text),
+  baseFailureArtifacts: Schema.optionalKey(Schema.Array(captureArtifactSchema)),
+  candidateFailureArtifacts: Schema.optionalKey(
+    Schema.Array(captureArtifactSchema),
+  ),
   base: Schema.NullOr(
     Schema.Struct({ manifestHash: digest, sourceHash: digest }),
   ),
