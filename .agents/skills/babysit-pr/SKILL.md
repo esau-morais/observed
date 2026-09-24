@@ -69,6 +69,8 @@ missing access prevents progress.
 - Stage explicit paths, commit a focused fix, and push. Reply to the relevant
   feedback with the change and verification result. Resolve a thread only when
   its concern is actually addressed.
+- Write comment replies in lowercase and keep them short and direct. Preserve
+  case-sensitive code, identifiers, paths, commands, and quoted text.
 - If there are conflicts, fetch the PR's actual base branch and inspect both
   sides. Preserve unrelated changes and avoid force-pushing shared branches.
 - Watch pending checks with `gh pr checks --watch`, then fetch comments, threads,

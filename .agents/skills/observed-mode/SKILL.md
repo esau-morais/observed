@@ -24,6 +24,9 @@ between logical blocks. Do not compress implementations. Keep prose concrete and
 brief. State the action or result without attributing it to a request or explaining
 which source skill inspired it.
 
+Write review-comment replies in lowercase, with short, direct phrasing. Preserve
+case in code, identifiers, file paths, commands, and quoted text when it matters.
+
 ## Verify the change
 
 Check package.json before choosing commands and run only applicable checks that
