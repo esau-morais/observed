@@ -12,8 +12,10 @@ for those routine actions.
 
 ## Open and review
 
-1. Inspect Git status, remotes, the PR base, and the complete branch diff. Preserve
-   unrelated work. Identify the phase requirement and expected behavior.
+1. Inspect Git status and remotes, then fetch the actual base branch before
+   implementation and again before publishing. Compare histories and reconcile
+   upstream changes, preserving uncommitted and unrelated work. Inspect the
+   complete branch diff. Identify the phase requirement and expected behavior.
 2. Review for correctness, repository standards, and scope. Use available review
    tooling or a bounded review agent when requested. A self-review is not an
    independent execution and does not replace GitHub approval.

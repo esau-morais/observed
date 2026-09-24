@@ -18,6 +18,5 @@ Check the symlink after checkout. If the system does not preserve links, report 
 
 When setup becomes repeated work, offer an explicit action for one versioned Observed skill and a project recipe. Show planned files, respect existing files, record skill and CLI versions, and support removal. Do not silently modify user instructions or install this contributor collection.
 
-The verification skill currently covers Phase 0 report inspection. Add application
-launch, drive, capture, and cleanup only after those steps work. No package.json,
-application entry point, or Observed runtime journey exists yet.
+The verification skill covers executable checks and evidence inspection. Add
+capture and viewer steps only after they have run.

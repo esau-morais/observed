@@ -14,8 +14,9 @@ Observed compares software changes using runtime evidence. Its core must work wi
 | Layer | Required choice |
 | --- | --- |
 | Language | TypeScript for application code, tooling, and configuration where supported |
+| Schema and effects | [Effect v4](https://effect.website/docs/v4/onboarding) for runtime schemas, typed errors, resource management, and effectful workflows. Pin an exact compatible release; use Effect Schema as the single schema system |
 | Dependencies | Bun only. Commit bun.lock and pin Bun. No npm, pnpm, Yarn, or secondary lockfiles |
-| Execution | Node.js on a supported, pinned LTS release. Bun manages dependencies and invokes scripts; do not adopt Bun runtime APIs or its test runner |
+| Execution | Pinned Bun for application and tooling execution, using `@effect/platform-bun`. Vitest remains the test framework; invoke it through its local binary under Bun |
 | Viewer | React with Vite and the official React plugin |
 | Styling | StyleX, following DESIGN.md and its official Vite integration. No Tailwind or second component styling system |
 | Tests | Vitest for runtime contracts. Existing browser journeys and agent-browser for real application checks |
@@ -26,17 +27,18 @@ Pin compatible versions during application setup. Stack changes need an explicit
 
 ## Commands and enforcement
 
-This workspace currently contains specifications, not a runnable application. These commands define the first implementation's script contract. Check package.json before running them. Never claim an absent check passed.
+The Phase 0 CLI generates Markdown reports from imported evidence. Check package.json before running commands. Never claim an absent check passed. Viewer commands apply when the viewer exists.
 
 | Command | Contract |
 | --- | --- |
 | `bun install` | Install dependencies locally |
 | `bun install --frozen-lockfile` | Install in CI after confirming the committed lockfile exists |
-| `bun run dev` | Start the Vite viewer using Node |
+| `bun run report <manifest.json> <new-report.md>` | Generate a report directly from the TypeScript CLI using Bun |
+| `bun run dev` (future viewer) | Start the Vite viewer using Bun |
 | `bun run typecheck` | Check application and tooling types |
-| `bun run lint` | Run TypeScript-aware ESLint, React Hooks, and official StyleX rules |
+| `bun run lint` | Run TypeScript-aware ESLint and formatting; add Hooks and official StyleX rules with the viewer |
 | `bun run test` | Run Vitest once, without watch mode |
-| `bun run build` | Build production assets, including extracted StyleX CSS |
+| `bun run build` | Compile the Bun CLI; add production assets and extracted StyleX CSS with the viewer |
 
 Use `bun run test`, not `bun test`. Invoke declared local tools through scripts. Pin exceptional bunx invocations. Do not use floating versions in CI or saved recipes.
 

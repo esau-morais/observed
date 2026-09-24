@@ -1,0 +1,6 @@
+    agent-browser reload
+    agent-browser wait --text 'Observed Phase 0 evidence'
+    test "$(agent-browser get count '.todo-list li')" = 1
+    test "$(agent-browser find testid todo-title text)" = 'Observed Phase 0 evidence'
+    test "$(agent-browser is checked '.todo-list .toggle')" = true
+    echo 'PASS reload: matching completed todo persisted'

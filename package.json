@@ -1,0 +1,31 @@
+{
+  "name": "observed",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": "1.4.2"
+  },
+  "scripts": {
+    "report": "bun src/cli.ts",
+    "typecheck": "bun run --bun tsc --noEmit",
+    "lint": "bun run --bun eslint . && bun run --bun prettier --check .",
+    "format": "bun run --bun prettier --write .",
+    "test": "bun run --bun vitest run",
+    "build": "bun run --bun tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.0-rc.117",
+    "effect": "4.0.0-rc.117"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.19.15",
+    "eslint": "10.11.0",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.1"
+  }
+}
