@@ -18,7 +18,7 @@ const sensitive = new Set([
 ]);
 
 function redactUserInfo(value: string): string {
-  const url = URL.parse(value);
+  const url = URL.parse(value, 'https://observed.invalid');
 
   if (url === null || (url.username === '' && url.password === '')) {
     return value;
@@ -27,7 +27,9 @@ function redactUserInfo(value: string): string {
   url.username = '[REDACTED]';
   url.password = '';
 
-  return url.href;
+  return value.startsWith('//')
+    ? url.href.slice(url.protocol.length)
+    : url.href;
 }
 
 function redactQuery(value: string): string {
@@ -57,7 +59,7 @@ function redactQuery(value: string): string {
 
 function redactString(value: string): string {
   return value
-    .replace(/https?:\/\/[^\s<>"']+/gi, redactUserInfo)
+    .replace(/(?:https?:)?\/\/[^\s<>"']+/gi, redactUserInfo)
     .replace(/[^\s<>"']*\?[^\s<>"']*/g, redactQuery)
     .replace(
       /((?:authorization|cookie|set-cookie)\s*[:=]\s*)[^\r\n]+/gi,

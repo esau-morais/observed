@@ -177,7 +177,11 @@ export function RequestLedger({ side, label }: { side: Side; label: string }) {
                         <th
                           key={column}
                           scope="col"
-                          {...stylex.props(styles.cell, styles.column)}
+                          {...stylex.props(
+                            styles.cell,
+                            styles.column,
+                            styles.nowrap,
+                          )}
                         >
                           {column}
                         </th>
