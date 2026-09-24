@@ -215,8 +215,30 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
   const candidate = yield* loadCapture(candidateDirectory);
 
+  let baseIssue: string | undefined;
+
   const base =
-    baseDirectory === null ? null : yield* loadCapture(baseDirectory);
+    baseDirectory === null
+      ? null
+      : yield* loadCapture(baseDirectory).pipe(
+          Effect.catchTags({
+            ExportFailure: (error) => {
+              baseIssue = `Baseline unavailable: ${error.message}`;
+
+              return Effect.succeed(null);
+            },
+            PlatformError: (error) => {
+              baseIssue = `Baseline unavailable: ${error.message}`;
+
+              return Effect.succeed(null);
+            },
+            SchemaError: () => {
+              baseIssue = 'Baseline manifest is malformed or unsupported';
+
+              return Effect.succeed(null);
+            },
+          }),
+        );
 
   const parent = yield* fs.realPath(path.dirname(path.resolve(directory)));
 
@@ -281,6 +303,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   const selection = yield* Schema.decodeUnknownEffect(selectionSchema)({
     schemaVersion: 1,
     evaluatedAt,
+    ...(baseIssue === undefined ? {} : { baseIssue }),
     base:
       base === null
         ? null

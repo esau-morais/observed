@@ -24,7 +24,11 @@ export const recipe = {
       'One Load items click, from an empty isolated browser session, through completion and network idle. Later activity is outside scope.',
   },
   viewport: { width: 1120, height: 800, scale: 1 },
-  browserArguments: ['--no-sandbox'],
+  browserArguments: [
+    '--no-sandbox',
+    '--disable-gpu',
+    '--force-color-profile=srgb',
+  ],
   fixture: {
     items: [
       { id: 'notebook', name: 'Notebook' },

@@ -69,6 +69,7 @@ export type Side = typeof sideSchema.Type;
 export const selectionSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   evaluatedAt: timestamp,
+  baseIssue: Schema.optionalKey(text),
   base: Schema.NullOr(
     Schema.Struct({ manifestHash: digest, sourceHash: digest }),
   ),

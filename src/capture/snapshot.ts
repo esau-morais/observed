@@ -1,6 +1,5 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
-import { listFiles } from './application';
 import { sourceSchema, type Source } from './model';
 import { json, sha256 } from './recipe';
 
@@ -18,19 +17,19 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
 
     const fixtureRoot = 'fixtures/request-lab';
 
-    const entries = yield* listFiles(
-      path.join(options.projectRoot, fixtureRoot),
-    );
-
-    const variants = ['base.ts', 'duplicate.ts', 'visual.ts'];
+    const entries = [
+      'App.tsx',
+      'main.tsx',
+      'items.ts',
+      'index.html',
+      'style.css',
+      'tokens.stylex.ts',
+      'fixture-variant.d.ts',
+      `${options.variant}.ts`,
+    ];
 
     const files = [
-      ...entries
-        .filter(
-          (entry) =>
-            !variants.includes(entry) || entry === `${options.variant}.ts`,
-        )
-        .map((entry) => `${fixtureRoot}/${entry}`),
+      ...entries.map((entry) => `${fixtureRoot}/${entry}`),
       'package.json',
       'bun.lock',
       'src/capture/fixture-build.ts',

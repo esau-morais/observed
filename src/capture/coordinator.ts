@@ -19,6 +19,7 @@ class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
   'CaptureFailure',
   {
     category: Schema.Literals(['timeout', 'application', 'producer']),
+    message: Schema.String,
     cause: Schema.Defect(),
   },
 ) {}
@@ -124,7 +125,11 @@ export const captureApplication = Effect.fn('captureApplication')(
       yield* processOutput({
         command: process.execPath,
         args: [
-          path.join(options.projectRoot, 'src/capture/fixture-build.ts'),
+          '--eval',
+          yield* fs.readFileString(
+            path.join(directory, 'source/src/capture/fixture-build.ts'),
+          ),
+          'snapshot-builder',
           path.join(directory, 'source/fixtures/request-lab'),
           path.join(directory, 'app'),
           options.variant,
@@ -165,18 +170,45 @@ export const captureApplication = Effect.fn('captureApplication')(
     yield* run.pipe(
       Effect.mapError((cause) => {
         if (Cause.isTimeoutError(cause)) {
-          return new CaptureFailure({ category: 'timeout', cause });
+          return new CaptureFailure({
+            category: 'timeout',
+            message:
+              'Capture timed out before the saved journey completed; see failure.txt and transcript.jsonl',
+            cause,
+          });
         }
 
         if (cause instanceof ApplicationFailure) {
-          return new CaptureFailure({ category: 'application', cause });
+          return new CaptureFailure({
+            category: 'application',
+            message: cause.message,
+            cause,
+          });
         }
 
-        return new CaptureFailure({ category: 'producer', cause });
+        return new CaptureFailure({
+          category: 'producer',
+          message: cause.message,
+          cause,
+        });
       }),
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           const finishedAt = DateTime.formatIso(yield* DateTime.now);
+
+          if (Exit.isFailure(exit)) {
+            yield* fs.writeFileString(
+              path.join(directory, 'failure.txt'),
+              Cause.pretty(exit.cause),
+              { flag: 'wx' },
+            );
+
+            addArtifact(
+              'failure',
+              'failure.txt',
+              'Original capture failure diagnostics',
+            );
+          }
 
           const records: CaptureArtifact[] = [];
 
@@ -197,7 +229,8 @@ export const captureApplication = Effect.fn('captureApplication')(
           let execution: Capture['execution'] = { kind: 'complete' };
 
           if (Exit.isFailure(exit)) {
-            const reason = Cause.pretty(exit.cause);
+            let reason =
+              'Capture failed unexpectedly; see failure.txt and transcript.jsonl';
 
             let category: Extract<
               Capture['execution'],
@@ -206,6 +239,9 @@ export const captureApplication = Effect.fn('captureApplication')(
 
             if (Cause.hasInterrupts(exit.cause)) {
               category = 'cancelled';
+
+              reason =
+                'Capture was cancelled before the saved journey completed';
             } else {
               for (const failure of exit.cause.reasons) {
                 if (
@@ -213,6 +249,8 @@ export const captureApplication = Effect.fn('captureApplication')(
                   failure.error instanceof CaptureFailure
                 ) {
                   category = failure.error.category;
+
+                  reason = failure.error.message;
                 }
               }
             }

@@ -14,6 +14,7 @@
     "compare": "bun src/workflow-cli.ts compare",
     "demo": "bun src/workflow-cli.ts demo",
     "view": "bun src/workflow-cli.ts view",
+    "verify": "bun scripts/verify.ts",
     "report": "bun src/cli.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "typecheck": "bun run --bun tsc --noEmit",

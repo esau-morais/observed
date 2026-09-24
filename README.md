@@ -121,6 +121,13 @@ Keep the input bundle immutable during generation and review.
 bun run check
 ```
 
+`bun run verify` exercises the live demo, timeout and SIGTERM cleanup, artifact
+faults, stale/incompatible captures, and report serving. It retains every run under
+`evidence/acceptance-<id>`. The strict screenshot-equality assertion currently
+detects a small rounded-border rendering variation between identical variants;
+the full acceptance command therefore remains failing. Request-count expectations
+are unchanged. This increment is not a completed Phase 1 acceptance gate.
+
 Reports and captures stay local under gitignored `evidence/`. Tests use Vitest
 under Bun; `bun test` is not the project test command.
 

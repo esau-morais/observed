@@ -377,7 +377,8 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       unresolved: [
         ...reasons,
         ...(observations?.browserErrors.map(
-          (error) => `Browser error: ${error}`,
+          (error) =>
+            `Browser error: ${error.trim() === '' ? '(empty message)' : error.trim()}`,
         ) ?? []),
       ],
     } satisfies Side;
@@ -572,14 +573,17 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
   evaluatedAt: string;
   selection?: Selection;
 }) {
-  const base = yield* inspectSide({
-    directory: baseDirectory,
-    prefix: 'base',
-    evaluatedAt,
-    ...(selection === undefined || selection.base === null
-      ? {}
-      : { expected: selection.base }),
-  });
+  const base =
+    selection?.baseIssue === undefined
+      ? yield* inspectSide({
+          directory: baseDirectory,
+          prefix: 'base',
+          evaluatedAt,
+          ...(selection === undefined || selection.base === null
+            ? {}
+            : { expected: selection.base }),
+        })
+      : unavailable(selection.baseIssue);
 
   const candidate = yield* inspectSide({
     directory: candidateDirectory,

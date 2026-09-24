@@ -358,6 +358,34 @@ test('keeps browser errors as unresolved evidence without inventing another chec
   expect(side.unresolved).toContain('Browser error: Synthetic page error');
 });
 
+test('serializes empty and newline-terminated browser errors without losing their original text', async () => {
+  const browserErrors = ['', 'Synthetic page error\n'];
+
+  const bundle = await syntheticBundle({
+    observations: { ...syntheticObservations(), browserErrors },
+  });
+
+  const result = await Effect.runPromise(
+    inspectComparison({
+      baseDirectory: null,
+      candidateDirectory: bundle.directory,
+      evaluatedAt,
+    }),
+  );
+
+  expect(result.candidate.check.outcome).toBe('passed');
+
+  expect(result.candidate.observations?.browserErrors).toEqual(browserErrors);
+
+  const decoded = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(json(result));
+
+  expect(decoded.candidate.observations?.browserErrors).toEqual(browserErrors);
+
+  expect(decoded.candidate.unresolved).toHaveLength(2);
+});
+
 test('keeps the independent candidate check with a missing baseline', async () => {
   const candidate = await syntheticBundle();
 

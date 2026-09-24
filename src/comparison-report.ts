@@ -89,7 +89,7 @@ function renderLedger(side: Side, label: string): string {
 
   const errors =
     observations.browserErrors.length === 0
-      ? 'No browser errors recorded in this window.'
+      ? 'No browser errors recorded during capture.'
       : `Recorded browser errors:\n\n${list(observations.browserErrors)}`;
 
   return [

@@ -198,7 +198,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       });
 
       yield* waitClosed.pipe(Effect.timeout('10 seconds'));
-    }).pipe(Effect.interruptible, Effect.orDie),
+    }).pipe(Effect.orDie),
   );
 
   yield* command(['open', options.url]);

@@ -11,7 +11,7 @@ import { ChildProcess } from 'effect/unstable/process';
 
 export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()(
   'ProcessFailure',
-  { command: Schema.String, exitCode: Schema.Number },
+  { command: Schema.String, exitCode: Schema.Number, message: Schema.String },
 ) {}
 
 export const processOutput = Effect.fn('processOutput')(function* (options: {
@@ -64,7 +64,11 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
     );
 
     if (exitCode !== 0) {
-      return yield* new ProcessFailure({ command: options.command, exitCode });
+      return yield* new ProcessFailure({
+        command: options.command,
+        exitCode,
+        message: `${options.command} exited with code ${exitCode}; see transcript.jsonl for original output`,
+      });
     }
 
     return stdout;
