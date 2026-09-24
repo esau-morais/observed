@@ -90,11 +90,9 @@ Contributor skills stay in this repository. Product users must be able to run sa
 | Task | Read |
 | --- | --- |
 | Write or review TypeScript | .agents/skills/typescript-best-practices/SKILL.md |
-| Create a runnable verification recipe | .agents/skills/create-verification-skill/SKILL.md |
 | Fix a bug with a useful regression check | .agents/skills/tdd/SKILL.md |
 | Review comments in the current change | .agents/skills/no-comments/SKILL.md |
 | Edit documentation or interface copy | .agents/skills/unslop/SKILL.md |
-| Capture explicitly requested working preferences | .agents/skills/automate-me/SKILL.md |
 | Apply Observed's working conventions | .agents/skills/observed-mode/SKILL.md |
 | Verify an Observed report against its artifacts | .agents/skills/verify-observed/SKILL.md |
 | Open, review, and maintain an Observed implementation PR | .agents/skills/babysit-pr/SKILL.md |

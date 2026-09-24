@@ -4,7 +4,7 @@ The product sequence and self-verification stages live in [ROADMAP.md](../docs/R
 
 ## Project skills
 
-The skills in .agents/skills support contributors. They have no editor-specific commands, transcript paths, or specialist-agent dependencies. The automate-me skill requires an explicit preference-capture request.
+The skills in .agents/skills support contributors. They have no editor-specific commands, transcript paths, or specialist-agent dependencies.
 
 Generated project workflows: [Observed mode](skills/observed-mode/SKILL.md),
 [verification](skills/verify-observed/SKILL.md), and
