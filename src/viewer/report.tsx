@@ -158,7 +158,6 @@ function Field({
 
 function Check({ side, label }: { side: Side; label: string }) {
   const check = side.check;
-
   const symbols = { passed: '✓', failed: '!', unknown: '?' };
 
   return (

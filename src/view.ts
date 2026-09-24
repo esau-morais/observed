@@ -65,7 +65,6 @@ const stageCapture = Effect.fnUntraced(function* (
   assets: Map<string, Asset>,
 ) {
   const fs = yield* FileSystem.FileSystem;
-
   const destination = path.join(staging, prefix);
 
   yield* fs.makeDirectory(destination);
@@ -99,7 +98,6 @@ const stageCapture = Effect.fnUntraced(function* (
     }
 
     const file = `${prefix}/${artifact.path}`;
-
     const read = yield* readVerifiedArtifact(root, { ...artifact, path: file });
 
     if (read.kind === 'unavailable') {
@@ -122,9 +120,7 @@ const stageCapture = Effect.fnUntraced(function* (
 
 const preloadReport = Effect.fnUntraced(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
-
   const root = yield* fs.realPath(directory);
-
   const selectionBytes = yield* readRequired(root, 'selection.json');
 
   const selection = yield* Schema.decodeUnknownEffect(

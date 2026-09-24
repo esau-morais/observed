@@ -33,13 +33,11 @@ export const captureApplication = Effect.fn('captureApplication')(
     stall?: boolean;
   }) {
     const fs = yield* FileSystem.FileSystem;
-
     const directory = path.resolve(options.directory);
 
     yield* fs.makeDirectory(directory);
 
     const id = randomUUID();
-
     const startedAt = DateTime.formatIso(yield* DateTime.now);
 
     yield* fs.writeFileString(

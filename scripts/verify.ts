@@ -205,9 +205,7 @@ const startControlledCli = Effect.fn('startControlledCli')(function* (
   args: readonly string[],
 ) {
   const fs = yield* FileSystem.FileSystem;
-
   const command = [path.join(projectRoot, 'src/workflow-cli.ts'), ...args];
-
   const startedAt = DateTime.formatIso(yield* DateTime.now);
 
   const handle = yield* ChildProcess.make(process.execPath, command, {
@@ -219,7 +217,6 @@ const startControlledCli = Effect.fn('startControlledCli')(function* (
   });
 
   const output = path.join(evidence, `${name}.stdout.txt`);
-
   const errorOutput = path.join(evidence, `${name}.stderr.txt`);
 
   yield* fs.writeFileString(output, '', { flag: 'wx' });
@@ -478,7 +475,6 @@ const snapshotOriginals = Effect.fn('snapshotOriginals')(function* (
   demo: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-
   const hashes: { path: string; sha256: string }[] = [];
 
   for (const name of ['base', 'unchanged', 'duplicate', 'visual']) {
@@ -555,7 +551,6 @@ const compareFault = Effect.fn('compareFault')(function* (
 
 const verifyFailures = Effect.fn('verifyFailures')(function* () {
   const fs = yield* FileSystem.FileSystem;
-
   const timeoutDirectory = path.join(evidence, 'timeout');
 
   yield* runCli(
@@ -855,11 +850,8 @@ const acceptance = Effect.gen(function* () {
   yield* save('originals.json', originals);
 
   const baseDirectory = path.join(demo, 'captures/base');
-
   const candidateDirectory = path.join(demo, 'captures/unchanged');
-
   const base = yield* verifyRawCapture('base', baseDirectory, 1);
-
   const unchanged = yield* verifyRawCapture('unchanged', candidateDirectory, 1);
 
   const duplicate = yield* verifyRawCapture(

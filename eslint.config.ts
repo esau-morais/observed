@@ -26,7 +26,9 @@ export default tseslint.config(
     rules: {
       '@stylistic/padding-line-between-statements': [
         'error',
-        { blankLine: 'always', prev: '*', next: '*' },
+        { blankLine: 'always', prev: '*', next: ['return', 'throw'] },
+        { blankLine: 'always', prev: 'block-like', next: '*' },
+        { blankLine: 'always', prev: 'import', next: '*' },
         { blankLine: 'any', prev: 'import', next: 'import' },
       ],
       '@stylexjs/valid-styles': 'error',

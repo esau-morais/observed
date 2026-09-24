@@ -23,11 +23,8 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
   timeoutMs?: number;
 }) {
   const fs = yield* FileSystem.FileSystem;
-
   const startedAt = DateTime.formatIso(yield* DateTime.now);
-
   let stdout = '';
-
   let stderr = '';
 
   const execute = Effect.gen(function* () {

@@ -14,7 +14,6 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
     variant: Variant;
   }) {
     const fs = yield* FileSystem.FileSystem;
-
     const fixtureRoot = 'fixtures/request-lab';
 
     const entries = [
@@ -41,7 +40,6 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
 
     for (const file of files) {
       const bytes = yield* fs.readFile(path.join(options.projectRoot, file));
-
       const output = path.join(options.directory, 'source', file);
 
       yield* fs.makeDirectory(path.dirname(output), { recursive: true });

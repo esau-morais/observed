@@ -231,7 +231,6 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     }
 
     const capture = parsed.capture;
-
     const reasons = captureProblems(capture, evaluatedAt);
 
     if (
@@ -246,7 +245,6 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     );
 
     const byId = new Map(inspected.map((item) => [item.artifact.id, item]));
-
     const byPath = new Map(inspected.map((item) => [item.artifact.path, item]));
 
     const artifacts = inspected.map((item): Side['artifacts'][number] => {
@@ -304,7 +302,6 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     }
 
     let observations: Observations | null = null;
-
     const observationArtifact = byId.get('observations');
 
     if (observationArtifact?.kind === 'available') {
@@ -472,11 +469,8 @@ export function compareCaptures({
   evaluatedAt: string;
 }): Comparison {
   const base = sideAt(inspectedBase, evaluatedAt);
-
   const candidate = sideAt(inspectedCandidate, evaluatedAt);
-
   const reasons = comparisonProblems(base, candidate);
-
   const firstReason = reasons[0];
 
   const common = {
@@ -519,7 +513,6 @@ export function compareCaptures({
   );
 
   const baseCount = base.check.actual;
-
   const candidateCount = candidate.check.actual;
 
   if (

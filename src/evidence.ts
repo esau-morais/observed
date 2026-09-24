@@ -66,7 +66,6 @@ export const inspectArtifact = Effect.fnUntraced(
     }
 
     const resolved = yield* nodeIo(() => realpath(absolutePath));
-
     const relative = path.relative(root, resolved);
 
     if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {

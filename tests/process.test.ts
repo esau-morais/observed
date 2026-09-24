@@ -112,17 +112,13 @@ test.each(['timeout', 'cancellation'] as const)(
   '%s retains partial output and stops a SIGTERM-resistant process and its descendant within the force-kill bound',
   async (mode) => {
     const directory = await mkdtemp(path.join(tmpdir(), 'observed-process-'));
-
     const helper = path.join(directory, 'stubborn.ts');
-
     const transcript = path.join(directory, 'transcript.jsonl');
 
     await writeFile(helper, stubbornProcess);
 
     const controller = new AbortController();
-
     const pids = new Set<number>();
-
     let emergencyCleanup = false;
 
     const watchdog = setTimeout(() => {
@@ -265,7 +261,6 @@ test.each(['timeout', 'cancellation'] as const)(
 
 test('nonzero exits retain stdout and stderr, name the exit code and transcript, and surface transcript write failures', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'observed-process-'));
-
   const transcript = path.join(directory, 'transcript.jsonl');
 
   const args = [

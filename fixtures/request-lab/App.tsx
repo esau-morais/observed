@@ -1,11 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
-
 import { useRef, useState } from 'react';
-
 import { loadItems, title } from 'fixture-variant';
-
 import type { Item } from './items';
-
 import { colors } from './tokens.stylex';
 
 type LoadState =
@@ -32,7 +28,6 @@ function statusText(state: LoadState): string {
 
 export function App() {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
-
   const inFlight = useRef(false);
 
   function handleLoad() {

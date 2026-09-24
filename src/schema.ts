@@ -1,9 +1,7 @@
 import { DateTime, Option, Schema } from 'effect';
 
 const text = Schema.NonEmptyString.check(Schema.isTrimmed());
-
 const id = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/));
-
 const sha256 = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 
 const unknown = Schema.Struct({
@@ -92,9 +90,7 @@ export const manifestSchema = Schema.Struct({
 }).check(
   Schema.makeFilter((manifest) => {
     const issues: Schema.FilterIssue[] = [];
-
     const artifactIds = new Set(manifest.artifacts.map((item) => item.id));
-
     const checkIds = new Set(manifest.checks.map((item) => item.id));
 
     if (artifactIds.size !== manifest.artifacts.length) {

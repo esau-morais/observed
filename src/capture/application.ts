@@ -54,7 +54,6 @@ export const startApplication = Effect.fn('startApplication')(
     stall?: boolean;
   }) {
     const fs = yield* FileSystem.FileSystem;
-
     const files = yield* listFiles(options.directory);
 
     const assets = new Map<

@@ -136,7 +136,6 @@ function renderProvenance(side: Side, label: string): string {
   }
 
   const conditions = capture.conditions;
-
   let recordedConditions: string;
 
   if (conditions.kind === 'unavailable') {

@@ -20,9 +20,7 @@ import { parseManifest } from '../src/schema';
 import fixtureManifest from './fixtures/todomvc/manifest.json' with { type: 'json' };
 
 const fixture = path.join(import.meta.dirname, 'fixtures/todomvc');
-
 const directories: string[] = [];
-
 const execute = promisify(execFile);
 
 async function bundle() {
@@ -160,9 +158,7 @@ test('rejects calendar rollover and accepts valid UTC timestamps without losing 
 
 test('retains real supplied results without converting imported PASS text into independent verification', async () => {
   const { directory, manifest } = await bundle();
-
   const report = await inspectEvidence(manifest, directory);
-
   const markdown = renderReport(report, directory);
 
   expect(report.checks.map((result) => result.outcome)).toEqual([
@@ -290,7 +286,6 @@ test.each(['file', 'directory'])(
   'rejects %s symlinks even when their target exists',
   async (kind) => {
     const { directory, manifest } = await bundle();
-
     const outside = await mkdtemp(path.join(tmpdir(), 'observed-outside-'));
 
     directories.push(outside);
@@ -384,13 +379,9 @@ test('escapes supplied markup and encodes evidence paths relative to the actual 
 
 test('CLI writes deterministic reports, fails malformed JSON, and refuses to overwrite evidence', async () => {
   const { directory } = await bundle();
-
   const cli = path.resolve('src/cli.ts');
-
   const manifestPath = path.join(directory, 'manifest.json');
-
   const first = path.join(directory, 'first.md');
-
   const second = path.join(directory, 'second.md');
 
   await execute('bun', [cli, manifestPath, first]);
@@ -400,7 +391,6 @@ test('CLI writes deterministic reports, fails malformed JSON, and refuses to ove
   expect(await readFile(first, 'utf8')).toBe(await readFile(second, 'utf8'));
 
   const original = await readFile(manifestPath, 'utf8');
-
   const collision = execute('bun', [cli, manifestPath, manifestPath]);
 
   await expect(collision).rejects.toMatchObject({ code: 1, stdout: '' });

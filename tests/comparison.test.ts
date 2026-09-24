@@ -33,7 +33,6 @@ import {
 import { comparisonSchema, type Selection } from '../src/comparison-model';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
-
 const directories: string[] = [];
 
 function syntheticObservations(count = 1): Observations {
@@ -87,7 +86,6 @@ async function syntheticBundle(
   }));
 
   const sourceIdentity = { entry: 'main.ts', files: sourceFiles };
-
   const artifacts: CaptureArtifact[] = [];
 
   const contents = [
@@ -210,7 +208,6 @@ afterEach(async () => {
 
 test('derives a regression from verified request observations despite unchanged image bytes and raw PASS text', async () => {
   const base = await syntheticBundle();
-
   const candidate = await syntheticBundle({ count: 4 });
 
   const result = await Effect.runPromise(
@@ -275,7 +272,6 @@ test.each([0, 2])(
   'fails the named count check for %i requests without inventing a regression from a failing base',
   async (count) => {
     const base = await syntheticBundle({ count: 3 });
-
     const candidate = await syntheticBundle({ count });
 
     const result = compareCaptures({
@@ -410,9 +406,7 @@ test.each(['application', 'conditions'] as const)(
   'rejects incompatible %s while preserving independent checks',
   async (field) => {
     const base = await syntheticBundle();
-
     const candidate = await syntheticBundle();
-
     const conditions = candidate.capture.conditions;
 
     if (conditions.kind !== 'recorded') {
@@ -513,7 +507,6 @@ test.each(['source digest', 'source file digest', 'entry absent'] as const)(
   'rejects inconsistent %s identities',
   async (problem) => {
     const bundle = await syntheticBundle();
-
     let source = bundle.capture.source;
 
     if (problem === 'source digest') {
@@ -669,7 +662,6 @@ test('accepts the maximum age boundary and rejects stale or future captures', as
 
 test('keeps the current candidate check when the baseline is stale', async () => {
   const base = await syntheticBundle();
-
   const candidate = await syntheticBundle();
 
   await saveManifest(base.directory, {
@@ -693,7 +685,6 @@ test('keeps the current candidate check when the baseline is stale', async () =>
 
 test('rechecks age during pure comparison without mutating the inspected inputs', async () => {
   const bundle = await syntheticBundle();
-
   const side = await inspect(bundle.directory);
 
   const staleAt = new Date(
@@ -732,7 +723,6 @@ test.each([
   'rejects observations with %s even when the digest matches',
   async (problem) => {
     const bundle = await syntheticBundle();
-
     const observations = syntheticObservations();
 
     const malformed = {
@@ -797,9 +787,7 @@ test.each([
 
 test('rejects symlink artifacts even when their target has the expected bytes', async () => {
   const bundle = await syntheticBundle();
-
   const outside = await syntheticBundle();
-
   const image = 'images/after #1.png';
 
   await rm(path.join(bundle.directory, image));

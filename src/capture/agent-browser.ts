@@ -91,9 +91,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   addArtifact: (id: string, filename: string, description: string) => void;
 }) {
   const fs = yield* FileSystem.FileSystem;
-
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: 'obs-' });
-
   const config = path.join(options.directory, 'browser-config.json');
 
   yield* fs.writeFileString(config, '{}\n', { flag: 'wx' });

@@ -12,9 +12,7 @@ import { exportComparison } from './export';
 import { serveReport } from './view';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
-
 const outputFlag = Flag.String('output').pipe(Flag.optional);
-
 const machineFlag = Flag.Boolean('json').pipe(Flag.withDefault(false));
 
 const variantArgument = Argument.Literals('variant', [
@@ -169,7 +167,6 @@ const demo = Command.make(
   },
   Effect.fn('demoCommand')(function* ({ output, machine }) {
     const fs = yield* FileSystem.FileSystem;
-
     const directory = yield* chooseDirectory(output, 'demo');
 
     yield* fs.makeDirectory(directory);
@@ -270,7 +267,6 @@ const view = Command.make(
   },
   Effect.fn('viewCommand')(function* ({ directory, port }) {
     const fs = yield* FileSystem.FileSystem;
-
     let selected: string;
 
     if (Option.isSome(directory)) {
@@ -310,7 +306,6 @@ const app = Command.make(
   },
   Effect.fn('appCommand')(function* ({ variant }) {
     const fs = yield* FileSystem.FileSystem;
-
     const directory = yield* chooseDirectory(Option.none(), 'application');
 
     yield* fs.makeDirectory(directory);

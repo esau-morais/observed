@@ -23,13 +23,9 @@ const command = Command.make(
     output,
   }) {
     const fs = yield* FileSystem.FileSystem;
-
     const manifestPath = yield* fs.realPath(manifestArgument);
-
     const input = yield* fs.readFileString(manifestPath);
-
     const manifest = yield* parseManifestJson(input);
-
     const report = yield* inspectEvidence(manifest, path.dirname(manifestPath));
 
     const outputDirectory = yield* fs.realPath(

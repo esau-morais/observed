@@ -105,7 +105,6 @@ export const readVerifiedArtifact = Effect.fnUntraced(
 
 const loadCapture = Effect.fnUntraced(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
-
   const root = yield* fs.realPath(directory);
 
   const manifest = yield* readVerifiedArtifact(root, {
@@ -212,7 +211,6 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   projectRoot: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
-
   let candidateIssue: string | undefined;
 
   const candidate = yield* loadCapture(candidateDirectory).pipe(
@@ -261,11 +259,8 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
         );
 
   const parent = yield* fs.realPath(path.dirname(path.resolve(directory)));
-
   const destination = path.join(parent, path.basename(path.resolve(directory)));
-
   const project = yield* fs.realPath(projectRoot);
-
   const viewer = path.join(project, 'dist', 'viewer');
 
   if (

@@ -14,7 +14,6 @@ export const timestamp = Schema.String.check(
 );
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-
 const positive = Schema.Int.check(Schema.isGreaterThan(0));
 
 const artifact = Schema.Struct({
