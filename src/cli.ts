@@ -7,7 +7,7 @@ import { renderReport } from './report';
 import { parseManifestJson } from './schema';
 
 const command = Command.make(
-  'observed-report',
+  'report',
   {
     manifest: Argument.String('manifest.json').pipe(
       Argument.withDescription(

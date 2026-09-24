@@ -1,6 +1,6 @@
 import { DateTime } from 'effect';
 import path from 'node:path';
-import type { ArtifactResult, EvidenceReport } from './evidence';
+import type { ArtifactResult, CheckResult, EvidenceReport } from './evidence';
 import type { Manifest } from './schema';
 
 function text(value: string): string {
@@ -52,6 +52,44 @@ function evidenceLink(result: ArtifactResult, outputDirectory: string): string {
   return `[${text(result.artifact.id)}](./${href})`;
 }
 
+function renderCheck(
+  { check, outcome, reasons }: CheckResult,
+  evidence: string,
+): string {
+  const detail =
+    check.result.kind === 'unknown' ? check.result.reason : check.result.detail;
+  const incomplete = reasons
+    .map((reason) => `- Incomplete: ${text(reason)}`)
+    .join('\n');
+
+  return `### ${text(check.name)} (${text(check.id)})
+
+- Reported outcome: **${outcome}**
+- Supplied result: ${check.result.kind}; ${text(detail)}
+- Expectation: ${text(check.expectation)}
+- Scope: ${text(check.scope)}
+- Method: ${text(check.method)}
+- Supplied by: ${text(check.suppliedBy)}
+- Evidence: ${evidence}
+${incomplete}`.trimEnd();
+}
+
+function renderArtifact(result: ArtifactResult, link: string): string {
+  let integrity: string;
+  if (result.kind === 'unavailable') {
+    integrity = `Unknown: ${text(result.reason)}`;
+  } else {
+    const label =
+      result.integrity === 'matched'
+        ? 'matched supplied hash'
+        : 'computed; no supplied hash to verify';
+    integrity = `SHA-256 ${label}: \`${result.hash}\``;
+  }
+
+  return `- ${link}: ${text(result.artifact.description)}
+  - ${integrity}`;
+}
+
 export function renderReport(
   report: EvidenceReport,
   outputDirectory: string,
@@ -66,109 +104,94 @@ export function renderReport(
   const incomplete = checks.filter((result) => result.outcome === 'unknown');
   const unavailable = artifacts.filter(
     (result) => result.kind === 'unavailable',
+  ).length;
+  const linkedArtifacts = artifacts.map((result, index) => ({
+    result,
+    index,
+    link: evidenceLink(result, outputDirectory),
+  }));
+  const byId = new Map(
+    linkedArtifacts.map((item) => [item.result.artifact.id, item]),
   );
-  const lines = [
-    `# ${text(manifest.title)}`,
-    '',
-    '## Conclusion',
-    '',
-    `${passed} imported passed; ${failed} imported failed; ${incomplete.length} unknown checks.`,
-    '',
-    'Behavior was not independently verified by Observed. Change comparison and regression interpretation are unavailable in this Phase 0 report.',
-    '',
-    `Observed computed artifact availability and SHA-256 integrity only: ${artifacts.length - unavailable.length} available; ${unavailable.length} unavailable. Schema version 1 validated.`,
-    '',
-    '## Incomplete checks',
-    '',
-    ...incomplete.map(
-      (result) =>
-        `- ${text(result.check.name)}: ${result.reasons.map(text).join('; ')}`,
-    ),
-    ...(incomplete.length === 0
-      ? [
-          'None among the supplied checks. This does not establish complete application coverage.',
-        ]
-      : []),
-    '',
-    '## Supplied application and capture context',
-    '',
-    `- Application: ${text(manifest.application.name)}`,
-    `- Location: ${known(manifest.application.location)}`,
-    `- Repository: ${known(manifest.application.repository)}`,
-    `- Base: ${revision(manifest.revisions.base)}`,
-    `- Candidate: ${revision(manifest.revisions.candidate)}`,
-    `- Captured revision: ${revision(manifest.capture.revision)}`,
-    `- Capture: ${text(manifest.capture.id)}; execution: ${manifest.capture.execution}`,
-    `- Started: ${timestamp(manifest.capture.startedAt)}`,
-    `- Finished: ${timestamp(manifest.capture.finishedAt)}`,
-    `- Producer: ${text(manifest.capture.producer.name)}; version: ${known(manifest.capture.producer.version)}`,
-    `- Recipe: ${text(manifest.recipe.id)}; version: ${known(manifest.recipe.version)}; artifact: ${text(manifest.recipe.artifactId)} (hash below)`,
-    ...manifest.capture.conditions.map(
-      (condition) => `- Condition: ${text(condition)}`,
-    ),
-    '',
-    '## Named checks',
-    '',
-    'All behavior outcomes below are supplied results. Available artifacts do not establish that their contents support the assertion. Unknown outcomes retain the original claim for inspection.',
-    '',
-  ];
-
-  for (const { check, outcome, reasons } of checks) {
-    const detail =
-      check.result.kind === 'unknown'
-        ? check.result.reason
-        : check.result.detail;
-    const references = artifacts.filter((result) =>
-      check.artifactIds.includes(result.artifact.id),
-    );
-
-    lines.push(
-      `### ${text(check.name)} (${text(check.id)})`,
-      '',
-      `- Reported outcome: **${outcome}**`,
-      `- Supplied result: ${check.result.kind}; ${text(detail)}`,
-      `- Expectation: ${text(check.expectation)}`,
-      `- Scope: ${text(check.scope)}`,
-      `- Method: ${text(check.method)}`,
-      `- Supplied by: ${text(check.suppliedBy)}`,
-      `- Evidence: ${references.length === 0 ? 'none' : references.map((result) => evidenceLink(result, outputDirectory)).join(', ')}`,
-      ...reasons.map((reason) => `- Incomplete: ${text(reason)}`),
-      '',
-    );
-  }
-
-  lines.push(
-    '## Artifact integrity computed by Observed',
-    '',
-    'Hashes establish file consistency, not truthful collection or application behavior.',
-    '',
-  );
-
-  for (const result of artifacts) {
-    lines.push(
-      `- ${evidenceLink(result, outputDirectory)}: ${text(result.artifact.description)}`,
-    );
-
-    if (result.kind === 'unavailable') {
-      lines.push(`  - Unknown: ${text(result.reason)}`);
-    } else {
-      lines.push(
-        `  - SHA-256 ${result.integrity === 'matched' ? 'matched supplied hash' : 'computed; no supplied hash to verify'}: \`${result.hash}\``,
-      );
-    }
-  }
-
-  lines.push(
-    '',
-    '## Missing prerequisites and interpretation limits',
-    '',
+  const namedChecks = checks
+    .map((result) => {
+      const references = [...new Set(result.check.artifactIds)]
+        .map((id) => byId.get(id))
+        .filter((item) => item !== undefined)
+        .sort((left, right) => left.index - right.index);
+      const evidence =
+        references.length === 0
+          ? 'none'
+          : references.map((item) => item.link).join(', ');
+      return renderCheck(result, evidence);
+    })
+    .join('\n\n');
+  const incompleteChecks =
+    incomplete.length === 0
+      ? 'None among the supplied checks. This does not establish complete application coverage.'
+      : incomplete
+          .map(
+            (result) =>
+              `- ${text(result.check.name)}: ${result.reasons.map(text).join('; ')}`,
+          )
+          .join('\n');
+  const conditions = manifest.capture.conditions
+    .map((condition) => `- Condition: ${text(condition)}`)
+    .join('\n');
+  const integrity = linkedArtifacts
+    .map(({ result, link }) => renderArtifact(result, link))
+    .join('\n');
+  const limitations = [
     ...manifest.missingPrerequisites.map((item) => `- Missing: ${text(item)}`),
     ...manifest.limitations.map((item) => `- ${text(item)}`),
-    '- Supplied identities, timestamps, conditions, and outcomes are not authenticated by Observed.',
-    '- No freshness, capture compatibility, source causation, or merge readiness is established.',
-    '- Integrity describes files read during generation. Keep the bundle immutable; later edits invalidate this report.',
-    '',
-  );
+  ].join('\n');
 
-  return lines.join('\n');
+  return `# ${text(manifest.title)}
+
+## Conclusion
+
+${passed} imported passed; ${failed} imported failed; ${incomplete.length} unknown checks.
+
+Behavior was not independently verified by Observed. Change comparison and regression interpretation are unavailable in this Phase 0 report.
+
+Observed computed artifact availability and SHA-256 integrity only: ${artifacts.length - unavailable} available; ${unavailable} unavailable. Schema version 1 validated.
+
+## Incomplete checks
+
+${incompleteChecks}
+
+## Supplied application and capture context
+
+- Application: ${text(manifest.application.name)}
+- Location: ${known(manifest.application.location)}
+- Repository: ${known(manifest.application.repository)}
+- Base: ${revision(manifest.revisions.base)}
+- Candidate: ${revision(manifest.revisions.candidate)}
+- Captured revision: ${revision(manifest.capture.revision)}
+- Capture: ${text(manifest.capture.id)}; execution: ${manifest.capture.execution}
+- Started: ${timestamp(manifest.capture.startedAt)}
+- Finished: ${timestamp(manifest.capture.finishedAt)}
+- Producer: ${text(manifest.capture.producer.name)}; version: ${known(manifest.capture.producer.version)}
+- Recipe: ${text(manifest.recipe.id)}; version: ${known(manifest.recipe.version)}; artifact: ${text(manifest.recipe.artifactId)} (hash below)
+${conditions}
+
+## Named checks
+
+All behavior outcomes below are supplied results. Available artifacts do not establish that their contents support the assertion. Unknown outcomes retain the original claim for inspection.
+
+${namedChecks}
+
+## Artifact integrity computed by Observed
+
+Hashes establish file consistency, not truthful collection or application behavior.
+
+${integrity}
+
+## Missing prerequisites and interpretation limits
+
+${limitations}
+- Supplied identities, timestamps, conditions, and outcomes are not authenticated by Observed.
+- No freshness, capture compatibility, source causation, or merge readiness is established.
+- Integrity describes files read during generation. Keep the bundle immutable; later edits invalidate this report.
+`;
 }
