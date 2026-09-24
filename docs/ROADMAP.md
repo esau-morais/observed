@@ -2,9 +2,9 @@
 
 ## Current state and next action
 
-The Phase 0 Bun CLI generates Markdown reports from a versioned input manifest and retained artifacts. It validates input, checks artifact paths and optional hashes, and labels supplied behavior results as imported. It has been exercised on a retained TodoMVC run. No capture adapter, revision comparator, viewer, pilot, or production integration has been verified. Stack and workflow decisions are in [AGENTS.md](../AGENTS.md).
+Specifications and visual concepts exist. No runnable Observed application, pilot, or production integration has been verified. Stack and workflow decisions are in [AGENTS.md](../AGENTS.md).
 
-Continue Phase 0 by observing developers using the generated combined report for an identified real change. Report generation alone does not establish usefulness or repeated verification pain. Do not build the full adapter list before checking whether people use the report.
+Start with Phase 0. Assemble a report from real existing artifacts while observing repeated verification work. Do not build the full adapter list before checking whether people use the report.
 
 Read only the document relevant to the task:
 

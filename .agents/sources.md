@@ -6,7 +6,7 @@ Reviewed on 23 September 2026. These project skills use original, shortened word
 
 | Topic | Project decision |
 | --- | --- |
-| Package manager and runtime | Bun manages dependencies and executes the TypeScript application, TypeScript compiler, ESLint, Prettier, and Vitest. package.json owns the version declaration. Vitest execution under Bun was checked with the suite and a temporary worker-runtime probe |
+| Package manager and runtime | Bun installs dependencies and runs the application and tools. Versions are declared in package.json |
 | Effect | Effect v4 is required for schemas, typed failures, resources, and workflows. Effect Command uses `@effect/platform-bun` at the CLI boundary |
 | Viewer | React, Vite, and StyleX. Vite and StyleX follow the user's selections; React follows the report plan |
 | Test runner | Vitest, chosen for the Vite project. Use bun run test so Bun does not select its own runner |
@@ -45,45 +45,14 @@ The upstream revision observed during research was `12d587dfb20741cafc376c42c696
 
 The selected agent host still needs a discovery check. A resolving filesystem link does not prove the host loaded each skill.
 
-## Phase 0 enforcement
+## Runtime and lint references
 
-Rules were selected from official documentation for the schema, filesystem, and
-report CLI implemented in this phase. `eslint.config.ts` is the executable policy.
-
-- [Recommended type-checked rules](https://typescript-eslint.io/users/configs#recommended-type-checked)
-  catch unsafe `any` flows and misused promises. Add
-  [unsafe assertion checks](https://typescript-eslint.io/rules/no-unsafe-type-assertion)
-  and [non-null assertion checks](https://typescript-eslint.io/rules/no-non-null-assertion)
-  so generated code cannot bypass boundary validation with a cast or `!`.
-- [Floating promises](https://typescript-eslint.io/rules/no-floating-promises)
-  reject `void` as an escape hatch and check thenables.
-  [Unknown rejection values](https://typescript-eslint.io/rules/use-unknown-in-catch-callback-variable)
-  keep Promise error handling from introducing `any`.
-- [Exhaustive switches](https://typescript-eslint.io/rules/switch-exhaustiveness-check)
-  protect outcome variants. [Explicit boolean conditions](https://typescript-eslint.io/rules/strict-boolean-expressions)
-  prevent absent values and zero measurements from being conflated.
-- [TypeScript directive checks](https://typescript-eslint.io/rules/ban-ts-comment)
-  forbid `ts-ignore` and `ts-nocheck`; `ts-expect-error` needs a description.
-  Unused ESLint suppressions and inline configurations are errors.
-- [Braces](https://eslint.org/docs/latest/rules/curly),
-  [strict equality](https://eslint.org/docs/latest/rules/eqeqeq),
-  [no nested ternaries](https://eslint.org/docs/latest/rules/no-nested-ternary), and
-  [no eval](https://eslint.org/docs/latest/rules/no-eval) keep control flow explicit.
-  Prettier enforces layout and one statement per line. The core
-  `max-statements-per-line` rule is deprecated, so it is not enabled.
-
-These checks do not establish report truth or detect every unused Effect value.
-Contract tests and execution against independent expectations remain required.
-React Hooks and StyleX rules belong to the later viewer setup.
-
-Effect references: [v4 onboarding](https://effect.website/docs/v4/onboarding),
-[installation](https://effect.website/docs/v4/getting-started/installation),
-[Command](https://effect.website/docs/v4/api/effect/unstable/cli/Command), and
-[Bun platform](https://effect.website/docs/v4/api/platform-bun). Implementation APIs
-were checked against installed `4.0.0-rc.117` sources and their `ai-docs` examples.
-The release-candidate version and lockfile are pinned. The
-[Bun runtime documentation](https://bun.com/docs/runtime#bun) explains why invoking
-a script with Bun does not by itself change that script's runtime.
+- Effect v4: [onboarding](https://effect.website/docs/v4/onboarding), [Command](https://effect.website/docs/v4/api/effect/unstable/cli/Command), [Bun platform](https://effect.website/docs/v4/api/platform-bun).
+- [Bun runtime selection](https://bun.com/docs/runtime#bun): `--bun` overrides Node shebangs in local tools.
+- [Type-checked ESLint presets](https://typescript-eslint.io/users/configs#recommended-type-checked), [unsafe assertions](https://typescript-eslint.io/rules/no-unsafe-type-assertion), and [non-null assertions](https://typescript-eslint.io/rules/no-non-null-assertion): prevent unchecked type escapes.
+- [Floating promises](https://typescript-eslint.io/rules/no-floating-promises), [unknown rejections](https://typescript-eslint.io/rules/use-unknown-in-catch-callback-variable), and [exhaustive switches](https://typescript-eslint.io/rules/switch-exhaustiveness-check): enforce handled async work and outcomes.
+- [Boolean conditions](https://typescript-eslint.io/rules/strict-boolean-expressions) and [TypeScript directives](https://typescript-eslint.io/rules/ban-ts-comment): require explicit conditions and justified exceptions.
+- [ESLint rules](https://eslint.org/docs/latest/rules/): control-flow rules live in `eslint.config.ts`; Prettier handles formatting.
 
 ## Retrieved source hashes
 

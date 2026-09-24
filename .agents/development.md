@@ -18,7 +18,5 @@ Check the symlink after checkout. If the system does not preserve links, report 
 
 When setup becomes repeated work, offer an explicit action for one versioned Observed skill and a project recipe. Show planned files, respect existing files, record skill and CLI versions, and support removal. Do not silently modify user instructions or install this contributor collection.
 
-The verification skill covers the Phase 0 report CLI, artifact integrity, and
-inspection against original evidence. Its saved commands run the CLI and check
-generated output. Add application launch, browser journeys, and capture cleanup
-when those paths exist and have run.
+The verification skill covers the Phase 0 report CLI and inspection against
+original evidence. Add capture and viewer steps only after they have run.
