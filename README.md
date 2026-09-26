@@ -117,19 +117,21 @@ jobs:
       - uses: esau-morais/observed@OBSERVED_COMMIT_SHA
         with:
           project: .
-          base: origin/${{ github.base_ref }}
+          base: ${{ github.event.pull_request.base.sha }}
 ```
 
 - Replace `OBSERVED_COMMIT_SHA` with a full commit SHA from this repository that
   contains `action.yml`.
 - Set `project` to the directory holding `observed.json`, relative to the
   repository root.
-- `fetch-depth: 0` fetches the base branch so Git can resolve `base`. The
-  candidate defaults to `HEAD`, the merge commit GitHub checks out for the pull
-  request.
-- Observed reads `observed.json` from the candidate and uses it for both
-  revisions. A pull request that edits it changes the check for both sides,
-  so review those edits like code.
+- `base` is the base commit recorded in the pull request event. It stays fixed
+  when the base branch moves or the job is re-run. `fetch-depth: 0` fetches the
+  history that contains it. The candidate defaults to `HEAD`, the merge commit
+  GitHub checks out for the pull request.
+- Observed reads `observed.json` from the checked-out working tree, which is the
+  candidate when `candidate` is `HEAD`, and uses it for both revisions. A pull
+  request that edits it changes the check for both sides, so review those edits
+  like code.
 - Keep the `pull_request` trigger. Do not use `pull_request_target`: the action
   needs no secrets or write access, and pull request code must not receive them.
 
@@ -143,6 +145,9 @@ system packages with apt.
 | 1 | Unavailable: a revision or capture could not be used | Fails |
 | 2 | A named check failed or regressed | Fails |
 
+The job also fails when `observed.json` is rejected before capture, when Observed
+writes no readable result, or when the result disagrees with the exit code.
+
 The job summary states the conclusion and each side's revision, capture state,
 and check outcome. Whenever the capture step ran, including failed comparisons,
 the `observed-bundle` artifact is uploaded and kept for 7 days. It holds the raw
@@ -153,9 +158,9 @@ Optional inputs: `candidate` (default `HEAD`), `timeout` per capture in
 milliseconds (default `120000`), `artifact-name`, and `retention-days`. Give each
 call a distinct `artifact-name` when one job runs the action more than once.
 
-Journeys with `fill` steps are not supported yet. Observed writes fill values
-into the exported evidence, so a typed password or token would be published in
-the artifact. The action stops before capture for these projects.
+The action does not run journeys with `fill` steps yet and stops before capture
+for these projects. Literal fill values are exported as written, and the action
+does not yet supply the environment variables that fill references read.
 
 This repository runs the same action on the Request lab example in
 [.github/workflows/observe.yml](.github/workflows/observe.yml).

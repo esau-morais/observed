@@ -1,4 +1,5 @@
-import { Option, Schema } from 'effect';
+import { BunServices } from '@effect/platform-bun';
+import { Cause, Effect, Exit, Option, Schema } from 'effect';
 import { appendFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -8,7 +9,7 @@ import {
   type Side,
 } from '../src/comparison-model';
 import { escapeText } from '../src/comparison-report';
-import { projectSchema, type Project } from '../src/project';
+import { loadProject, type Project } from '../src/project';
 
 const runOutputSchema = Schema.fromJsonString(
   Schema.Struct({ directory: Schema.String, result: comparisonSchema }),
@@ -140,13 +141,17 @@ async function writeSummary(markdown: string) {
 async function readOptional(file: string): Promise<string | null> {
   try {
     return await readFile(file, 'utf8');
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+
+    throw error;
   }
 }
 
 async function notRun(reason: string): Promise<never> {
-  await writeSummary(['## Observed: not run', reason].join('\n\n'));
+  await writeSummary(['## Observed: not run', escapeText(reason)].join('\n\n'));
   process.stderr.write(`Observed: ${reason}\n`);
   process.exit(1);
 }
@@ -155,18 +160,21 @@ if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2);
 
   if (command === 'preflight' && args.length === 1) {
-    const project = Schema.decodeUnknownOption(
-      Schema.fromJsonString(projectSchema),
-      { onExcessProperty: 'error' },
-    )((await readOptional(path.join(args[0] ?? '.', 'observed.json'))) ?? '');
+    const loaded = await Effect.runPromiseExit(
+      loadProject(path.resolve(args[0] ?? '.')).pipe(
+        Effect.provide(BunServices.layer),
+      ),
+    );
 
-    if (Option.isNone(project)) {
+    if (Exit.isFailure(loaded)) {
+      const error = Cause.squash(loaded.cause);
+
       await notRun(
-        'observed.json is missing or does not match the project contract in src/project.ts.',
+        `observed.json could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
       );
-    } else if (fillSteps(project.value) > 0) {
+    } else if (fillSteps(loaded.value.project) > 0) {
       await notRun(
-        'This project fills form fields. This version of Observed writes fill values into the exported evidence, so the action does not run or upload projects with fill steps.',
+        'This project fills form fields. The action does not run journeys with fill steps yet: literal fill values are exported as written, and the action does not supply the environment variables that fill references read.',
       );
     }
   } else if (command === 'summary' && args.length === 3) {

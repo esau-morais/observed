@@ -6,7 +6,7 @@ inputs:
     description: Directory containing observed.json, relative to the workspace.
     default: .
   base:
-    description: Revision to compare against, such as origin/main. The checkout must already contain it.
+    description: Revision to compare against, such as the pull request's base SHA. The checkout must already contain it.
     required: true
   candidate:
     description: Revision to capture as the candidate.
@@ -24,7 +24,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
         bun-version-file: ${{ github.action_path }}/package.json
 

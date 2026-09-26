@@ -22,4 +22,4 @@ jobs:
       - uses: ./
         with:
           project: examples/request-lab
-          base: origin/${{ github.base_ref }}
+          base: ${{ github.event.pull_request.base.sha }}
