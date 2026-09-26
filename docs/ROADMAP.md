@@ -7,10 +7,9 @@ separate applications, including a non-React one, use the same capture path
 without core edits. Named checks decide the result while pixel changes stay
 observations, and missing requested captures show as unavailable.
 
-Phase 2 is complete: an agent in another environment configures an unfamiliar
-app from the README and gets a report without help, the GitHub Action runs it on
-pull requests on Linux and macOS, and missing secrets, failed starts, and
-unavailable baselines fail the job. Windows is unsupported.
+Phase 2 is complete: an agent in another environment configured an unfamiliar
+app from the README without help, and the GitHub Action runs it on pull requests
+on Linux and macOS. Failed, missing, and stale captures never pass.
 
 Next, run the pilot gates below. They choose the Phase 3 extension. Keep the
 adoption study separate: working code does not establish that people find it
