@@ -10,6 +10,7 @@ import {
 } from '../src/comparison-model';
 import { escapeText } from '../src/comparison-report';
 import { loadProject, type Project } from '../src/project';
+import { describeRevision } from '../src/provenance-text';
 
 const runOutputSchema = Schema.fromJsonString(
   Schema.Struct({ directory: Schema.String, result: comparisonSchema }),
@@ -51,7 +52,10 @@ const outcomes = {
 } satisfies Record<Kind, { heading: string; meaning: string }>;
 
 function describeSide(label: string, side: Side): string {
-  const revision = side.capture?.manifest.source.revision ?? 'unavailable';
+  const revision =
+    side.capture === null
+      ? 'unavailable'
+      : describeRevision(side.capture.manifest.source.revision);
 
   return `| ${label} | ${escapeText(revision)} | ${side.execution} | ${side.check.outcome} |`;
 }
