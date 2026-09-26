@@ -412,13 +412,19 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
 
     const parsed = yield* parseCapture(manifestText.text).pipe(
       Effect.map((capture) => ({ kind: 'parsed', capture }) as const),
-      Effect.catchTag('SchemaError', () =>
-        Effect.succeed({ kind: 'invalid' } as const),
-      ),
+      Effect.catchTags({
+        SchemaError: () =>
+          Effect.succeed({
+            kind: 'invalid',
+            reason: 'Capture manifest is malformed or unsupported',
+          } as const),
+        UnsupportedCapture: ({ message }) =>
+          Effect.succeed({ kind: 'invalid', reason: message } as const),
+      }),
     );
 
     if (parsed.kind === 'invalid') {
-      return unavailable('Capture manifest is malformed or unsupported');
+      return unavailable(parsed.reason);
     }
 
     const capture = parsed.capture;
@@ -649,6 +655,12 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
       reasons.push('Capture producers differ');
     }
 
+    if (before.observed.version !== after.observed.version) {
+      reasons.push(
+        `Observed versions differ (base ${before.observed.version}, candidate ${after.observed.version}), so observations may be derived differently`,
+      );
+    }
+
     if (
       !isDeepStrictEqual(
         comparableConditions(before),
@@ -664,6 +676,57 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
   }
 
   return reasons;
+}
+
+function observedSourceNotes(base: Side, candidate: Side): string[] {
+  const before = base.capture?.manifest.observed;
+  const after = candidate.capture?.manifest.observed;
+
+  if (
+    before === undefined ||
+    after === undefined ||
+    before.version !== after.version
+  ) {
+    return [];
+  }
+
+  const sides = [
+    { name: 'base', source: before.source },
+    { name: 'candidate', source: after.source },
+  ] as const;
+  const notes: string[] = [];
+  const unknown = sides.flatMap(({ name, source }) =>
+    source.kind === 'unavailable' ? [{ name, reason: source.reason }] : [],
+  );
+
+  const [first, second] = unknown;
+
+  if (first !== undefined) {
+    const subject =
+      second === undefined ? `the ${first.name} capture` : 'both captures';
+
+    notes.push(
+      `Observed's source commit is unknown for ${subject}, so the same Observed ${after.version} code cannot be confirmed on both sides. ${unknown.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}.`,
+    );
+  } else if (
+    before.source.kind === 'git' &&
+    after.source.kind === 'git' &&
+    before.source.commit !== after.source.commit
+  ) {
+    notes.push(
+      `Both captures report Observed ${after.version}, but from different commits (base ${before.source.commit}, candidate ${after.source.commit}), so the observations may come from different code.`,
+    );
+  }
+
+  for (const side of sides) {
+    if (side.source.kind === 'git' && side.source.trackedChanges) {
+      notes.push(
+        `The ${side.name} capture ran Observed ${after.version} with uncommitted tracked changes, so commit ${side.source.commit} does not identify its code.`,
+      );
+    }
+  }
+
+  return notes;
 }
 
 export function compareCaptures({
@@ -685,7 +748,7 @@ export function compareCaptures({
   const firstReason = reasons[0];
 
   const common = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     mode,
     title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
     evaluatedAt,
@@ -697,6 +760,7 @@ export function compareCaptures({
       'Checks cover only their stated expectations. Browser errors remain available as evidence.',
       'Screenshot differences are observations of rendered pixels, not a visual regression.',
       'Artifact hashes detect changed bytes; they do not establish collector honesty or source causation.',
+      ...(mode === 'comparison' ? observedSourceNotes(base, candidate) : []),
     ],
   } as const;
 
@@ -757,7 +821,7 @@ export function compareCaptures({
     comparison: {
       kind: 'available',
       basis:
-        'Complete, intact captures with the same protected recipe, application, producer, and recorded conditions.',
+        'Complete, intact captures with the same protected recipe, application, producer, Observed version, and recorded conditions.',
       requestDifference:
         candidate.observations.requests.length -
         base.observations.requests.length,

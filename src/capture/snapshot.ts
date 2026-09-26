@@ -5,8 +5,8 @@ import path from 'node:path';
 import { json, sha256 } from '../encoding';
 import { nodeIo, type EvidenceIoError } from '../node-io';
 import { relativePathSchema, type Project } from '../project';
-import { sourceSchema, type Source } from './model';
-import { processOutput } from './process';
+import { commitSchema, sourceSchema, type Source } from './model';
+import { gitEnvironment, processOutput } from './process';
 
 export class SourceFailure extends Schema.TaggedError<SourceFailure>()(
   'SourceFailure',
@@ -82,6 +82,7 @@ const workingFiles = Effect.fnUntraced(function* (
 const readGitBlob = Effect.fnUntraced(function* (root: string, object: string) {
   const handle = yield* ChildProcess.make('git', ['cat-file', 'blob', object], {
     cwd: root,
+    env: gitEnvironment(),
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore',
@@ -115,13 +116,15 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
       string,
       { object: string | null; executable: boolean }
     >();
-    let revision = 'worktree';
+    let label = 'worktree';
+    let revision: Source['revision'];
 
     const git = (args: readonly string[]) =>
       processOutput({
         command: 'git',
         args,
         cwd: root,
+        env: gitEnvironment(),
         transcript: path.join(options.directory, 'source-transcript.jsonl'),
       });
 
@@ -135,7 +138,8 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
         '--',
         '.',
       ];
-      const inventory = yield* git(listArguments).pipe(
+      const { inventory, tracked } = yield* git(listArguments).pipe(
+        Effect.map((output) => ({ inventory: output, tracked: true })),
         Effect.catchTag('ProcessFailure', () =>
           Effect.gen(function* () {
             const emptyGit = yield* fs.makeTempDirectoryScoped({
@@ -143,16 +147,40 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
             });
             yield* git(['init', '--bare', '--quiet', emptyGit]);
 
-            return yield* git([
-              '--git-dir',
-              emptyGit,
-              '--work-tree',
-              root,
-              ...listArguments,
-            ]);
+            return {
+              inventory: yield* git([
+                '--git-dir',
+                emptyGit,
+                '--work-tree',
+                root,
+                ...listArguments,
+              ]),
+              tracked: false,
+            };
           }),
         ),
       );
+      revision = {
+        kind: 'worktree',
+        head: tracked
+          ? yield* git(['rev-parse', '--verify', 'HEAD^{commit}']).pipe(
+              Effect.flatMap((output) =>
+                Schema.decodeUnknownEffect(commitSchema)(output.trim()),
+              ),
+              Effect.map((commit) => ({ kind: 'commit', commit }) as const),
+              Effect.catchTag('ProcessFailure', () =>
+                Effect.succeed({
+                  kind: 'unavailable',
+                  reason: 'The Git repository has no HEAD commit',
+                } as const),
+              ),
+            )
+          : {
+              kind: 'unavailable',
+              reason:
+                'Git did not list the project as a work tree; see source-transcript.jsonl',
+            },
+      };
       const included = new Set(
         inventory
           .split('\0')
@@ -192,10 +220,9 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
         '--end-of-options',
         `${options.revision}^{commit}`,
       ])).trim();
-      yield* Schema.decodeUnknownEffect(
-        Schema.String.check(Schema.isPattern(/^[a-f0-9]{40,64}$/)),
-      )(commit);
-      revision = commit;
+      yield* Schema.decodeUnknownEffect(commitSchema)(commit);
+      label = commit;
+      revision = { kind: 'commit', commit };
       const prefix = (yield* git(['rev-parse', '--show-prefix'])).trim();
       const tree = yield* git(['ls-tree', '-rz', '--full-tree', commit]);
 
@@ -233,7 +260,7 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
 
     if (!files.has(options.source.entry)) {
       return yield* new SourceFailure({
-        message: `Source entry ${options.source.entry} is absent or excluded in ${revision}`,
+        message: `Source entry ${options.source.entry} is absent or excluded in ${label}`,
       });
     }
 

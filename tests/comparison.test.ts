@@ -19,7 +19,12 @@ import {
 } from '../src/capture/model';
 import { json, sha256 } from '../src/encoding';
 import type { Recipe } from '../src/capture/recipe';
-import { fixtureHash, producer, recipe } from './support/request-recipe';
+import {
+  fixtureHash,
+  observed,
+  producer,
+  recipe,
+} from './support/request-recipe';
 import {
   compareCaptures,
   inspectComparison,
@@ -146,7 +151,7 @@ async function syntheticBundle(
   }
 
   const capture: Capture = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     kind: 'capture',
     id: path.basename(directory),
     label: 'Synthetic unit fixture',
@@ -154,10 +159,15 @@ async function syntheticBundle(
     source: Schema.decodeUnknownSync(sourceSchema)({
       kind: 'snapshot',
       sha256: sha256(json(sourceIdentity)),
+      revision: {
+        kind: 'worktree',
+        head: { kind: 'commit', commit: 'b'.repeat(40) },
+      },
       ...sourceIdentity,
     }),
     recipe: { id: contract.id, sha256: sha256(contractText) },
     producer,
+    observed,
     conditions: {
       kind: 'recorded',
       value: {
@@ -861,7 +871,7 @@ test('renders captured text literally instead of injecting Markdown headings or 
   expect(report).toContain('Forged heading');
 });
 
-test.each(['application', 'conditions', 'producer'] as const)(
+test.each(['application', 'conditions', 'producer', 'observed'] as const)(
   'rejects incompatible %s while preserving independent checks',
   async (field) => {
     const base = await syntheticBundle();
@@ -874,6 +884,7 @@ test.each(['application', 'conditions', 'producer'] as const)(
 
     const incompatible = {
       producer: { producer: { name: 'another-collector', version: '2' } },
+      observed: { observed: { ...observed, version: '0.0.1-synthetic' } },
       application: { application: 'A different application' },
       conditions: {
         conditions: {
@@ -900,12 +911,161 @@ test.each(['application', 'conditions', 'producer'] as const)(
     expect(result.comparison.kind).toBe('unavailable');
 
     expect(json(result.comparison)).toContain(
-      field === 'application'
-        ? 'different applications'
-        : `${field === 'producer' ? 'producers' : 'conditions'} differ`,
+      {
+        application: 'different applications',
+        producer: 'producers differ',
+        observed: 'Observed versions differ',
+        conditions: 'conditions differ',
+      }[field],
     );
   },
 );
+
+const dirtySource = { ...observed.source, trackedChanges: true } as const;
+const unknownSource = {
+  kind: 'unavailable',
+  reason: 'Synthetic tarball install',
+} as const;
+
+test.each([
+  {
+    name: 'different commits',
+    base: observed.source,
+    candidate: { ...observed.source, commit: 'c'.repeat(40) },
+    expected: [
+      `from different commits (base ${'a'.repeat(40)}, candidate ${'c'.repeat(40)})`,
+    ],
+  },
+  {
+    name: 'uncommitted changes on both sides of one commit',
+    base: dirtySource,
+    candidate: dirtySource,
+    expected: [
+      'The base capture ran Observed 0.0.0-synthetic with uncommitted tracked changes',
+      'The candidate capture ran Observed 0.0.0-synthetic with uncommitted tracked changes',
+    ],
+  },
+  {
+    name: 'one unknown commit',
+    base: observed.source,
+    candidate: unknownSource,
+    expected: [
+      "Observed's source commit is unknown for the candidate capture",
+      'candidate: Synthetic tarball install',
+    ],
+  },
+  {
+    name: 'two unknown commits',
+    base: unknownSource,
+    candidate: unknownSource,
+    expected: ["Observed's source commit is unknown for both captures"],
+  },
+])(
+  'discloses Observed code that may differ under one version without blocking the comparison: $name',
+  async (sources) => {
+    const base = await syntheticBundle();
+    const candidate = await syntheticBundle();
+
+    for (const [bundle, source] of [
+      [base, sources.base],
+      [candidate, sources.candidate],
+    ] as const) {
+      await saveManifest(bundle.directory, {
+        ...bundle.capture,
+        observed: { ...observed, source },
+      });
+    }
+
+    const result = compareCaptures({
+      visual: pixelsNotInspected,
+      base: await inspect(base.directory),
+      candidate: await inspect(candidate.directory),
+      evaluatedAt,
+    });
+    const limitations = result.limitations.join('\n');
+
+    expect(result.comparison.kind).toBe('available');
+
+    for (const text of sources.expected) {
+      expect(limitations).toContain(text);
+    }
+
+    if (sources.name !== 'different commits') {
+      expect(limitations).not.toContain('different commits');
+    }
+  },
+);
+
+test('adds no Observed source limitation when both captures name the same clean commit', async () => {
+  const base = await syntheticBundle();
+  const candidate = await syntheticBundle();
+
+  const result = compareCaptures({
+    visual: pixelsNotInspected,
+    base: await inspect(base.directory),
+    candidate: await inspect(candidate.directory),
+    evaluatedAt,
+  });
+
+  expect(result.limitations.join('\n')).not.toContain('Observed');
+});
+
+test('marks a schema version 3 capture unavailable with the reason instead of reading or dropping it', async () => {
+  const base = await syntheticBundle();
+  const candidate = await syntheticBundle();
+  const legacy: Record<string, unknown> = {
+    ...base.capture,
+    schemaVersion: 3,
+    source: { ...base.capture.source, revision: 'worktree' },
+  };
+  delete legacy.observed;
+
+  await saveManifest(base.directory, legacy);
+
+  const side = await inspect(base.directory);
+
+  expect(side.execution).toBe('unavailable');
+  expect(side.check.detail).toContain(
+    'Capture manifest schema version 3 is unsupported',
+  );
+
+  const root = await mkdtemp(path.join(tmpdir(), 'observed-legacy-export-'));
+  directories.push(root);
+  await mkdir(path.join(root, 'viewer'));
+  await writeFile(path.join(root, 'viewer/index.html'), '<!doctype html>');
+
+  const exported = await Effect.runPromise(
+    exportComparison({
+      baseDirectory: base.directory,
+      candidateDirectory: candidate.directory,
+      directory: path.join(root, 'report'),
+      viewerDirectory: path.join(root, 'viewer'),
+    }).pipe(
+      Effect.provideService(Clock.Clock, clockAt(evaluatedAt)),
+      Effect.provide(BunServices.layer),
+    ),
+  );
+
+  expect(exported.result.comparison).toMatchObject({ kind: 'unavailable' });
+  expect(json(exported.result.comparison)).toContain(
+    'Baseline unavailable: Capture manifest schema version 3 is unsupported',
+  );
+  expect(exported.result.candidate.check.outcome).toBe('passed');
+});
+
+test('tells the reader to update Observed for a newer capture schema instead of recapturing', async () => {
+  const bundle = await syntheticBundle();
+
+  await saveManifest(bundle.directory, { ...bundle.capture, schemaVersion: 5 });
+
+  const side = await inspect(bundle.directory);
+
+  expect(side.execution).toBe('unavailable');
+  expect(side.check.detail).toContain(
+    'Capture manifest schema version 5 is unsupported. It was written by a newer Observed',
+  );
+  expect(side.check.detail).toContain('Update Observed.');
+});
 
 test.each([
   'recipe',

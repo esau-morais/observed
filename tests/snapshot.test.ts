@@ -1,5 +1,6 @@
 import { BunServices } from '@effect/platform-bun';
 import { Effect } from 'effect';
+import { execFileSync } from 'node:child_process';
 import {
   chmod,
   mkdir,
@@ -70,6 +71,14 @@ test('source identity includes executable permissions and preserves binary and u
   const after = await snapshot(root, 'after');
 
   expect(before.sha256).not.toBe(after.sha256);
+  expect(after.revision).toEqual({
+    kind: 'worktree',
+    head: {
+      kind: 'unavailable',
+      reason:
+        'Git did not list the project as a work tree; see source-transcript.jsonl',
+    },
+  });
   expect(after.files.map((file) => file.path)).toEqual([
     'app/asset.bin',
     'app/start.sh',
@@ -79,6 +88,24 @@ test('source identity includes executable permissions and preserves binary and u
       await readFile(path.join(root, 'after/source/app/asset.bin')),
     ),
   ).toEqual(binary);
+});
+
+test('a worktree snapshot in a repository without commits records HEAD as unavailable', async () => {
+  const root = await project();
+  execFileSync('git', ['init', '--quiet'], {
+    cwd: root,
+    env: Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+    ),
+  });
+
+  expect((await snapshot(root, 'capture')).revision).toEqual({
+    kind: 'worktree',
+    head: {
+      kind: 'unavailable',
+      reason: 'The Git repository has no HEAD commit',
+    },
+  });
 });
 
 test('directory selection respects project ignore rules for untracked credentials', async () => {

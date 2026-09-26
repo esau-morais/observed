@@ -10,6 +10,7 @@ import {
   Screenshot,
   type Highlight,
 } from './evidence';
+import { describeObserved, describeRevision } from '../provenance-text';
 import { describeRegion, describeVisual, diffLegend } from '../visual-text';
 import { colors } from './tokens.stylex';
 
@@ -230,7 +231,7 @@ function CaptureDetails({ side }: { side: Side }) {
   return (
     <details>
       <summary {...stylex.props(styles.summary)}>
-        Producer, conditions, recipe and source files
+        Observed, producer, conditions, recipe and source files
       </summary>
       <dl {...stylex.props(styles.definition)}>
         <Field label="Application">{capture.application}</Field>
@@ -240,8 +241,14 @@ function CaptureDetails({ side }: { side: Side }) {
         <Field label="Manifest SHA-256" mono>
           {side.capture.sha256}
         </Field>
+        <Field label="Observed" mono>
+          {describeObserved(capture.observed)}
+        </Field>
         <Field label="Producer">
           {capture.producer.name} · {capture.producer.version}
+        </Field>
+        <Field label="Source revision" mono>
+          {describeRevision(capture.source.revision)}
         </Field>
         <Field label="Recipe">{capture.recipe.id}</Field>
         <Field label="Recipe SHA-256" mono>

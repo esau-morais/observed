@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
+import { describeRevision } from '../provenance-text';
 import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
 import { colors } from './tokens.stylex';
@@ -75,7 +76,11 @@ const styles = stylex.create({
   nowrap: { whiteSpace: 'nowrap' },
   list: { display: 'grid', gap: 12, paddingInlineStart: 20, marginBlock: 0 },
   artifact: { paddingBlock: 4 },
-  caption: { color: colors.textMuted, fontSize: '0.8125rem' },
+  caption: {
+    color: colors.textMuted,
+    fontSize: '0.8125rem',
+    overflowWrap: 'anywhere',
+  },
   frame: { display: 'block', position: 'relative' },
   region: {
     borderColor: {
@@ -170,7 +175,7 @@ export function Screenshot({
         {capture?.label ?? 'No capture'}
         {capture === null
           ? ''
-          : ` · ${capture.source.revision ?? 'snapshot'} · ${capture.source.sha256.slice(0, 12)}`}
+          : ` · ${describeRevision(capture.source.revision)} · ${capture.source.sha256.slice(0, 12)}`}
       </p>
       {side.screenshot === null ? (
         <p {...stylex.props(styles.missing)}>

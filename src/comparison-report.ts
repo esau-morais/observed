@@ -1,4 +1,5 @@
 import type { Comparison, Side, Visual } from './comparison-model';
+import { describeObserved, describeRevision } from './provenance-text';
 import { describeRegion, describeVisual, diffLegend } from './visual-text';
 
 function escapeText(value: string): string {
@@ -188,6 +189,8 @@ function renderProvenance(side: Side, label: string): string {
       `- Capture ID: ${escapeText(capture.id)}`,
       `- Manifest SHA-256: ${side.capture.sha256}`,
       `- Producer: ${escapeText(capture.producer.name)}; version ${escapeText(capture.producer.version)}`,
+      `- Observed: version ${escapeText(describeObserved(capture.observed))}`,
+      `- Source revision: ${escapeText(describeRevision(capture.source.revision))}`,
       `- Recipe: ${escapeText(capture.recipe.id)}`,
       `- Recipe SHA-256: ${escapeText(capture.recipe.sha256)}`,
       `- Source entry: ${escapeText(capture.source.entry)}`,
@@ -240,7 +243,7 @@ export function renderComparison(result: Comparison): string {
         `## ${label}`,
         side.capture === null
           ? 'Capture unavailable.'
-          : `Source: ${escapeText(side.capture.manifest.source.revision ?? 'snapshot')} · ${side.capture.manifest.source.sha256}`,
+          : `Source: ${escapeText(describeRevision(side.capture.manifest.source.revision))} · ${side.capture.manifest.source.sha256}`,
         side.screenshot === null
           ? 'Screenshot unavailable.'
           : `!${link(`${label} captured application`, side.screenshot)}`,
@@ -279,7 +282,7 @@ export function renderComparison(result: Comparison): string {
       ? []
       : [renderArtifacts(result.base, 'Base · before')]),
     renderArtifacts(result.candidate, candidateLabel),
-    '## Producer, conditions and recipe',
+    '## Observed, producer, conditions and recipe',
     ...(result.mode === 'preview'
       ? []
       : [renderProvenance(result.base, 'Base · before')]),

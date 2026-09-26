@@ -392,8 +392,39 @@ test('compares a React commit with a duplicate-request worktree through the publ
     200,
   );
   expect(before.source.sha256).not.toBe(after.source.sha256);
-  expect(before.source.revision).toMatch(/^[a-f0-9]{40}$/);
-  expect(after.source.revision).toBe('worktree');
+  expect(before.source.revision).toEqual({
+    kind: 'commit',
+    commit: await command(['git', 'rev-parse', 'HEAD'], project).then(
+      (output) => output.trim(),
+    ),
+  });
+  expect(after.source.revision).toEqual({
+    kind: 'worktree',
+    head: before.source.revision,
+  });
+  const observed = {
+    version: (
+      await readJson(
+        path.join(root, 'package.json'),
+        Schema.Struct({ version: Schema.String }),
+      )
+    ).version,
+    source: {
+      kind: 'git',
+      commit: (await command(['git', 'rev-parse', 'HEAD'])).trim(),
+      trackedChanges: (await command(['git', 'diff', '--name-only', 'HEAD']))
+        .split('\n')
+        .some(
+          (file) =>
+            file !== '' &&
+            !`/${file}`.startsWith(
+              `/${path.relative(root, project).split(path.sep).join('/')}/`,
+            ),
+        ),
+    },
+  };
+  expect(before.observed).toEqual(observed);
+  expect(after.observed).toEqual(observed);
   expect(await pageTree(path.join(result.directory, 'candidate'))).toEqual(
     await pageTree(path.join(result.directory, 'base')),
   );
@@ -969,6 +1000,11 @@ test('bun start opens the example from a fresh checkout without an app path', as
     expect(result.mode).toBe('preview');
     expect(result.candidate.execution).toBe('complete');
     expect(result.candidate.check.outcome).toBe('passed');
+    expect(result.candidate.capture?.manifest.observed.source).toEqual({
+      kind: 'unavailable',
+      reason:
+        "Observed's checkout has no HEAD commit; see observed-transcript.jsonl",
+    });
   } finally {
     child.kill('SIGINT');
     await expect.poll(() => child.exitCode, { timeout: 10_000 }).not.toBeNull();

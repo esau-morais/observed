@@ -1,4 +1,4 @@
-import { DateTime, Option, Schema } from 'effect';
+import { DateTime, Effect, Option, Schema } from 'effect';
 
 export const text = Schema.NonEmptyString.check(Schema.isTrimmed());
 
@@ -31,6 +31,20 @@ export const timestamp = Schema.String.check(
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const positive = Schema.Int.check(Schema.isGreaterThan(0));
 
+export const commitSchema = Schema.String.check(
+  Schema.isPattern(/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/),
+);
+
+const commitIdentity = Schema.Struct({
+  kind: Schema.Literal('commit'),
+  commit: commitSchema,
+});
+
+const unavailableReason = Schema.Struct({
+  kind: Schema.Literal('unavailable'),
+  reason: text,
+});
+
 export const captureArtifactSchema = Schema.Struct({
   id: text,
   path: text,
@@ -42,7 +56,13 @@ export const sourceSchema = Schema.Struct({
   kind: Schema.Literal('snapshot'),
   sha256: digest,
   entry: text,
-  revision: Schema.optionalKey(text),
+  revision: Schema.Union([
+    commitIdentity,
+    Schema.Struct({
+      kind: Schema.Literal('worktree'),
+      head: Schema.Union([commitIdentity, unavailableReason]),
+    }),
+  ]),
   files: Schema.NonEmptyArray(
     Schema.Struct({
       path: text,
@@ -89,8 +109,22 @@ export const conditionsSchema = Schema.Struct({
   dependenciesHash: Schema.NullOr(digest),
 });
 
+export const observedSchema = Schema.Struct({
+  version: text,
+  source: Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal('git'),
+      commit: commitSchema,
+      trackedChanges: Schema.Boolean,
+    }),
+    unavailableReason,
+  ]),
+});
+
+export const captureSchemaVersion = 4;
+
 export const captureSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(3),
+  schemaVersion: Schema.Literal(captureSchemaVersion),
   kind: Schema.Literal('capture'),
   id: text,
   label: text,
@@ -98,6 +132,7 @@ export const captureSchema = Schema.Struct({
   source: sourceSchema,
   recipe: Schema.Struct({ id: text, sha256: digest }),
   producer: Schema.Struct({ name: text, version: text }),
+  observed: observedSchema,
   conditions: Schema.Union([
     Schema.Struct({
       kind: Schema.Literal('recorded'),
@@ -168,16 +203,47 @@ export type Capture = typeof captureSchema.Type;
 
 export type Source = typeof sourceSchema.Type;
 
+export type Observed = typeof observedSchema.Type;
+
 export type Conditions = typeof conditionsSchema.Type;
 
 export type Observations = typeof observationsSchema.Type;
 
 export type CaptureArtifact = Capture['artifacts'][number];
 
-export const parseCapture = Schema.decodeUnknownEffect(
+export class UnsupportedCapture extends Schema.TaggedError<UnsupportedCapture>()(
+  'UnsupportedCapture',
+  { message: Schema.String },
+) {}
+
+const manifestVersion = Schema.fromJsonString(
+  Schema.Struct({ kind: Schema.Literal('capture'), schemaVersion: Schema.Int }),
+);
+
+const decodeCapture = Schema.decodeUnknownEffect(
   Schema.fromJsonString(captureSchema),
   { onExcessProperty: 'error' },
 );
+
+export const parseCapture = Effect.fnUntraced(function* (input: string) {
+  const version = Schema.decodeUnknownOption(manifestVersion)(input);
+
+  if (
+    Option.isSome(version) &&
+    version.value.schemaVersion !== captureSchemaVersion
+  ) {
+    const found = version.value.schemaVersion;
+
+    return yield* new UnsupportedCapture({
+      message:
+        found < captureSchemaVersion
+          ? `Capture manifest schema version ${found} is unsupported. This Observed reads version ${captureSchemaVersion}. Capture this revision again.`
+          : `Capture manifest schema version ${found} is unsupported. It was written by a newer Observed than this one, which reads version ${captureSchemaVersion}. Update Observed.`,
+    });
+  }
+
+  return yield* decodeCapture(input);
+});
 
 export const parseObservations = Schema.decodeUnknownEffect(
   Schema.fromJsonString(observationsSchema),

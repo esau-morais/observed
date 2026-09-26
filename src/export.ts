@@ -109,6 +109,11 @@ const loadSide = Effect.fnUntraced(
             kind: 'unavailable',
             issue: `${label} manifest is malformed or unsupported`,
           } as const),
+        UnsupportedCapture: (error) =>
+          Effect.succeed({
+            kind: 'unavailable',
+            issue: `${label} unavailable: ${error.message}`,
+          } as const),
       }),
     );
 
@@ -123,6 +128,11 @@ const loadSide = Effect.fnUntraced(
         'source-transcript',
         'source-transcript.jsonl',
         'Source revision selection',
+      ],
+      [
+        'observed-transcript',
+        'observed-transcript.jsonl',
+        "Observed's source commit detection",
       ],
       ['owner', 'owner.json', 'Run ownership'],
     ] as const) {
