@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { sha256 } from './encoding';
 import { nodeIo } from './node-io';
 import type { Artifact, Check, Manifest } from './schema';
 
@@ -122,6 +123,57 @@ export const inspectArtifact = Effect.fnUntraced(
         } satisfies ArtifactResult),
       ),
     ),
+);
+
+export const readVerifiedArtifact = Effect.fnUntraced(
+  function* (root: string, artifact: Artifact) {
+    const inspected = yield* inspectArtifact(root, artifact);
+
+    if (inspected.kind === 'unavailable') {
+      return inspected;
+    }
+
+    const handle = yield* Effect.acquireRelease(
+      nodeIo(() =>
+        open(
+          inspected.absolutePath,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+        ),
+      ),
+      (owned) => nodeIo(() => owned.close()).pipe(Effect.orDie),
+    );
+
+    const stat = yield* nodeIo(() => handle.stat());
+
+    if (!stat.isFile()) {
+      return {
+        kind: 'unavailable',
+        reason: 'Artifact is not a regular file',
+      } as const;
+    }
+
+    const bytes = yield* nodeIo((signal) => handle.readFile({ signal }));
+
+    if (sha256(bytes) !== inspected.hash) {
+      return {
+        kind: 'unavailable',
+        reason: 'Artifact changed while reading',
+      } as const;
+    }
+
+    return {
+      kind: 'available',
+      bytes: new Uint8Array(bytes),
+      hash: inspected.hash,
+    } as const;
+  },
+  Effect.scoped,
+  Effect.catchTag('EvidenceIoError', (error) =>
+    Effect.succeed({
+      kind: 'unavailable',
+      reason: `Artifact could not be read (${error.code})`,
+    } as const),
+  ),
 );
 
 function checkOutcome(

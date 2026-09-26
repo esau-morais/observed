@@ -96,8 +96,57 @@ export const sideSchema = Schema.Union([
   }),
 ]);
 
+const pixels = Schema.Int.check(Schema.isGreaterThan(0));
+
+const imageSize = { width: pixels, height: pixels };
+
+const visualRegion = Schema.Struct({
+  x: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  y: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  ...imageSize,
+  changedPixels: pixels,
+});
+
+const threshold = Schema.Number.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(1),
+);
+
+export const visualSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('identical'), ...imageSize }),
+  Schema.Struct({
+    kind: Schema.Literal('below-threshold'),
+    ...imageSize,
+    threshold,
+    differingPixels: pixels,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('changed'),
+    ...imageSize,
+    threshold,
+    differingPixels: pixels,
+    changedPixels: pixels,
+    regionCount: pixels,
+    regions: Schema.NonEmptyArray(visualRegion),
+    diff: Schema.Struct({
+      path: Schema.Literal('visual-diff.png'),
+      sha256: digest,
+    }),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('size-differs'),
+    base: Schema.Struct(imageSize),
+    candidate: Schema.Struct(imageSize),
+  }),
+  Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+]);
+
+export type Visual = typeof visualSchema.Type;
+
+export type VisualRegion = typeof visualRegion.Type;
+
 export const comparisonSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(3),
+  schemaVersion: Schema.Literal(4),
   mode: Schema.Literals(['preview', 'comparison']),
   title: text,
   evaluatedAt: timestamp,
@@ -109,7 +158,7 @@ export const comparisonSchema = Schema.Struct({
       kind: Schema.Literal('available'),
       basis: text,
       requestDifference: Schema.Int,
-      visual: Schema.Literals(['unchanged', 'changed']),
+      visual: visualSchema,
     }),
     Schema.Struct({
       kind: Schema.Literal('unavailable'),

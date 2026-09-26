@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
-import type { Side } from '../comparison-model';
+import type { Side, Visual, VisualRegion } from '../comparison-model';
 import { fonts, geometry, media } from './constants.stylex';
 import { colors } from './tokens.stylex';
 
@@ -75,7 +75,56 @@ const styles = stylex.create({
   list: { display: 'grid', gap: 12, paddingInlineStart: 20, marginBlock: 0 },
   artifact: { paddingBlock: 4 },
   caption: { color: colors.textMuted, fontSize: '0.8125rem' },
+  frame: { display: 'block', position: 'relative' },
+  region: {
+    outlineColor: {
+      default: colors.changed,
+      [media.forcedColors]: 'Highlight',
+    },
+    outlineOffset: 4,
+    outlineStyle: 'solid',
+    outlineWidth: 2,
+    pointerEvents: 'none',
+    position: 'absolute',
+  },
+  regionBox: (left: string, top: string, width: string, height: string) => ({
+    height,
+    left,
+    top,
+    width,
+  }),
 });
+
+const count = new Intl.NumberFormat('en-US');
+
+export type Highlight = {
+  width: number;
+  height: number;
+  regions: readonly VisualRegion[];
+};
+
+export function units(value: number, singular: string): string {
+  return `${count.format(value)} ${singular}${value === 1 ? '' : 's'}`;
+}
+
+export function visualSummary(visual: Visual): string {
+  switch (visual.kind) {
+    case 'identical':
+      return 'Screenshot pixels are identical.';
+    case 'below-threshold':
+      return `No visible change. ${units(visual.differingPixels, 'pixel')} differ, all below the ${visual.threshold} color threshold.`;
+    case 'size-differs':
+      return `Screenshots not compared. Base is ${visual.base.width} × ${visual.base.height} px; after is ${visual.candidate.width} × ${visual.candidate.height} px.`;
+    case 'unavailable':
+      return `Pixel comparison unavailable. ${visual.reason}`;
+    case 'changed':
+      return `${units(visual.changedPixels, 'pixel')} (${((visual.changedPixels / (visual.width * visual.height)) * 100).toFixed(2)}%) changed beyond the ${visual.threshold} color threshold, in ${units(visual.regionCount, 'region')}.`;
+  }
+}
+
+function percent(value: number, total: number): string {
+  return `${(value / total) * 100}%`;
+}
 
 export function EvidenceLink({
   href,
@@ -91,7 +140,15 @@ export function EvidenceLink({
   );
 }
 
-export function Screenshot({ side, label }: { side: Side; label: string }) {
+export function Screenshot({
+  side,
+  label,
+  highlight,
+}: {
+  side: Side;
+  label: string;
+  highlight: Highlight | null;
+}) {
   const [failed, setFailed] = useState(false);
   const capture = side.capture?.manifest ?? null;
 
@@ -119,13 +176,31 @@ export function Screenshot({ side, label }: { side: Side; label: string }) {
                 Image could not be displayed. Open original screenshot.
               </p>
             ) : (
-              <img
-                src={side.screenshot}
-                alt={`${label} captured application. Open full-size screenshot.`}
-                loading="eager"
-                onError={() => setFailed(true)}
-                {...stylex.props(styles.image)}
-              />
+              <span {...stylex.props(styles.frame)}>
+                <img
+                  src={side.screenshot}
+                  alt={`${label} captured application. Open full-size screenshot.`}
+                  loading="eager"
+                  onError={() => setFailed(true)}
+                  {...stylex.props(styles.image)}
+                />
+                {highlight?.regions.map((region, index) => (
+                  <span
+                    key={index}
+                    aria-hidden="true"
+                    data-region=""
+                    {...stylex.props(
+                      styles.region,
+                      styles.regionBox(
+                        percent(region.x, highlight.width),
+                        percent(region.y, highlight.height),
+                        percent(region.width, highlight.width),
+                        percent(region.height, highlight.height),
+                      ),
+                    )}
+                  />
+                ))}
+              </span>
             )}
           </a>
           <figcaption {...stylex.props(styles.caption)}>

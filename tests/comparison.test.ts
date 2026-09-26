@@ -25,12 +25,22 @@ import {
   inspectComparison,
   inspectSide,
 } from '../src/comparison';
-import { comparisonSchema, type Selection } from '../src/comparison-model';
+import {
+  comparisonSchema,
+  type Selection,
+  type Visual,
+} from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
 import { exportComparison } from '../src/export';
+import { encodeRgbPng } from '../src/png';
 import { serveReport } from '../src/view';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
+const whitePng = encodeRgbPng(4, 4, new Uint8Array(4 * 4 * 3).fill(255));
+const pixelsNotInspected: Visual = {
+  kind: 'unavailable',
+  reason: 'Synthetic sides without screenshot pixels',
+};
 const directories: string[] = [];
 
 function syntheticObservations(count = 1): Observations {
@@ -61,7 +71,7 @@ async function saveManifest(
 async function syntheticBundle(
   options: {
     count?: number;
-    image?: string;
+    image?: string | Uint8Array;
     observations?: Observations;
     contract?: Recipe;
   } = {},
@@ -106,7 +116,7 @@ async function syntheticBundle(
     {
       id: 'screenshot',
       path: 'images/after #1.png',
-      text: options.image ?? 'synthetic image bytes',
+      text: options.image ?? whitePng,
     },
     {
       id: 'observations',
@@ -273,7 +283,7 @@ test('derives a regression from verified request observations despite unchanged 
   const base = await syntheticBundle();
   const candidate = await syntheticBundle({ count: 4 });
 
-  const result = await Effect.runPromise(
+  const { result } = await Effect.runPromise(
     inspectComparison({
       baseDirectory: base.directory,
       candidateDirectory: candidate.directory,
@@ -291,7 +301,7 @@ test('derives a regression from verified request observations despite unchanged 
   expect(result.comparison).toMatchObject({
     kind: 'available',
     requestDifference: 3,
-    visual: 'unchanged',
+    visual: { kind: 'identical', width: 4, height: 4 },
   });
 
   expect(result.conclusion.kind).toBe('regression');
@@ -314,6 +324,7 @@ test('derives a regression from verified request observations despite unchanged 
 
 test('rejects saved results whose side state contradicts its evidence', async () => {
   const result = compareCaptures({
+    visual: pixelsNotInspected,
     base: await inspect((await syntheticBundle()).directory),
     candidate: await inspect((await syntheticBundle()).directory),
     evaluatedAt,
@@ -342,25 +353,100 @@ test('rejects saved results whose side state contradicts its evidence', async ()
   }
 });
 
-test('reports image changes as observations while the named check continues to pass', async () => {
+test('exports changed pixels as a located observation with a served difference image while the named check still passes', async () => {
+  const changed = new Uint8Array(4 * 4 * 3).fill(255);
+  changed.set([0, 0, 0], (2 * 4 + 1) * 3);
   const base = await syntheticBundle();
-
   const candidate = await syntheticBundle({
-    image: 'different synthetic image bytes',
+    image: encodeRgbPng(4, 4, changed),
+  });
+  const root = await mkdtemp(path.join(tmpdir(), 'observed-visual-'));
+  directories.push(root);
+  await mkdir(path.join(root, 'viewer'));
+  await writeFile(
+    path.join(root, 'viewer/index.html'),
+    '<!doctype html><title>Synthetic viewer asset</title>',
+  );
+
+  const exported = await Effect.runPromise(
+    exportComparison({
+      baseDirectory: base.directory,
+      candidateDirectory: candidate.directory,
+      directory: path.join(root, 'report'),
+      viewerDirectory: path.join(root, 'viewer'),
+    }).pipe(
+      Effect.provideService(Clock.Clock, clockAt(evaluatedAt)),
+      Effect.provide(BunServices.layer),
+    ),
+  );
+
+  expect(exported.result.conclusion.kind).toBe('no-regression');
+  expect(exported.result.comparison).toMatchObject({
+    kind: 'available',
+    requestDifference: 0,
+    visual: {
+      kind: 'changed',
+      differingPixels: 1,
+      changedPixels: 1,
+      regionCount: 1,
+      regions: [{ x: 1, y: 2, width: 1, height: 1, changedPixels: 1 }],
+      diff: { path: 'visual-diff.png' },
+    },
   });
 
-  const result = compareCaptures({
-    base: await inspect(base.directory),
-    candidate: await inspect(candidate.directory),
-    evaluatedAt,
-  });
+  if (
+    exported.result.comparison.kind !== 'available' ||
+    exported.result.comparison.visual.kind !== 'changed'
+  ) {
+    throw new Error('Expected a changed pixel observation');
+  }
+
+  const diff = exported.result.comparison.visual.diff;
+  const saved = await readFile(path.join(exported.directory, diff.path));
+  expect(sha256(saved)).toBe(diff.sha256);
+  expect(
+    await readFile(path.join(exported.directory, 'report.md'), 'utf8'),
+  ).toContain('(<visual-diff.png>)');
+
+  const served = await Effect.runPromise(
+    Effect.gen(function* () {
+      const url = yield* serveReport({
+        directory: exported.directory,
+        port: 0,
+      });
+
+      return yield* Effect.promise(
+        async () =>
+          new Uint8Array(
+            await (await fetch(new URL(diff.path, url))).arrayBuffer(),
+          ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
+  );
+
+  expect(sha256(served)).toBe(diff.sha256);
+});
+
+test('identical but undecodable screenshots leave the pixel observation unavailable instead of identical', async () => {
+  const base = await syntheticBundle({ image: 'synthetic image bytes' });
+  const candidate = await syntheticBundle({ image: 'synthetic image bytes' });
+
+  const { result, visualDiff } = await Effect.runPromise(
+    inspectComparison({
+      baseDirectory: base.directory,
+      candidateDirectory: candidate.directory,
+      evaluatedAt,
+    }),
+  );
 
   expect(result.comparison).toMatchObject({
     kind: 'available',
-    visual: 'changed',
-    requestDifference: 0,
+    visual: {
+      kind: 'unavailable',
+      reason: 'Base screenshot: Not a PNG file',
+    },
   });
-
+  expect(visualDiff).toBeNull();
   expect(result.conclusion.kind).toBe('no-regression');
 });
 
@@ -411,6 +497,7 @@ test.each([0, 2])(
     const candidate = await syntheticBundle({ count });
 
     const result = compareCaptures({
+      visual: pixelsNotInspected,
       base: await inspect(base.directory),
       candidate: await inspect(candidate.directory),
       evaluatedAt,
@@ -508,7 +595,12 @@ test('matches a protected request origin without conflating the same path on ano
       actual: 1,
     });
     const report = renderComparison(
-      compareCaptures({ base: side, candidate: side, evaluatedAt }),
+      compareCaptures({
+        visual: pixelsNotInspected,
+        base: side,
+        candidate: side,
+        evaluatedAt,
+      }),
     );
     expect(report).toContain('| GET | /api/items | 200 |');
     expect(report).toContain(
@@ -546,7 +638,7 @@ test('serializes empty and newline-terminated browser errors without losing thei
     observations: { ...syntheticObservations(), browserErrors },
   });
 
-  const result = await Effect.runPromise(
+  const { result } = await Effect.runPromise(
     inspectComparison({
       baseDirectory: null,
       candidateDirectory: bundle.directory,
@@ -581,7 +673,7 @@ test.each([
   async (count, outcome, conclusion) => {
     const candidate = await syntheticBundle({ count });
 
-    const result = await Effect.runPromise(
+    const { result } = await Effect.runPromise(
       inspectComparison({
         baseDirectory: null,
         candidateDirectory: candidate.directory,
@@ -608,6 +700,7 @@ test('previews without a baseline or a named check, while a requested missing ba
   const base = await inspect(null);
   const candidate = await inspect(bundle.directory);
   const preview = compareCaptures({
+    visual: pixelsNotInspected,
     base,
     candidate,
     evaluatedAt,
@@ -618,7 +711,12 @@ test('previews without a baseline or a named check, while a requested missing ba
   expect(preview.candidate.check.outcome).toBe('not-run');
   expect(preview.conclusion.kind).toBe('preview');
   expect(
-    compareCaptures({ base, candidate, evaluatedAt }).comparison.kind,
+    compareCaptures({
+      visual: pixelsNotInspected,
+      base,
+      candidate,
+      evaluatedAt,
+    }).comparison.kind,
   ).toBe('unavailable');
 
   await writeFile(
@@ -626,6 +724,7 @@ test('previews without a baseline or a named check, while a requested missing ba
     'corrupt',
   );
   const failed = compareCaptures({
+    visual: pixelsNotInspected,
     base,
     candidate: await inspect(bundle.directory),
     evaluatedAt,
@@ -674,6 +773,7 @@ test.each([
 
     expect(candidate.check.outcome).toBe(expected);
     const preview = compareCaptures({
+      visual: pixelsNotInspected,
       base: await inspect(null),
       candidate,
       evaluatedAt,
@@ -709,6 +809,7 @@ test('renders captured text literally instead of injecting Markdown headings or 
   });
   const report = renderComparison(
     compareCaptures({
+      visual: pixelsNotInspected,
       base: await inspect(null),
       candidate: await inspect(bundle.directory),
       evaluatedAt,
@@ -749,6 +850,7 @@ test.each(['application', 'conditions', 'producer'] as const)(
     });
 
     const result = compareCaptures({
+      visual: pixelsNotInspected,
       base: await inspect(base.directory),
       candidate: await inspect(candidate.directory),
       evaluatedAt,
@@ -906,7 +1008,7 @@ test.each(['manifestHash', 'sourceHash'] as const)(
       },
     };
 
-    const result = await Effect.runPromise(
+    const { result } = await Effect.runPromise(
       inspectComparison({
         baseDirectory: null,
         candidateDirectory: bundle.directory,
@@ -998,6 +1100,7 @@ test('keeps the current candidate check when the baseline is stale', async () =>
   });
 
   const result = compareCaptures({
+    visual: pixelsNotInspected,
     base: await inspect(base.directory),
     candidate: await inspect(candidate.directory),
     evaluatedAt,
@@ -1019,12 +1122,14 @@ test('rechecks age during pure comparison without mutating the inspected inputs'
   ).toISOString();
 
   const first = compareCaptures({
+    visual: pixelsNotInspected,
     base: side,
     candidate: side,
     evaluatedAt: staleAt,
   });
 
   const second = compareCaptures({
+    visual: pixelsNotInspected,
     base: side,
     candidate: side,
     evaluatedAt: staleAt,

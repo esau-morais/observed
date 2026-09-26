@@ -4,7 +4,8 @@ import { parseCapture, type CaptureArtifact } from './capture/model';
 import { json } from './encoding';
 import { inspectComparison } from './comparison';
 import { selectionSchema, type Selection } from './comparison-model';
-import { readVerifiedArtifact, viewerIntegritySchema } from './export';
+import { readVerifiedArtifact } from './evidence';
+import { viewerIntegritySchema } from './export';
 
 export class ViewFailure extends Schema.TaggedError<ViewFailure>()(
   'ViewFailure',
@@ -210,7 +211,7 @@ const preloadReport = Effect.fnUntraced(function* (directory: string) {
     );
   }
 
-  const result = yield* inspectComparison({
+  const { result, visualDiff } = yield* inspectComparison({
     baseDirectory:
       selection.base === null && selection.baseIssue === undefined
         ? null
@@ -219,6 +220,14 @@ const preloadReport = Effect.fnUntraced(function* (directory: string) {
     evaluatedAt: selection.evaluatedAt,
     selection,
   });
+
+  if (visualDiff !== null) {
+    assets.set(`/${visualDiff.path}`, {
+      bytes: new Uint8Array(visualDiff.bytes),
+      type: 'image/png',
+      evidence: true,
+    });
+  }
 
   assets.set('/result.json', {
     bytes: new TextEncoder().encode(json(result)),
