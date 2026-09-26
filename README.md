@@ -49,6 +49,10 @@ HTTP(S) origins, such as `["http://127.0.0.1:4000"]`. Request checks match the
 application origin by default; set the check's `origin` to one of those allowed
 origins to check that service. Observations version 2 records each request's origin.
 
+agent-browser does not report the status of a request answered by a redirect,
+such as a login form's POST followed by a 303. Observed records that request with
+status `0`. A request check for it uses `"status": 0`.
+
 A `fill` step's `value` is either literal text, exported as written, or an
 environment reference such as `{ "env": "LOGIN_PASSWORD" }`. Recipes and evidence
 keep only the variable name. Observed reads the variable when the capture runs,

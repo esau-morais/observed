@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "name": "Form redirect",
+  "source": {
+    "entry": "server.ts",
+    "paths": ["server.ts"]
+  },
+  "setup": [],
+  "start": ["bun", "server.ts"],
+  "ready": { "path": "/", "status": 200 },
+  "capture": {
+    "name": "Sign in with a form",
+    "path": "/",
+    "ready": [{ "kind": "wait-selector", "selector": "#name" }],
+    "steps": [
+      { "kind": "fill", "selector": "#name", "value": "Ada" },
+      { "kind": "click-role", "role": "button", "name": "Sign in" },
+      { "kind": "wait-text", "text": "Welcome, Ada" }
+    ],
+    "check": {
+      "kind": "text",
+      "id": "welcome",
+      "name": "Welcome after sign-in",
+      "scope": "One form submission answered by a redirect",
+      "selector": "[role=\"status\"]",
+      "expectedText": "Welcome, Ada"
+    },
+    "browserArguments": ["--no-sandbox"]
+  }
+}

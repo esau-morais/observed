@@ -29,11 +29,16 @@ const filledSchema = Schema.Tuple([
   Schema.Struct({ success: Schema.Literal(true) }),
 ]);
 
+// agent-browser 0.38.1 omits the status of a request answered by a redirect,
+// and the next request in the chain reuses its requestId. Its HAR records the
+// same request with status 0.
 const requestSchema = Schema.Struct({
   requestId: Schema.NonEmptyString,
   url: Schema.URLFromString,
   method: Schema.NonEmptyString,
-  status: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  status: Schema.optionalKey(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  ),
 });
 
 const requestsSchema = response(
@@ -439,13 +444,20 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     .sort();
 
   const requestLedger = requests.data.requests
-    .map((request) => `${request.method} ${request.url.href} ${request.status}`)
+    .map(
+      (request) =>
+        `${request.method} ${request.url.href} ${request.status ?? 0}`,
+    )
     .sort();
 
   if (
     json(harLedger) !== json(requestLedger) ||
-    new Set(requests.data.requests.map((request) => request.requestId)).size !==
-      requests.data.requests.length
+    new Set(
+      requests.data.requests.map(
+        (request) =>
+          `${request.requestId} ${request.method} ${request.url.href}`,
+      ),
+    ).size !== requests.data.requests.length
   ) {
     return yield* new BrowserFailure({
       message: 'HAR and request log disagree; capture completeness is unknown',

@@ -81,6 +81,7 @@ const projects = {
   'request-lab': 'examples/request-lab',
   shop: 'examples/shop',
   'access-code': 'tests/fixtures/access-code',
+  'form-redirect': 'tests/fixtures/form-redirect',
 };
 
 async function copyProject(name: keyof typeof projects, label: string) {
@@ -728,6 +729,40 @@ test.each([
     ).toEqual([]);
   },
 );
+
+test('a form submission answered by a redirect keeps the capture complete', async () => {
+  const project = await copyProject('form-redirect', 'form-redirect');
+  const result = await observe(project, 'form-redirect-result');
+  expect(result.result.candidate.execution).toBe('complete');
+  expect(result.result.candidate.check.outcome).toBe('passed');
+  const capture = path.join(
+    evidence,
+    'form-redirect-result/captures/candidate',
+  );
+  const observations = await readJson(
+    path.join(capture, 'observations.json'),
+    Schema.Struct({
+      requests: Schema.Array(
+        Schema.Struct({
+          method: Schema.String,
+          path: Schema.String,
+          status: Schema.Number,
+        }),
+      ),
+    }),
+  );
+  expect(
+    observations.requests.map(({ method, path, status }) => ({
+      method,
+      path,
+      status,
+    })),
+  ).toEqual([
+    { method: 'POST', path: '/session', status: 0 },
+    { method: 'GET', path: '/welcome', status: 200 },
+  ]);
+  await cleanup(capture);
+});
 
 test('additional origins preserve previews and keep same-path request checks separate', async () => {
   const requests: string[] = [];
