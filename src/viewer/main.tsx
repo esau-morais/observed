@@ -5,6 +5,8 @@ import './reset.css';
 import { Schema } from 'effect';
 import { createRoot } from 'react-dom/client';
 import { comparisonSchema } from '../comparison-model';
+import { embeddedEvidenceId, readEmbeddedEvidence } from './embedded';
+import { EvidenceUrls } from './evidence';
 import { ComparisonReport, ReportState } from './report';
 
 const container = document.getElementById('root');
@@ -17,21 +19,35 @@ const root = createRoot(container);
 
 root.render(<ReportState kind="loading" />);
 
-async function loadReport() {
+async function fetchReport() {
   const response = await fetch('./result.json', { cache: 'no-store' });
 
   if (!response.ok) {
     throw new Error(`The report request failed (HTTP ${response.status}).`);
   }
 
-  const input: unknown = await response.json();
+  const result: unknown = await response.json();
+
+  return { result, resolve: (href: string) => href };
+}
+
+async function loadReport() {
+  const embedded = document.getElementById(embeddedEvidenceId);
+  const { result: input, resolve } =
+    embedded === null
+      ? await fetchReport()
+      : readEmbeddedEvidence(embedded.textContent);
   const result = await Schema.decodeUnknownPromise(comparisonSchema, {
     onExcessProperty: 'error',
   })(input);
 
   document.title = `${result.title} | Observed`;
 
-  root.render(<ComparisonReport result={result} />);
+  root.render(
+    <EvidenceUrls value={resolve}>
+      <ComparisonReport result={result} />
+    </EvidenceUrls>,
+  );
 }
 
 loadReport().catch((error: unknown) => {

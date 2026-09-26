@@ -177,7 +177,7 @@ Reports and captures stay local under gitignored `evidence/`.
 ## Run on pull requests
 
 Observed's GitHub Action captures your saved journey on the pull request's base
-and candidate, compares the two, and uploads the evidence as a workflow artifact.
+and candidate, compares the two, and links a report page from the job summary.
 Your repository needs a committed `observed.json` following the
 [project contract](src/project.ts). The job needs an `ubuntu-24.04` or
 `macos-15` runner. On Linux it installs packages with passwordless `sudo`, which
@@ -239,15 +239,25 @@ The job also fails when `observed.json` is rejected before capture, when Observe
 writes no readable result, or when the result disagrees with the exit code.
 
 The job summary states the conclusion, each side's revision, capture state, and
-check outcome, and why a capture failed. Whenever the capture step ran,
-including failed comparisons, the `observed-bundle` artifact is uploaded and
-kept for 7 days. It holds the raw captures, `result.json`, and the exported
-viewer. To open it, download it and run
-`bun run view <download>/run/report` from an Observed checkout.
+check outcome, and why a capture failed. Its **Open the report** link opens
+`observed-bundle.html` in the browser: the same report as `bun run view`, with
+the screenshots, changed regions, checks, requests and original artifacts in
+one file. GitHub shows it only to signed-in users who can read the repository;
+a signed-out visitor gets a 404, even on a public repository. GitHub serves it
+through a storage link that expires after about 10 minutes, so share the
+summary link rather than the address the page opens at.
+
+Whenever the capture step ran, including failed comparisons, the action also
+uploads the `observed-bundle` artifact. It holds the raw captures,
+`result.json`, the exported viewer and the report page. To open it with a
+local server, download it and run `bun run view <download>/run/report` from an
+Observed checkout. GitHub keeps both artifacts for 7 days by default.
 
 Optional inputs: `candidate` (default `HEAD`), `timeout` per capture in
-milliseconds (default `120000`), `artifact-name`, and `retention-days`. Give each
-call a distinct `artifact-name` when one job runs the action more than once.
+milliseconds (default `120000`), `artifact-name`, and `retention-days`. The
+report page is named after `artifact-name` with `.html` added. Give each call a
+distinct `artifact-name` when a workflow runs the action more than once, such
+as in a matrix.
 
 A journey that signs in reads its secret from an environment variable, as in
 `{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
@@ -263,8 +273,8 @@ A journey that signs in reads its secret from an environment variable, as in
 
 GitHub gives no Actions secrets to pull requests from forks or Dependabot. The
 variable is then empty, both captures fail, and the job reports unavailable. Use
-a disposable account: the uploaded bundle holds screenshots of every page the
-journey reaches. Literal fill values, such as a username, appear in the bundle as
+a disposable account: the report page and bundle hold screenshots of every page
+the journey reaches. Literal fill values, such as a username, appear in the bundle as
 written, so never write a password as a literal value.
 
 This repository runs the same action on the Request lab example in

@@ -17,6 +17,7 @@ import { comparisonSchema } from '../../src/comparison-model';
 import { json, sha256 } from '../../src/encoding';
 import { projectSchema } from '../../src/project';
 import { redactText } from '../../src/redact';
+import { renderReportPage } from '../../src/report-page';
 import { serveReport } from '../../src/view';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -215,6 +216,119 @@ async function pageTree(directory: string) {
   );
 
   return snapshot.data;
+}
+
+function agentBrowser(session: string, config: string) {
+  return (...args: string[]) =>
+    command([
+      process.execPath,
+      'node_modules/agent-browser/bin/agent-browser.js',
+      '--config',
+      config,
+      '--session',
+      session,
+      '--headed',
+      'false',
+      '--args',
+      '--no-sandbox',
+      '--no-webmcp',
+      '--json',
+      ...args,
+    ]);
+}
+
+async function evaluate<A>(
+  browser: ReturnType<typeof agentBrowser>,
+  script: string,
+  schema: Schema.Codec<A>,
+): Promise<A> {
+  const output = Schema.decodeUnknownSync(
+    Schema.fromJsonString(
+      Schema.Struct({ data: Schema.Struct({ result: Schema.Unknown }) }),
+    ),
+  )(await browser('eval', '-b', Buffer.from(script).toString('base64')));
+
+  return Schema.decodeUnknownSync(schema)(output.data.result);
+}
+
+// GitHub serves an unzipped HTML artifact inline with no Content-Security-Policy
+// header, so this server adds none either.
+async function reportPage(
+  directory: string,
+  conclusion: string,
+  highlightedRegions: number,
+) {
+  const page = await Effect.runPromise(
+    renderReportPage(directory).pipe(Effect.provide(BunServices.layer)),
+  );
+  await writeFile(path.join(evidence, `report-page-${sequence}.html`), page);
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () =>
+      new Response(page, { headers: { 'Content-Type': 'text/html' } }),
+  });
+  const session = `observed-page-${Date.now()}-${sequence++}`;
+  const config = path.join(evidence, `${session}.json`);
+  await writeFile(config, '{}\n');
+  const browser = agentBrowser(session, config);
+
+  try {
+    await browser('open', String(server.url));
+    await browser('wait', '#screenshots');
+    const viewed = await evaluate(
+      browser,
+      '[...document.querySelectorAll("#screenshots a img")].map((image) => image.complete && image.naturalWidth > 0 && image.src.startsWith("blob:"))',
+      Schema.Array(Schema.Boolean),
+    );
+    expect(viewed).toEqual([true, true]);
+
+    await browser('focus', 'main > details > summary');
+    await browser('press', 'Enter');
+    expect(
+      await evaluate(browser, 'document.body.innerText', Schema.String),
+    ).toContain(conclusion);
+    const link = '[aria-label="After original artifacts"] li:has(> a) a';
+    const links = await evaluate(
+      browser,
+      `[...document.querySelectorAll('${link}')].map((item) => [item.textContent, item.href.startsWith("blob:")])`,
+      Schema.Array(Schema.Tuple([Schema.String, Schema.Boolean])),
+    );
+    expect(links).toContainEqual(['requests', true]);
+    expect(links.every(([, blob]) => blob)).toBe(true);
+
+    if (highlightedRegions > 0) {
+      await browser('focus', 'input[type=checkbox]');
+      await browser('press', 'Space');
+      expect(
+        await evaluate(
+          browser,
+          '[...document.querySelectorAll("[aria-labelledby=changed-regions] img")].filter((image) => image.complete && image.naturalWidth > 0).length + document.querySelectorAll("[data-region]").length',
+          Schema.Number,
+        ),
+      ).toBe(highlightedRegions * 4);
+    }
+
+    await browser('screenshot', path.join(evidence, `${session}.png`));
+    await evaluate(
+      browser,
+      `[...document.querySelectorAll('${link}')].find((item) => item.textContent === "requests").click() ?? true`,
+      Schema.Boolean,
+    );
+    await browser('wait', '--fn', 'location.protocol === "blob:"');
+    expect(
+      JSON.parse(
+        await evaluate(browser, 'document.body.innerText', Schema.String),
+      ),
+    ).toEqual(
+      JSON.parse(
+        await readFile(path.join(directory, 'candidate/requests.har'), 'utf8'),
+      ),
+    );
+  } finally {
+    await browser('close');
+    await server.stop(true);
+  }
 }
 
 async function viewer(
@@ -430,6 +544,7 @@ test('compares a React commit with a duplicate-request worktree through the publ
     await pageTree(path.join(result.directory, 'base')),
   );
   await viewer(result.directory, 'comparison', after.source.sha256);
+  await reportPage(result.directory, 'Regression', 0);
 
   const previewed = Schema.decodeUnknownSync(
     Schema.fromJsonString(exportedSchema),
@@ -465,6 +580,7 @@ test('compares a React commit with a duplicate-request worktree through the publ
     visual.result.candidate.capture?.manifest.source.sha256 ?? 'no capture',
     1,
   );
+  await reportPage(visual.directory, 'No regression', 1);
 });
 
 test('previews a non-React app without checks and then applies its own POST expectation', async () => {

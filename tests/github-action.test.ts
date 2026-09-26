@@ -25,16 +25,19 @@ test('CI summaries never present unavailable or unreadable results as passing', 
     output: json({ directory: '/bundle', result }),
     exitCode: 1,
     artifact: 'observed-bundle',
+    page: null,
   });
   const mismatched = summarize({
     output: json({ directory: '/bundle', result }),
     exitCode: 0,
     artifact: 'observed-bundle',
+    page: null,
   });
   const unreadable = summarize({
     output: '{"result":{"conclusion":{"kind":"no-regression"}}}',
     exitCode: 0,
     artifact: 'observed-bundle',
+    page: null,
   });
 
   expect(unavailable.trusted).toBe(true);
@@ -81,4 +84,36 @@ test('a capture failure reason cannot break the job summary markup', () => {
   expect(line).toContain('Candidate capture failed (application)');
   expect(line).not.toMatch(/<img|[^\\]\||[^\\]\[/);
   expect(describeFailure('Base', { kind: 'complete' })).toEqual([]);
+});
+
+test('the summary links only an https report page and cannot be steered by its URL', async () => {
+  const missing = await Effect.runPromise(
+    inspectSide({ directory: null, prefix: 'candidate', evaluatedAt }),
+  );
+  const result = compareCaptures({
+    base: missing,
+    candidate: missing,
+    evaluatedAt,
+    visual: { kind: 'unavailable', reason: 'No captures' },
+  });
+  const summary = (page: string | null) =>
+    summarize({
+      output: json({ directory: '/bundle', result }),
+      exitCode: 1,
+      artifact: 'observed-bundle',
+      page,
+    }).markdown;
+  const page = 'https://github.com/o/r/actions/runs/1/artifacts/2';
+
+  expect(summary(page)).toContain(`[Open the report](${page})`);
+  expect(summary(page)).toContain('## Observed: Unavailable');
+
+  for (const url of [
+    null,
+    'javascript:alert(1)',
+    'https://x) ![img](https://y',
+  ]) {
+    expect(summary(url)).not.toContain('Open the report');
+    expect(summary(url)).toContain('No report page was uploaded');
+  }
 });

@@ -12,7 +12,7 @@ export class ViewFailure extends Schema.TaggedError<ViewFailure>()(
   { message: Schema.String },
 ) {}
 
-type Asset = {
+export type Asset = {
   bytes: Uint8Array<ArrayBuffer>;
   type: string;
   evidence: boolean;
@@ -136,7 +136,7 @@ const stageArtifacts = Effect.fnUntraced(function* (
   }
 });
 
-const preloadReport = Effect.fnUntraced(function* (directory: string) {
+export const preloadReport = Effect.fnUntraced(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.realPath(directory);
   const selectionBytes = yield* readRequired(root, 'selection.json');

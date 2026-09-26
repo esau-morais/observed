@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
-import { useState, type ReactNode } from 'react';
+import { createContext, use, useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
 import { describeRevision } from '../provenance-text';
 import { describeStatus } from '../request-text';
@@ -143,6 +143,8 @@ function percent(value: number, total: number): string {
   return `${(value / total) * 100}%`;
 }
 
+export const EvidenceUrls = createContext((href: string) => href);
+
 export function EvidenceLink({
   href,
   children,
@@ -150,8 +152,10 @@ export function EvidenceLink({
   href: string;
   children: ReactNode;
 }) {
+  const resolve = use(EvidenceUrls);
+
   return (
-    <a href={href} {...stylex.props(styles.link)}>
+    <a href={resolve(href)} {...stylex.props(styles.link)}>
       {children}
     </a>
   );
@@ -167,6 +171,7 @@ export function Screenshot({
   highlight: Highlight | null;
 }) {
   const [failed, setFailed] = useState(false);
+  const resolve = use(EvidenceUrls);
   const capture = side.capture?.manifest ?? null;
 
   return (
@@ -185,7 +190,7 @@ export function Screenshot({
       ) : (
         <>
           <a
-            href={side.screenshot}
+            href={resolve(side.screenshot)}
             {...stylex.props(styles.link, styles.imageLink)}
           >
             {failed ? (
@@ -195,7 +200,7 @@ export function Screenshot({
             ) : (
               <span {...stylex.props(styles.frame)}>
                 <img
-                  src={side.screenshot}
+                  src={resolve(side.screenshot)}
                   alt={`${label} captured application. Open full-size screenshot.`}
                   loading="eager"
                   onError={() => setFailed(true)}
@@ -393,6 +398,8 @@ export function ChangedRegions({
   before: string;
   after: string;
 }) {
+  const resolve = use(EvidenceUrls);
+
   return (
     <section {...stylex.props(styles.stack)} aria-labelledby="changed-regions">
       <h2 id="changed-regions" {...stylex.props(styles.heading)}>
@@ -428,7 +435,7 @@ export function ChangedRegions({
                       )}
                     >
                       <img
-                        src={source}
+                        src={resolve(source)}
                         alt={`${label}, region ${index + 1}`}
                         {...stylex.props(
                           styles.cropImage,
