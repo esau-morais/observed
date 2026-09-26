@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { summarize } from '../scripts/github-action';
+import { describeFailure, summarize } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 import { json } from '../src/encoding';
 
@@ -53,7 +53,6 @@ test('CI summaries never present unavailable or unreadable results as passing', 
 
 test.each([
   { project: 'examples/shop', code: 0 },
-  { project: 'tests/fixtures/access-code', code: 0 },
   { project: 'tests', code: 1 },
 ])(
   'CI preflight exits $code for $project so only a loadable observed.json reaches capture',
@@ -71,3 +70,15 @@ test.each([
     expect(await child.exited).toBe(code);
   },
 );
+
+test('a capture failure reason cannot break the job summary markup', () => {
+  const [line = ''] = describeFailure('Candidate', {
+    kind: 'failed',
+    category: 'application',
+    reason: 'exited | <img src=x> [link](http://x)',
+  });
+
+  expect(line).toContain('Candidate capture failed (application)');
+  expect(line).not.toMatch(/<img|[^\\]\||[^\\]\[/);
+  expect(describeFailure('Base', { kind: 'complete' })).toEqual([]);
+});

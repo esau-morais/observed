@@ -154,8 +154,8 @@ system packages with apt.
 The job also fails when `observed.json` is rejected before capture, when Observed
 writes no readable result, or when the result disagrees with the exit code.
 
-The job summary states the conclusion and each side's revision, capture state,
-and check outcome. Whenever the capture step ran, including failed comparisons,
+The job summary states the conclusion, each side's revision, capture state,
+and check outcome, and why a capture failed. Whenever the capture step ran, including failed comparisons,
 the `observed-bundle` artifact is uploaded and kept for 7 days. It holds the raw
 captures, `result.json`, and the exported viewer. To open it, download it and run
 `bun run view <download>/run/report` from an Observed checkout.
@@ -176,10 +176,11 @@ A journey that signs in reads its secret from an environment variable, as in
           base: ${{ github.event.pull_request.base.sha }}
 ```
 
-GitHub gives no secrets to pull requests from forks. The variable is then empty,
-both captures fail, and the job reports unavailable. Use a disposable account:
-the uploaded bundle holds screenshots of every page the journey reaches. Literal
-fill values, such as a username, appear in the bundle as written.
+GitHub gives no Actions secrets to pull requests from forks or Dependabot. The
+variable is then empty, both captures fail, and the job reports unavailable. Use
+a disposable account: the uploaded bundle holds screenshots of every page the
+journey reaches. Literal fill values, such as a username, appear in the bundle as
+written, so never write a password as a literal value.
 
 This repository runs the same action on the Request lab example in
 [.github/workflows/observe.yml](.github/workflows/observe.yml).

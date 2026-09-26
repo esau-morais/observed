@@ -8,6 +8,7 @@ import {
   type Comparison,
   type Side,
 } from '../src/comparison-model';
+import type { Capture } from '../src/capture/model';
 import { escapeText } from '../src/comparison-report';
 import { loadProject } from '../src/project';
 import { describeRevision } from '../src/provenance-text';
@@ -60,9 +61,10 @@ function describeSide(label: string, side: Side): string {
   return `| ${label} | ${escapeText(revision)} | ${side.execution} | ${side.check.outcome} |`;
 }
 
-function describeFailure(label: string, side: Side): string[] {
-  const execution = side.capture?.manifest.execution;
-
+export function describeFailure(
+  label: string,
+  execution: Capture['execution'] | undefined,
+): string[] {
   return execution?.kind === 'failed'
     ? [
         `- ${label} capture failed (${execution.category}): ${escapeText(execution.reason)}`,
@@ -117,7 +119,7 @@ export function summarize(options: {
           ['Candidate', result.candidate],
         ];
   const failures = labelled.flatMap(([label, side]) =>
-    describeFailure(label, side),
+    describeFailure(label, side.capture?.manifest.execution),
   );
 
   const markdown = [
