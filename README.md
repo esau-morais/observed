@@ -50,8 +50,9 @@ application origin by default; set the check's `origin` to one of those allowed
 origins to check that service. Observations version 2 records each request's origin.
 
 agent-browser does not report the status of a request answered by a redirect,
-such as a login form's POST followed by a 303. Observed records that request with
-status `0`. A request check for it uses `"status": 0`.
+such as a login form's POST followed by a 302 or 303. Observed records that
+request with status `0` and shows it as not recorded. A request check can't match
+it by status; check the request the redirect leads to.
 
 A `fill` step's `value` is either literal text, exported as written, or an
 environment reference such as `{ "env": "LOGIN_PASSWORD" }`. Recipes and evidence

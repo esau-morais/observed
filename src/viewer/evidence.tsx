@@ -2,6 +2,7 @@ import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
 import { describeRevision } from '../provenance-text';
+import { describeStatus } from '../request-text';
 import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
 import { colors } from './tokens.stylex';
@@ -292,7 +293,7 @@ export function RequestLedger({ side, label }: { side: Side; label: string }) {
                         {request.path}
                       </td>
                       <td {...stylex.props(styles.cell, styles.mono)}>
-                        {request.status}
+                        {describeStatus(request.status)}
                       </td>
                       <td
                         {...stylex.props(

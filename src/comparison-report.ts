@@ -1,5 +1,6 @@
 import type { Comparison, Side, Visual } from './comparison-model';
 import { describeObserved, describeRevision } from './provenance-text';
+import { describeStatus } from './request-text';
 import { describeRegion, describeVisual, diffLegend } from './visual-text';
 
 export function escapeText(value: string): string {
@@ -102,7 +103,7 @@ function renderLedger(side: Side, label: string): string {
           '| --- | --- | --- | --- |',
           ...observations.requests.map(
             (request) =>
-              `| ${escapeText(request.method)} | ${escapeText(`${request.origin === 'application' ? '' : request.origin}${request.path}`)} | ${request.status} | ${escapeText(request.startedAt)} |`,
+              `| ${escapeText(request.method)} | ${escapeText(`${request.origin === 'application' ? '' : request.origin}${request.path}`)} | ${describeStatus(request.status)} | ${escapeText(request.startedAt)} |`,
           ),
         ].join('\n');
 
