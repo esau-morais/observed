@@ -76,7 +76,11 @@ const styles = stylex.create({
   nowrap: { whiteSpace: 'nowrap' },
   list: { display: 'grid', gap: 12, paddingInlineStart: 20, marginBlock: 0 },
   artifact: { paddingBlock: 4 },
-  caption: { color: colors.textMuted, fontSize: '0.8125rem' },
+  caption: {
+    color: colors.textMuted,
+    fontSize: '0.8125rem',
+    overflowWrap: 'anywhere',
+  },
   frame: { display: 'block', position: 'relative' },
   region: {
     borderColor: {

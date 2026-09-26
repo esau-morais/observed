@@ -136,23 +136,25 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
         '--',
         '.',
       ];
-      let tracked = true;
-      const inventory = yield* git(listArguments).pipe(
+      const { inventory, tracked } = yield* git(listArguments).pipe(
+        Effect.map((output) => ({ inventory: output, tracked: true })),
         Effect.catchTag('ProcessFailure', () =>
           Effect.gen(function* () {
-            tracked = false;
             const emptyGit = yield* fs.makeTempDirectoryScoped({
               prefix: 'observed-index-',
             });
             yield* git(['init', '--bare', '--quiet', emptyGit]);
 
-            return yield* git([
-              '--git-dir',
-              emptyGit,
-              '--work-tree',
-              root,
-              ...listArguments,
-            ]);
+            return {
+              inventory: yield* git([
+                '--git-dir',
+                emptyGit,
+                '--work-tree',
+                root,
+                ...listArguments,
+              ]),
+              tracked: false,
+            };
           }),
         ),
       );
@@ -173,7 +175,8 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
             )
           : {
               kind: 'unavailable',
-              reason: 'The project is not in a Git work tree',
+              reason:
+                'Git did not list the project as a work tree; see source-transcript.jsonl',
             },
       };
       const included = new Set(

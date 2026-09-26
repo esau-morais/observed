@@ -36,6 +36,7 @@ import {
   type Visual,
 } from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
+import { describeObserved } from '../src/provenance-text';
 import { exportComparison } from '../src/export';
 import { encodeRgbPng } from '../src/png';
 import { serveReport } from '../src/view';
@@ -921,17 +922,42 @@ test.each(['application', 'conditions', 'producer', 'observed'] as const)(
   },
 );
 
-test('discloses captures from different Observed commits under one version without blocking the comparison', async () => {
+test.each([
+  { commit: 'c'.repeat(40), trackedChanges: false },
+  { commit: observed.source.commit, trackedChanges: true },
+])(
+  'discloses Observed code that may differ under one version without blocking the comparison (%o)',
+  async (candidateSource) => {
+    const base = await syntheticBundle();
+    const candidate = await syntheticBundle();
+    const source = { kind: 'git', ...candidateSource } as const;
+
+    for (const bundle of candidateSource.trackedChanges
+      ? [base, candidate]
+      : [candidate]) {
+      await saveManifest(bundle.directory, {
+        ...bundle.capture,
+        observed: { ...observed, source },
+      });
+    }
+
+    const result = compareCaptures({
+      visual: pixelsNotInspected,
+      base: await inspect(base.directory),
+      candidate: await inspect(candidate.directory),
+      evaluatedAt,
+    });
+
+    expect(result.comparison.kind).toBe('available');
+    expect(result.limitations.join('\n')).toContain(
+      `Candidate: ${describeObserved({ ...observed, source })}.`,
+    );
+  },
+);
+
+test('adds no Observed source limitation when both captures name the same clean commit', async () => {
   const base = await syntheticBundle();
   const candidate = await syntheticBundle();
-
-  await saveManifest(candidate.directory, {
-    ...candidate.capture,
-    observed: {
-      ...observed,
-      source: { kind: 'git', commit: 'c'.repeat(40), trackedChanges: true },
-    },
-  });
 
   const result = compareCaptures({
     visual: pixelsNotInspected,
@@ -940,10 +966,7 @@ test('discloses captures from different Observed commits under one version witho
     evaluatedAt,
   });
 
-  expect(result.comparison.kind).toBe('available');
-  expect(result.limitations.join('\n')).toContain(
-    `Candidate: 0.0.0-synthetic; commit ${'c'.repeat(40)} with uncommitted tracked changes.`,
-  );
+  expect(result.limitations.join('\n')).not.toContain('Observed');
 });
 
 test('marks a schema version 3 capture unavailable with the reason instead of reading or dropping it', async () => {

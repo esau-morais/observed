@@ -998,6 +998,11 @@ test('bun start opens the example from a fresh checkout without an app path', as
     expect(result.mode).toBe('preview');
     expect(result.candidate.execution).toBe('complete');
     expect(result.candidate.check.outcome).toBe('passed');
+    expect(result.candidate.capture?.manifest.observed.source).toEqual({
+      kind: 'unavailable',
+      reason:
+        "Observed's checkout has no HEAD commit; see observed-transcript.jsonl",
+    });
   } finally {
     child.kill('SIGINT');
     await expect.poll(() => child.exitCode, { timeout: 10_000 }).not.toBeNull();

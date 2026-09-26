@@ -241,7 +241,9 @@ function CaptureDetails({ side }: { side: Side }) {
         <Field label="Manifest SHA-256" mono>
           {side.capture.sha256}
         </Field>
-        <Field label="Observed">{describeObserved(capture.observed)}</Field>
+        <Field label="Observed" mono>
+          {describeObserved(capture.observed)}
+        </Field>
         <Field label="Producer">
           {capture.producer.name} · {capture.producer.version}
         </Field>

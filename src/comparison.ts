@@ -686,14 +686,21 @@ function observedSourceNotes(base: Side, candidate: Side): string[] {
   if (
     before === undefined ||
     after === undefined ||
-    before.version !== after.version ||
-    isDeepStrictEqual(before.source, after.source)
+    before.version !== after.version
   ) {
     return [];
   }
 
+  const modified = [before, after].some(
+    ({ source }) => source.kind === 'git' && source.trackedChanges,
+  );
+
+  if (!modified && isDeepStrictEqual(before.source, after.source)) {
+    return [];
+  }
+
   return [
-    `Both captures report Observed ${after.version} from different sources, so their observations may come from different code. Base: ${describeObserved(before)}. Candidate: ${describeObserved(after)}.`,
+    `Both captures report Observed ${after.version}, but its commits differ or include uncommitted tracked changes, so the observations may come from different code. Base: ${describeObserved(before)}. Candidate: ${describeObserved(after)}.`,
   ];
 }
 

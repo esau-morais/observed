@@ -232,8 +232,13 @@ export const parseCapture = Effect.fnUntraced(function* (input: string) {
     Option.isSome(version) &&
     version.value.schemaVersion !== captureSchemaVersion
   ) {
+    const found = version.value.schemaVersion;
+
     return yield* new UnsupportedCapture({
-      message: `Capture manifest schema version ${version.value.schemaVersion} is unsupported. This Observed reads version ${captureSchemaVersion}, which records the Observed version and the worktree HEAD. Capture this revision again.`,
+      message:
+        found < captureSchemaVersion
+          ? `Capture manifest schema version ${found} is unsupported. This Observed reads version ${captureSchemaVersion}. Capture this revision again.`
+          : `Capture manifest schema version ${found} is unsupported. It was written by a newer Observed than this one, which reads version ${captureSchemaVersion}. Update Observed.`,
     });
   }
 

@@ -39,7 +39,15 @@ function git(cwd: string, ...args: string[]) {
       'commit.gpgsign=false',
       ...args,
     ],
-    { cwd, encoding: 'utf8' },
+    {
+      cwd,
+      encoding: 'utf8',
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([name]) => !name.startsWith('GIT_'),
+        ),
+      ),
+    },
   ).trim();
 }
 
@@ -66,7 +74,8 @@ test('records the commit as unavailable instead of borrowing an enclosing reposi
     version: '9.9.9-test',
     source: {
       kind: 'unavailable',
-      reason: "Git found no checkout at Observed's directory",
+      reason:
+        "Git found no checkout at Observed's directory; see observed-transcript.jsonl",
     },
   });
 
@@ -81,6 +90,19 @@ test('records the commit as unavailable instead of borrowing an enclosing reposi
     kind: 'unavailable',
     reason: "Observed's directory is inside another Git checkout, not its own",
   });
+
+  const inherited = process.env.GIT_DIR;
+  process.env.GIT_DIR = path.join(application, '.git');
+
+  try {
+    expect((await provenance(outside)).source.kind).toBe('unavailable');
+  } finally {
+    if (inherited === undefined) {
+      delete process.env.GIT_DIR;
+    } else {
+      process.env.GIT_DIR = inherited;
+    }
+  }
 });
 
 test('flags tracked changes but not untracked files in Observed checkout', async () => {

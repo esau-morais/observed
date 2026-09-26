@@ -64,7 +64,7 @@ Hashes detect changed artifacts; they do not establish collector honesty. A stac
 ## Comparable and safe runs
 
 - Snapshot the selected source, including intended worktree changes and untracked files. The snapshot hash identifies a worktree capture; its HEAD commit is recorded as context. Pin the base when comparing versions. Exclude credentials and unrelated ignored data.
-- Observed derives observations from producer output, so captures from different Observed versions are not comparable. Captures from different Observed commits under one version remain comparable with a disclosed limitation. Recapture a manifest written under an older capture schema; it is reported unavailable, not upgraded.
+- Observed derives observations from producer output, so captures from different Observed versions are not comparable. Under one version, differing Observed commits or uncommitted tracked changes leave the pair comparable and appear as a limitation. Recapture a manifest written under an older capture schema; it is reported unavailable, not upgraded.
 - Isolate ports, browser profiles, processes, fixtures, and writable directories. Otherwise serialize and reset shared state. Record limitations.
 - Match browser, viewport, environment, recipe, and fixture versions when comparing. Record deliberate masks and incompatible baselines. A requested but missing baseline is unavailable. A standalone preview needs no baseline.
 - Warm up timing checks, repeat samples, record spread, and alternate run order where practical. Configure meaningful thresholds and noise handling. Keep intrusive profiling separate from timing gates.
