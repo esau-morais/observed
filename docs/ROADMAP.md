@@ -7,8 +7,13 @@ separate applications, including a non-React one, use the same capture path
 without core edits. Named checks decide the result while pixel changes stay
 observations, and missing requested captures show as unavailable.
 
-The next implementation milestone is Phase 2: repeatable use. Keep the adoption
-study separate: working code does not establish that people find it useful.
+Phase 2 is complete: an agent in another environment configured an unfamiliar
+app from the README without help, and the GitHub Action runs it on pull requests
+on Linux and macOS. Failed, missing, and stale captures never pass.
+
+Next, run the pilot gates below. They choose the Phase 3 extension. Keep the
+adoption study separate: working code does not establish that people find it
+useful.
 
 Read only the document relevant to the task:
 
