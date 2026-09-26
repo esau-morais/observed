@@ -341,6 +341,56 @@ was posted, and the job passes or fails on Observed's result as before. A
 required Observed check stays missing on those pull requests until a maintainer
 runs the workflow with credentials.
 
+### Post failures to Slack
+
+The action can also post to one Slack channel. It sends a message when a pull
+request's result starts failing: a regression, a failed check, or unavailable
+evidence. Later runs of that pull request edit the same message, including a
+recovery to no regression, so retries don't notify anyone again. A pull request
+that never fails posts nothing. The message links the pull request, the report
+page and the GitHub check, and uses the same wording as the check.
+
+Editing the earlier message needs the GitHub App above, because the comment
+remembers which Slack message belongs to the pull request. Without the App,
+every failing run posts a new message.
+
+1. Create a Slack app at https://api.slack.com/apps with **From a manifest** and
+   give its bot only the `chat:write` scope:
+
+```yaml
+display_information:
+  name: Observed
+features:
+  bot_user:
+    display_name: Observed
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+
+2. Install it to the workspace and copy the **Bot User OAuth Token**
+   (`xoxb-...`). Store it as the repository secret `OBSERVED_SLACK_BOT_TOKEN`.
+   The app needs no app-level token.
+3. Invite the bot to the channel with `/invite @Observed`. Copy the channel ID
+   from the bottom of the channel's **About** tab and store it as the repository
+   variable `OBSERVED_SLACK_CHANNEL`.
+4. Add both to the action:
+
+```yaml
+          slack-bot-token: ${{ secrets.OBSERVED_SLACK_BOT_TOKEN }}
+          slack-channel: ${{ vars.OBSERVED_SLACK_CHANNEL }}
+```
+
+The report link needs a GitHub account that can read the repository. Pull
+requests from forks and Dependabot receive no secrets, so they post nothing to
+Slack either.
+
 This repository runs the same action on the Request lab example in
 [.github/workflows/observe.yml](.github/workflows/observe.yml).
 

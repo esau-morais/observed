@@ -135,24 +135,22 @@ export async function postCheckRun(
   return run.html_url;
 }
 
-export async function upsertComment(
+export type OwnComment = { id: number; body: string };
+
+export async function findComment(
   target: Target,
   marker: string,
-  markdown: string,
-): Promise<string | null> {
+): Promise<OwnComment | null> {
   if (target.pullRequest === null) {
     return null;
   }
-
-  const body = limit(`${marker}\n${markdown}`);
-  const issue = `/repos/${target.repository}/issues/${String(target.pullRequest)}`;
 
   for (let page = 1; page <= 20; page++) {
     const listed = await request(
       target,
       comments,
       'GET',
-      `${issue}/comments?per_page=100&page=${String(page)}`,
+      `/repos/${target.repository}/issues/${String(target.pullRequest)}/comments?per_page=100&page=${String(page)}`,
     );
     const own = listed.find(
       (comment) =>
@@ -161,15 +159,7 @@ export async function upsertComment(
     );
 
     if (own !== undefined) {
-      const edited = await request(
-        target,
-        created,
-        'PATCH',
-        `/repos/${target.repository}/issues/comments/${String(own.id)}`,
-        { body },
-      );
-
-      return edited.html_url;
+      return { id: own.id, body: own.body ?? '' };
     }
 
     if (listed.length < 100) {
@@ -177,9 +167,49 @@ export async function upsertComment(
     }
   }
 
-  const posted = await request(target, created, 'POST', `${issue}/comments`, {
-    body,
-  });
+  return null;
+}
 
-  return posted.html_url;
+export async function writeComment(
+  target: Target,
+  existing: OwnComment | null,
+  marker: string,
+  markdown: string,
+): Promise<string | null> {
+  if (target.pullRequest === null) {
+    return null;
+  }
+
+  const body = limit(`${marker}\n${markdown}`);
+  const written =
+    existing === null
+      ? await request(
+          target,
+          created,
+          'POST',
+          `/repos/${target.repository}/issues/${String(target.pullRequest)}/comments`,
+          { body },
+        )
+      : await request(
+          target,
+          created,
+          'PATCH',
+          `/repos/${target.repository}/issues/comments/${String(existing.id)}`,
+          { body },
+        );
+
+  return written.html_url;
+}
+
+export async function upsertComment(
+  target: Target,
+  marker: string,
+  markdown: string,
+): Promise<string | null> {
+  return writeComment(
+    target,
+    await findComment(target, marker),
+    marker,
+    markdown,
+  );
 }
