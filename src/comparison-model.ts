@@ -96,8 +96,89 @@ export const sideSchema = Schema.Union([
   }),
 ]);
 
+const pixels = Schema.Int.check(Schema.isGreaterThan(0));
+
+const imageSize = { width: pixels, height: pixels };
+
+const box = {
+  x: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  y: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  ...imageSize,
+};
+
+const visualRegion = Schema.Struct({ ...box, changedPixels: pixels });
+
+const threshold = Schema.Number.check(
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(1),
+);
+
+type Box = { x: number; y: number; width: number; height: number };
+
+function inside(image: { width: number; height: number }, area: Box): boolean {
+  return (
+    area.x + area.width <= image.width && area.y + area.height <= image.height
+  );
+}
+
+export const maxVisualRegions = 10;
+
+export const visualSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('identical'), ...imageSize }),
+  Schema.Struct({
+    kind: Schema.Literal('below-threshold'),
+    ...imageSize,
+    threshold,
+    differingPixels: pixels,
+    bounds: Schema.Struct(box),
+  }).check(
+    Schema.makeFilter(
+      (visual) =>
+        visual.differingPixels <= visual.width * visual.height &&
+        inside(visual, visual.bounds),
+      { message: 'Differing pixels must lie inside the screenshot' },
+    ),
+  ),
+  Schema.Struct({
+    kind: Schema.Literal('changed'),
+    ...imageSize,
+    threshold,
+    differingPixels: pixels,
+    changedPixels: pixels,
+    regionCount: pixels,
+    regions: Schema.NonEmptyArray(visualRegion),
+    diff: Schema.Struct({
+      path: Schema.Literal('visual-diff.png'),
+      sha256: digest,
+    }),
+  }).check(
+    Schema.makeFilter(
+      (visual) =>
+        visual.changedPixels <= visual.differingPixels &&
+        visual.differingPixels <= visual.width * visual.height &&
+        visual.regions.length <=
+          Math.min(visual.regionCount, maxVisualRegions) &&
+        visual.regions.every((area) => inside(visual, area)),
+      {
+        message:
+          'Changed pixel counts and regions must be consistent with the screenshot',
+      },
+    ),
+  ),
+  Schema.Struct({
+    kind: Schema.Literal('size-differs'),
+    base: Schema.Struct(imageSize),
+    candidate: Schema.Struct(imageSize),
+  }),
+  Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+]);
+
+export type Visual = typeof visualSchema.Type;
+
+export type VisualRegion = typeof visualRegion.Type;
+
 export const comparisonSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(3),
+  schemaVersion: Schema.Literal(4),
   mode: Schema.Literals(['preview', 'comparison']),
   title: text,
   evaluatedAt: timestamp,
@@ -109,7 +190,7 @@ export const comparisonSchema = Schema.Struct({
       kind: Schema.Literal('available'),
       basis: text,
       requestDifference: Schema.Int,
-      visual: Schema.Literals(['unchanged', 'changed']),
+      visual: visualSchema,
     }),
     Schema.Struct({
       kind: Schema.Literal('unavailable'),

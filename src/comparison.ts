@@ -18,10 +18,17 @@ import type {
   Side,
   SideArtifact,
   UnknownCheck,
+  Visual,
 } from './comparison-model';
-import { inspectArtifact, type ArtifactResult } from './evidence';
+import {
+  inspectArtifact,
+  readVerifiedArtifact,
+  type ArtifactResult,
+} from './evidence';
 import { nodeIo } from './node-io';
+import { decodePng, type DecodedPng } from './png';
 import { relativePathSchema } from './project';
+import { comparePixels } from './visual';
 
 const requiredArtifacts = [
   'recipe',
@@ -663,11 +670,13 @@ export function compareCaptures({
   base: inspectedBase,
   candidate: inspectedCandidate,
   evaluatedAt,
+  visual,
   mode = 'comparison',
 }: {
   base: Side;
   candidate: Side;
   evaluatedAt: string;
+  visual: Visual;
   mode?: 'preview' | 'comparison';
 }): Comparison {
   const base = sideAt(inspectedBase, evaluatedAt);
@@ -676,7 +685,7 @@ export function compareCaptures({
   const firstReason = reasons[0];
 
   const common = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     mode,
     title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
     evaluatedAt,
@@ -686,7 +695,7 @@ export function compareCaptures({
       candidate.recipe?.check?.scope ??
         'Only the configured page and recorded capture window were captured.',
       'Checks cover only their stated expectations. Browser errors remain available as evidence.',
-      'Screenshot SHA-256 differences show changed bytes, not a visual regression.',
+      'Screenshot differences are observations of rendered pixels, not a visual regression.',
       'Artifact hashes detect changed bytes; they do not establish collector honesty or source causation.',
     ],
   } as const;
@@ -743,28 +752,6 @@ export function compareCaptures({
   const regression =
     base.check.outcome === 'passed' && candidate.check.outcome === 'failed';
 
-  const baseScreenshot = base.capture.manifest.artifacts.find(
-    (item) => item.id === 'screenshot',
-  );
-
-  const candidateScreenshot = candidate.capture.manifest.artifacts.find(
-    (item) => item.id === 'screenshot',
-  );
-
-  if (baseScreenshot === undefined || candidateScreenshot === undefined) {
-    return {
-      ...common,
-      comparison: {
-        kind: 'unavailable',
-        reasons: ['Verified screenshots unavailable'],
-      },
-      conclusion: {
-        kind: 'unavailable',
-        text: 'Required comparison evidence is unavailable.',
-      },
-    };
-  }
-
   return {
     ...common,
     comparison: {
@@ -774,14 +761,84 @@ export function compareCaptures({
       requestDifference:
         candidate.observations.requests.length -
         base.observations.requests.length,
-      visual:
-        baseScreenshot.sha256 === candidateScreenshot.sha256
-          ? 'unchanged'
-          : 'changed',
+      visual,
     },
     conclusion: conclusion(base, candidate, regression),
   };
 }
+
+function noVisual(reason: string): { visual: Visual; diff: null } {
+  return { visual: { kind: 'unavailable', reason }, diff: null };
+}
+
+const loadScreenshot = Effect.fnUntraced(function* (
+  directory: string,
+  side: Extract<Side, { execution: 'complete' }>,
+  label: string,
+) {
+  const artifact = side.capture.manifest.artifacts.find(
+    (item) => item.id === 'screenshot',
+  );
+
+  if (artifact === undefined) {
+    return {
+      kind: 'unsupported',
+      reason: `${label} screenshot is missing`,
+    } satisfies DecodedPng;
+  }
+
+  const root = yield* nodeIo(() => realpath(directory));
+  const read = yield* readVerifiedArtifact(root, artifact);
+  const decoded =
+    read.kind === 'available'
+      ? decodePng(read.bytes)
+      : ({ kind: 'unsupported', reason: read.reason } satisfies DecodedPng);
+
+  return decoded.kind === 'decoded'
+    ? decoded
+    : ({
+        kind: 'unsupported',
+        reason: `${label} screenshot: ${decoded.reason}`,
+      } satisfies DecodedPng);
+});
+
+const inspectVisual = Effect.fnUntraced(
+  function* (
+    baseDirectory: string | null,
+    candidateDirectory: string,
+    base: Side,
+    candidate: Side,
+  ) {
+    if (
+      baseDirectory === null ||
+      base.execution !== 'complete' ||
+      candidate.execution !== 'complete'
+    ) {
+      return noVisual('Complete screenshots on both sides are required');
+    }
+
+    const before = yield* loadScreenshot(baseDirectory, base, 'Base');
+
+    if (before.kind === 'unsupported') {
+      return noVisual(before.reason);
+    }
+
+    const after = yield* loadScreenshot(
+      candidateDirectory,
+      candidate,
+      'Candidate',
+    );
+
+    if (after.kind === 'unsupported') {
+      return noVisual(after.reason);
+    }
+
+    return comparePixels(before.image, after.image);
+  },
+  Effect.catchTag('EvidenceIoError', (error) =>
+    Effect.succeed(noVisual(`Screenshot could not be read (${error.code})`)),
+  ),
+);
 
 export const inspectComparison = Effect.fn('inspectComparison')(function* ({
   baseDirectory,
@@ -828,10 +885,21 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
           selection.candidateFailureArtifacts,
         );
 
-  return compareCaptures({
+  const mode = selection?.mode ?? 'comparison';
+  const pixels =
+    mode === 'comparison'
+      ? yield* inspectVisual(baseDirectory, candidateDirectory, base, candidate)
+      : noVisual('Preview has no baseline');
+  const result = compareCaptures({
     base,
     candidate,
     evaluatedAt,
-    mode: selection?.mode ?? 'comparison',
+    visual: pixels.visual,
+    mode,
   });
+
+  return {
+    result,
+    visualDiff: result.comparison.kind === 'available' ? pixels.diff : null,
+  };
 });

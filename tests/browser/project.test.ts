@@ -199,6 +199,7 @@ async function viewer(
   directory: string,
   mode: 'preview' | 'comparison',
   sourceHash: string,
+  highlightedRegions = 0,
 ) {
   await Effect.runPromise(
     Effect.gen(function* () {
@@ -243,7 +244,7 @@ async function viewer(
             'eval',
             '-b',
             Buffer.from(
-              '({images: document.querySelectorAll("#report img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("main details").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
+              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("main details").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
             ).toString('base64'),
           );
           const viewed = Schema.decodeUnknownSync(
@@ -279,6 +280,43 @@ async function viewer(
               ),
             )(opened).data.result,
           ).toBe(true);
+          if (highlightedRegions > 0) {
+            const regions = async () =>
+              Schema.decodeUnknownSync(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    data: Schema.Struct({ count: Schema.Number }),
+                  }),
+                ),
+              )(await browser('get', 'count', '[data-region]')).data.count;
+            expect(await regions()).toBe(0);
+            await browser('focus', 'input[type=checkbox]');
+            await browser('press', 'Space');
+            expect(await regions()).toBe(highlightedRegions * 2);
+            const crops = await browser(
+              'eval',
+              '[...document.querySelectorAll("[aria-labelledby=changed-regions] img")].filter((image) => image.complete && image.naturalWidth > 0).length',
+            );
+            expect(
+              Schema.decodeUnknownSync(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    data: Schema.Struct({ result: Schema.Number }),
+                  }),
+                ),
+              )(crops).data.result,
+            ).toBe(highlightedRegions * 2);
+            await browser(
+              'screenshot',
+              path.join(evidence, 'viewer-highlighted.png'),
+            );
+            const diff = await fetch(new URL('visual-diff.png', String(url)));
+            expect(diff.status).toBe(200);
+            expect(sha256(new Uint8Array(await diff.arrayBuffer()))).toBe(
+              sha256(await readFile(path.join(directory, 'visual-diff.png'))),
+            );
+          }
+
           const response = await fetch(
             new URL('candidate/requests.har', String(url)),
           );
@@ -312,6 +350,12 @@ test('compares a React commit with a duplicate-request worktree through the publ
     2,
   );
   expect(result.result.conclusion.kind).toBe('regression');
+  expect(result.result.comparison.kind).toBe('available');
+  expect(['identical', 'below-threshold']).toContain(
+    result.result.comparison.kind === 'available'
+      ? result.result.comparison.visual.kind
+      : result.result.comparison.kind,
+  );
   const before = await rawCapture(
     path.join(result.directory, 'base'),
     1,
@@ -359,9 +403,15 @@ test('compares a React commit with a duplicate-request worktree through the publ
   const visual = await observe(project, 'react-visual', ['--base', 'HEAD']);
   expect(visual.result.comparison).toMatchObject({
     kind: 'available',
-    visual: 'changed',
+    visual: { kind: 'changed', regionCount: 1 },
   });
   expect(visual.result.candidate.check.outcome).toBe('passed');
+  await viewer(
+    visual.directory,
+    'comparison',
+    visual.result.candidate.capture?.manifest.source.sha256 ?? 'no capture',
+    1,
+  );
 });
 
 test('previews a non-React app without checks and then applies its own POST expectation', async () => {

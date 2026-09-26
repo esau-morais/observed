@@ -1,8 +1,16 @@
 import * as stylex from '@stylexjs/stylex';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Comparison, Side } from '../comparison-model';
 import { fonts, geometry, media } from './constants.stylex';
-import { Artifacts, EvidenceLink, RequestLedger, Screenshot } from './evidence';
+import {
+  Artifacts,
+  ChangedRegions,
+  EvidenceLink,
+  RequestLedger,
+  Screenshot,
+  type Highlight,
+} from './evidence';
+import { describeRegion, describeVisual, diffLegend } from '../visual-text';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -115,6 +123,23 @@ const styles = stylex.create({
     outlineWidth: { default: 0, ':focus-visible': 2 },
   },
   nav: { display: 'flex', flexWrap: 'wrap', columnGap: 24, rowGap: 12 },
+  toggle: {
+    alignItems: 'center',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    gap: 8,
+    minHeight: geometry.target,
+  },
+  checkbox: {
+    accentColor: colors.focus,
+    height: 20,
+    margin: 0,
+    width: 20,
+    outlineColor: { default: colors.focus, [media.forcedColors]: 'Highlight' },
+    outlineOffset: 3,
+    outlineStyle: 'solid',
+    outlineWidth: { default: 0, ':focus-visible': 2 },
+  },
   skip: {
     backgroundColor: colors.surface,
     color: colors.text,
@@ -337,7 +362,16 @@ function Availability({ result }: { result: Comparison }) {
             <Field label="Request count difference (candidate minus base)">
               {comparison.requestDifference}
             </Field>
-            <Field label="Screenshot bytes">{comparison.visual}</Field>
+            <Field label="Screenshot pixels">
+              {describeVisual(comparison.visual)}
+              {comparison.visual.kind === 'changed' ? (
+                <ul {...stylex.props(styles.list)}>
+                  {comparison.visual.regions.map((region, index) => (
+                    <li key={index}>{describeRegion(region)}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </Field>
           </dl>
         </>
       )}
@@ -367,6 +401,11 @@ export function ComparisonReport({ result }: { result: Comparison }) {
   const failed =
     result.conclusion.kind === 'regression' ||
     result.conclusion.kind === 'check-failed';
+  const [highlighted, setHighlighted] = useState(false);
+  const visual =
+    result.comparison.kind === 'available' ? result.comparison.visual : null;
+  const highlight: Highlight | null =
+    highlighted && visual?.kind === 'changed' ? visual : null;
 
   return (
     <div {...stylex.props(styles.canvas)}>
@@ -404,11 +443,53 @@ export function ComparisonReport({ result }: { result: Comparison }) {
                 : 'Before and after'
             }
           >
+            {visual === null ? null : (
+              <div {...stylex.props(styles.stack)}>
+                <p {...stylex.props(styles.text)}>{describeVisual(visual)}</p>
+                {visual.kind === 'changed' ? (
+                  <div {...stylex.props(styles.nav)}>
+                    <label {...stylex.props(styles.toggle)}>
+                      <input
+                        type="checkbox"
+                        checked={highlighted}
+                        onChange={(event) =>
+                          setHighlighted(event.currentTarget.checked)
+                        }
+                        {...stylex.props(styles.checkbox)}
+                      />
+                      Highlight changed regions
+                    </label>
+                    <span {...stylex.props(styles.toggle)}>
+                      <EvidenceLink href={visual.diff.path}>
+                        Open pixel difference image
+                      </EvidenceLink>
+                    </span>
+                  </div>
+                ) : null}
+                {visual.kind === 'changed' ? (
+                  <p {...stylex.props(styles.small)}>{diffLegend}</p>
+                ) : null}
+              </div>
+            )}
             <div {...stylex.props(result.mode === 'comparison' && styles.grid)}>
               {sides.map(({ side, label }) => (
-                <Screenshot key={label} side={side} label={label} />
+                <Screenshot
+                  key={label}
+                  side={side}
+                  label={label}
+                  highlight={highlight}
+                />
               ))}
             </div>
+            {visual?.kind === 'changed' &&
+            result.base.screenshot !== null &&
+            result.candidate.screenshot !== null ? (
+              <ChangedRegions
+                visual={visual}
+                before={result.base.screenshot}
+                after={result.candidate.screenshot}
+              />
+            ) : null}
           </section>
 
           <details>

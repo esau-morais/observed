@@ -1,6 +1,5 @@
 import { DateTime, Effect, FileSystem, Schema } from 'effect';
-import { constants } from 'node:fs';
-import { open, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {
   digest,
@@ -13,9 +12,8 @@ import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
 import { selectionSchema, type Selection } from './comparison-model';
 import { renderComparison } from './comparison-report';
-import { inspectArtifact } from './evidence';
+import { readVerifiedArtifact } from './evidence';
 import { nodeIo, type EvidenceIoError } from './node-io';
-import type { Artifact } from './schema';
 
 export class ExportFailure extends Schema.TaggedError<ExportFailure>()(
   'ExportFailure',
@@ -55,57 +53,6 @@ export const viewerIntegritySchema = Schema.Struct({
       new Set(value.assets.map((asset) => asset.path)).size ===
         value.assets.length,
     { message: 'Viewer assets need one index.html and unique paths' },
-  ),
-);
-
-export const readVerifiedArtifact = Effect.fnUntraced(
-  function* (root: string, artifact: Artifact) {
-    const inspected = yield* inspectArtifact(root, artifact);
-
-    if (inspected.kind === 'unavailable') {
-      return inspected;
-    }
-
-    const handle = yield* Effect.acquireRelease(
-      nodeIo(() =>
-        open(
-          inspected.absolutePath,
-          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-        ),
-      ),
-      (owned) => nodeIo(() => owned.close()).pipe(Effect.orDie),
-    );
-
-    const stat = yield* nodeIo(() => handle.stat());
-
-    if (!stat.isFile()) {
-      return {
-        kind: 'unavailable',
-        reason: 'Artifact is not a regular file',
-      } as const;
-    }
-
-    const bytes = yield* nodeIo((signal) => handle.readFile({ signal }));
-
-    if (sha256(bytes) !== inspected.hash) {
-      return {
-        kind: 'unavailable',
-        reason: 'Artifact changed while reading',
-      } as const;
-    }
-
-    return {
-      kind: 'available',
-      bytes: new Uint8Array(bytes),
-      hash: inspected.hash,
-    } as const;
-  },
-  Effect.scoped,
-  Effect.catchTag('EvidenceIoError', (error) =>
-    Effect.succeed({
-      kind: 'unavailable',
-      reason: `Artifact could not be read (${error.code})`,
-    } as const),
   ),
 );
 
@@ -403,12 +350,20 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     { flag: 'wx' },
   );
 
-  const result = yield* inspectComparison({
+  const { result, visualDiff } = yield* inspectComparison({
     baseDirectory: base === null ? null : path.join(destination, 'base'),
     candidateDirectory: path.join(destination, 'candidate'),
     evaluatedAt,
     selection,
   });
+
+  if (visualDiff !== null) {
+    yield* fs.writeFile(
+      path.join(destination, visualDiff.path),
+      visualDiff.bytes,
+      { flag: 'wx' },
+    );
+  }
 
   const report = `> Archival report. Evidence inspected at ${evaluatedAt}. Start the local viewer to inspect the current bundle.\n\n${renderComparison(result)}`;
 

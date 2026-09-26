@@ -1,4 +1,5 @@
-import type { Comparison, Side } from './comparison-model';
+import type { Comparison, Side, Visual } from './comparison-model';
+import { describeRegion, describeVisual, diffLegend } from './visual-text';
 
 function escapeText(value: string): string {
   return value
@@ -54,6 +55,19 @@ function renderCheck(side: Side, label: string): string {
   ].join('\n\n');
 }
 
+function renderVisual(visual: Visual): string {
+  const summary = escapeText(describeVisual(visual));
+
+  if (visual.kind !== 'changed') {
+    return summary;
+  }
+
+  return [
+    `${summary} ${link('Open pixel difference image', visual.diff.path)} (SHA-256 ${visual.diff.sha256}). ${escapeText(diffLegend)}`,
+    ...visual.regions.map((box) => `  - ${escapeText(describeRegion(box))}`),
+  ].join('\n');
+}
+
 function renderAvailability(result: Comparison): string {
   const comparison = result.comparison;
 
@@ -68,7 +82,7 @@ function renderAvailability(result: Comparison): string {
   return [
     `Available. ${escapeText(comparison.basis)}`,
     `- Request count difference (candidate minus base): ${comparison.requestDifference}`,
-    `- Screenshot bytes: ${comparison.visual}`,
+    `- Screenshot pixels: ${renderVisual(comparison.visual)}`,
   ].join('\n\n');
 }
 
