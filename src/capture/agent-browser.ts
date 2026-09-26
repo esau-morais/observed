@@ -32,7 +32,7 @@ const filledSchema = Schema.Tuple([
 // agent-browser 0.38.1 omits the status of a request answered by a redirect,
 // and the next request in the chain reuses its requestId. Its HAR records the
 // same request with status 0.
-export const requestSchema = Schema.Struct({
+const requestSchema = Schema.Struct({
   requestId: Schema.NonEmptyString,
   url: Schema.URLFromString,
   method: Schema.NonEmptyString,

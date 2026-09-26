@@ -1,5 +1,5 @@
-// Observed records status 0 only for a request that a redirect answered: the
-// collector reports no status for it.
+// Status 0 means no response status was recorded, as for a request that a
+// redirect answered.
 export function describeStatus(status: number): string {
-  return status === 0 ? 'not recorded (redirected)' : String(status);
+  return status === 0 ? 'not recorded' : String(status);
 }
