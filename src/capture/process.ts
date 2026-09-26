@@ -114,7 +114,7 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
       return yield* new ProcessFailure({
         command: options.command,
         exitCode,
-        stderr: hide(redactText(stderr)),
+        stderr: redactText(stderr, options.concealed),
         message: `${options.command} exited with code ${exitCode}; see transcript.jsonl for original output`,
       });
     }
@@ -135,8 +135,8 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
               args: options.args.map(hide),
               startedAt,
               finishedAt,
-              stdout: hide(redactText(stdout)),
-              stderr: hide(redactText(stderr)),
+              stdout: redactText(stdout, options.concealed),
+              stderr: redactText(stderr, options.concealed),
               outcome: Exit.isSuccess(exit)
                 ? 'complete'
                 : hide(Cause.pretty(exit.cause)),

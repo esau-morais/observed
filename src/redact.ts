@@ -100,35 +100,45 @@ export function redact(value: unknown, body = false): unknown {
   return value;
 }
 
-export function redactText(value: string): string {
+export function redactText(
+  value: string,
+  known: readonly string[] = [],
+): string {
+  const input = conceal(value, known);
+
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = JSON.parse(input);
 
-    return `${JSON.stringify(redact(parsed))}\n`;
+    return conceal(`${JSON.stringify(redact(parsed))}\n`, known);
   } catch {
-    return value
-      .split('\n')
-      .map((line) => {
-        try {
-          const parsed: unknown = JSON.parse(line);
+    return conceal(
+      input
+        .split('\n')
+        .map((line) => {
+          try {
+            const parsed: unknown = JSON.parse(line);
 
-          return JSON.stringify(redact(parsed));
-        } catch {
-          return redactString(line);
-        }
-      })
-      .join('\n');
+            return JSON.stringify(redact(parsed));
+          } catch {
+            return redactString(line);
+          }
+        })
+        .join('\n'),
+      known,
+    );
   }
 }
 
-// Removes known values in the forms captured text can repeat them: as typed,
-// inside a JSON string, and inside a URL.
-export function conceal(value: string, secrets: Iterable<string>): string {
-  const forms = [...secrets]
+// agent-browser echoes batch input as JSON, and pages can send a value in a
+// path, a query string, or a form body.
+export function conceal(value: string, secrets: readonly string[]): string {
+  const forms = secrets
     .flatMap((secret) => [
       secret,
       JSON.stringify(secret).slice(1, -1),
       encodeURIComponent(secret),
+      encodeURI(secret),
+      new URLSearchParams([['', secret]]).toString().slice(1),
     ])
     .filter((form) => form !== '')
     .sort((left, right) => right.length - left.length);

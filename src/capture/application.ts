@@ -11,7 +11,7 @@ import { ChildProcess } from 'effect/unstable/process';
 import path from 'node:path';
 import { json } from '../encoding';
 import type { Project } from '../project';
-import { conceal, redactText } from '../redact';
+import { redactText } from '../redact';
 import { startProcess } from './process';
 
 export class ApplicationFailure extends Schema.TaggedError<ApplicationFailure>()(
@@ -109,7 +109,7 @@ export const startApplication = Effect.fn('startApplication')(
         yield* Effect.forEach(readers, (reader) => Fiber.join(reader));
         yield* fs.writeFileString(
           output,
-          conceal(redactText(capturedOutput), options.concealed ?? []),
+          redactText(capturedOutput, options.concealed),
         );
         const status = yield* handle.exitCode.pipe(
           Effect.match({

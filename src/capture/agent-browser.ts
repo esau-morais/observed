@@ -25,6 +25,10 @@ const response = <S extends Schema.Constraint>(data: S) =>
 
 const sessionSchema = response(Schema.Struct({ active: Schema.Boolean }));
 
+const filledSchema = Schema.Tuple([
+  Schema.Struct({ success: Schema.Literal(true) }),
+]);
+
 const requestSchema = Schema.Struct({
   requestId: Schema.NonEmptyString,
   url: Schema.URLFromString,
@@ -182,7 +186,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
     yield* fs.writeFileString(
       path.join(options.directory, filename),
-      conceal(redactText(output), concealed),
+      redactText(output, concealed),
       {
         flag: 'wx',
       },
@@ -224,9 +228,19 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
         // Batch input arrives on stdin, so the value stays out of process
         // arguments. Its echoed command output is concealed in the transcript.
-        return yield* command(
+        const output = yield* command(
           ['batch', '--bail'],
           JSON.stringify([['fill', action.selector, value]]),
+        );
+
+        return yield* decode(filledSchema, output).pipe(
+          Effect.mapError(
+            () =>
+              new BrowserFailure({
+                message: `agent-browser did not confirm the fill on ${action.selector}`,
+              }),
+          ),
+          Effect.as(output),
         );
       }
       case 'press':
@@ -400,7 +414,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   const harFile = path.join(options.directory, 'requests.har');
   const harText = yield* fs.readFileString(harFile);
-  yield* fs.writeFileString(harFile, conceal(redactText(harText), concealed));
+  yield* fs.writeFileString(harFile, redactText(harText, concealed));
   const har = yield* decode(harSchema, harText);
 
   if (
@@ -468,7 +482,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* fs.writeFileString(
     path.join(options.directory, 'observations.json'),
-    conceal(redactText(json(observations)), concealed),
+    redactText(json(observations), concealed),
     { flag: 'wx' },
   );
 

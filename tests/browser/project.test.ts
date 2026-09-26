@@ -77,20 +77,19 @@ async function command(
   return stdout;
 }
 
-async function copyProject(
-  name: 'request-lab' | 'shop' | 'fixtures/access-code',
-  label: string,
-) {
+const projects = {
+  'request-lab': 'examples/request-lab',
+  shop: 'examples/shop',
+  'access-code': 'tests/fixtures/access-code',
+};
+
+async function copyProject(name: keyof typeof projects, label: string) {
   const directory = path.join(evidence, label);
-  await cp(
-    path.join(root, name.startsWith('fixtures/') ? 'tests' : 'examples', name),
-    directory,
-    {
-      recursive: true,
-      filter: (source) =>
-        !['node_modules', 'dist'].includes(path.basename(source)),
-    },
-  );
+  await cp(path.join(root, projects[name]), directory, {
+    recursive: true,
+    filter: (source) =>
+      !['node_modules', 'dist'].includes(path.basename(source)),
+  });
   await command(['git', 'init', '--quiet'], directory);
   await command(['git', 'add', '.'], directory);
   await command(
@@ -560,76 +559,97 @@ async function transcript(directory: string) {
     );
 }
 
-test('an environment fill value reaches the page but no evidence file or command output', async () => {
-  const project = await copyProject('fixtures/access-code', 'access-code');
-  // Every encoded or escaped form of the value keeps this marker verbatim.
-  const marker = randomUUID();
-  const secret = `Heron "${marker}" lantern/?&`;
-  expect(
-    redactText(
+test.each([
+  { label: 'filled', selector: '#code', exit: 0 },
+  { label: 'unmatched', selector: '#missing-code', exit: 1 },
+])(
+  'an environment fill value that is $label reaches no evidence file or command output',
+  async ({ label, selector, exit }) => {
+    const project = await copyProject('access-code', `access-code-${label}`);
+    // Escaped and encoded copies keep the marker verbatim. Generic redaction
+    // must leave it too, so a clean bundle shows the known value was concealed.
+    const marker = randomUUID();
+    const secret = `Heron "${marker}" lantern/?&`;
+    expect(
+      redactText(
+        json({
+          selector,
+          value: secret,
+          path: `/session/${encodeURIComponent(secret)}`,
+        }),
+      ).split(marker),
+    ).toHaveLength(3);
+    const config = await readJson(
+      path.join(project, 'observed.json'),
+      projectSchema,
+    );
+    await writeFile(
+      path.join(project, 'observed.json'),
       json({
-        selector: '#code',
-        value: secret,
-        path: `/session/${encodeURIComponent(secret)}`,
-      }),
-    ).split(marker),
-  ).toHaveLength(3);
-  const config = await readJson(
-    path.join(project, 'observed.json'),
-    projectSchema,
-  );
-  await writeFile(
-    path.join(project, 'observed.json'),
-    json({
-      ...config,
-      capture: {
-        ...config.capture,
-        check: {
-          kind: 'text',
-          id: 'accepted',
-          name: 'Accepted code',
-          scope: 'After signing in',
-          selector: '[role="status"]',
-          expectedText: `Accepted ${new Bun.CryptoHasher('sha256').update(secret).digest('hex')}`,
+        ...config,
+        capture: {
+          ...config.capture,
+          steps: config.capture.steps.map((step) =>
+            step.kind === 'fill' ? { ...step, selector } : step,
+          ),
+          check: {
+            kind: 'text',
+            id: 'accepted',
+            name: 'Accepted code',
+            scope: 'After signing in',
+            selector: '[role="status"]',
+            expectedText: `Accepted ${new Bun.CryptoHasher('sha256').update(secret).digest('hex')}`,
+          },
         },
-      },
-    }),
-  );
-  const result = await observe(project, 'access-code-result', [], 0, {
-    ...process.env,
-    OBSERVED_ACCESS_CODE: secret,
-  });
-  expect(result.result.candidate.check.outcome).toBe('passed');
-  const capture = path.join(evidence, 'access-code-result/captures/candidate');
-  const fills = (await transcript(capture)).filter(
-    (record) => record.args.at(-2) === 'batch',
-  );
-  expect(fills).toHaveLength(1);
-  expect(fills[0]?.stdout).toContain('"command":["fill","#code","[REDACTED]"]');
-  expect(
-    await readFile(path.join(capture, 'application.log'), 'utf8'),
-  ).toContain('/session/[REDACTED]');
+      }),
+    );
+    const result = await observe(
+      project,
+      `access-code-${label}-result`,
+      [],
+      exit,
+      { ...process.env, OBSERVED_ACCESS_CODE: secret },
+    );
+    const capture = path.join(
+      evidence,
+      `access-code-${label}-result/captures/candidate`,
+    );
+    const fills = (await transcript(capture)).filter(
+      (record) => record.args.at(-2) === 'batch',
+    );
+    expect(fills).toHaveLength(1);
 
-  const leaks: string[] = [];
-
-  for (const entry of await readdir(evidence, {
-    recursive: true,
-    withFileTypes: true,
-  })) {
-    if (!entry.isFile()) {
-      continue;
+    if (exit === 0) {
+      expect(result.result.candidate.check.outcome).toBe('passed');
+      expect(
+        await readFile(path.join(capture, 'application.log'), 'utf8'),
+      ).toContain('/session/[REDACTED]');
+    } else {
+      expect(result.result.candidate.execution).toBe('capture-failed');
+      expect(result.result.candidate.check.outcome).not.toBe('passed');
     }
 
-    const filename = path.join(entry.parentPath, entry.name);
-    const bytes = await readFile(filename);
+    const leaks: string[] = [];
 
-    if (bytes.includes(marker)) {
-      leaks.push(filename);
+    for (const entry of await readdir(evidence, {
+      recursive: true,
+      withFileTypes: true,
+    })) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const filename = path.join(entry.parentPath, entry.name);
+      const bytes = await readFile(filename);
+
+      if (bytes.includes(marker)) {
+        leaks.push(filename);
+      }
     }
-  }
 
-  expect(leaks).toEqual([]);
-});
+    expect(leaks).toEqual([]);
+  },
+);
 
 test.each([
   { label: 'unset', value: undefined },
@@ -637,10 +657,7 @@ test.each([
 ])(
   'an $label fill variable fails the capture instead of filling a blank value',
   async ({ label, value }) => {
-    const project = await copyProject(
-      'fixtures/access-code',
-      `access-code-${label}`,
-    );
+    const project = await copyProject('access-code', `access-code-${label}`);
     const env = Object.fromEntries(
       Object.entries(process.env).filter(
         ([name]) => name !== 'OBSERVED_ACCESS_CODE',
