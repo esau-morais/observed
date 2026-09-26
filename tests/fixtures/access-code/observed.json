@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "name": "Access code",
+  "source": {
+    "entry": "server.ts",
+    "paths": ["server.ts", "index.html"]
+  },
+  "setup": [],
+  "start": ["bun", "server.ts"],
+  "ready": { "path": "/", "status": 200 },
+  "capture": {
+    "name": "Sign in with a code",
+    "path": "/",
+    "ready": [{ "kind": "wait-selector", "selector": "#code" }],
+    "steps": [
+      {
+        "kind": "fill",
+        "selector": "#code",
+        "value": { "env": "OBSERVED_ACCESS_CODE" }
+      },
+      { "kind": "click-role", "role": "button", "name": "Sign in" },
+      { "kind": "wait-text", "text": "Accepted" },
+      { "kind": "network-idle" }
+    ],
+    "browserArguments": ["--no-sandbox"]
+  }
+}

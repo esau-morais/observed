@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Effect, Schema } from 'effect';
 import { httpOriginSchema, text } from './model';
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -20,7 +20,12 @@ export const stepSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal('fill'),
     selector: text,
-    value: Schema.String,
+    value: Schema.Union([
+      Schema.String,
+      Schema.Struct({
+        env: text.check(Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/)),
+      }),
+    ]),
   }),
   Schema.Struct({ kind: Schema.Literal('press'), key: text }),
   Schema.Struct({ kind: Schema.Literal('wait-text'), text }),
@@ -87,3 +92,40 @@ export const parseRecipe = Schema.decodeUnknownEffect(
   Schema.fromJsonString(recipeSchema),
   { onExcessProperty: 'error' },
 );
+
+export class FillValueFailure extends Schema.TaggedError<FillValueFailure>()(
+  'FillValueFailure',
+  { message: Schema.String },
+) {}
+
+// An empty value is rejected too: CI systems commonly expand an unavailable
+// secret to an empty string, and filling it would capture a different journey.
+export const resolveFillValues = (
+  recipe: Recipe,
+  environment: Readonly<Record<string, string | undefined>>,
+) => {
+  const values = new Map<string, string>();
+  const missing = new Set<string>();
+
+  for (const step of [...recipe.ready, ...recipe.steps]) {
+    if (step.kind !== 'fill' || typeof step.value === 'string') {
+      continue;
+    }
+
+    const value = environment[step.value.env];
+
+    if (value === undefined || value === '') {
+      missing.add(step.value.env);
+    } else {
+      values.set(step.value.env, value);
+    }
+  }
+
+  return missing.size === 0
+    ? Effect.succeed(values)
+    : Effect.fail(
+        new FillValueFailure({
+          message: `Fill value unavailable. Missing or empty environment variables: ${[...missing].join(', ')}`,
+        }),
+      );
+};

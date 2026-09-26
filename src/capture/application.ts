@@ -11,7 +11,7 @@ import { ChildProcess } from 'effect/unstable/process';
 import path from 'node:path';
 import { json } from '../encoding';
 import type { Project } from '../project';
-import { redactText } from '../redact';
+import { conceal, redactText } from '../redact';
 import { startProcess } from './process';
 
 export class ApplicationFailure extends Schema.TaggedError<ApplicationFailure>()(
@@ -24,6 +24,7 @@ export const startApplication = Effect.fn('startApplication')(
     workspace: string;
     evidenceDirectory: string;
     project: Project;
+    concealed?: readonly string[];
   }) {
     const fs = yield* FileSystem.FileSystem;
     const reservation = yield* Effect.sync(() =>
@@ -106,7 +107,10 @@ export const startApplication = Effect.fn('startApplication')(
       Effect.gen(function* () {
         yield* Scope.close(processScope, exit);
         yield* Effect.forEach(readers, (reader) => Fiber.join(reader));
-        yield* fs.writeFileString(output, redactText(capturedOutput));
+        yield* fs.writeFileString(
+          output,
+          conceal(redactText(capturedOutput), options.concealed ?? []),
+        );
         const status = yield* handle.exitCode.pipe(
           Effect.match({
             onSuccess: (code) => ({ kind: 'exited', code }) as const,

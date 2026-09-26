@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Access code</title>
+  </head>
+  <body>
+    <main>
+      <form>
+        <label for="code">Access code</label>
+        <input id="code" type="password" required />
+        <button type="submit">Sign in</button>
+      </form>
+      <p role="status">Ready</p>
+    </main>
+    <script type="module">
+      const input = document.querySelector('#code');
+      const status = document.querySelector('[role="status"]');
+
+      document.querySelector('form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        fetch(`/session/${encodeURIComponent(input.value)}`, { method: 'POST' })
+          .then((response) => response.json())
+          .then((body) => {
+            status.textContent = `Accepted ${body.digest}`;
+          });
+      });
+    </script>
+  </body>
+</html>

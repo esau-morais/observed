@@ -120,3 +120,21 @@ export function redactText(value: string): string {
       .join('\n');
   }
 }
+
+// Removes known values in the forms captured text can repeat them: as typed,
+// inside a JSON string, and inside a URL.
+export function conceal(value: string, secrets: Iterable<string>): string {
+  const forms = [...secrets]
+    .flatMap((secret) => [
+      secret,
+      JSON.stringify(secret).slice(1, -1),
+      encodeURIComponent(secret),
+    ])
+    .filter((form) => form !== '')
+    .sort((left, right) => right.length - left.length);
+
+  return forms.reduce(
+    (text, form) => text.replaceAll(form, '[REDACTED]'),
+    value,
+  );
+}

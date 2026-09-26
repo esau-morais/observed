@@ -9,7 +9,7 @@ import {
   Stream,
 } from 'effect';
 import { ChildProcess } from 'effect/unstable/process';
-import { redact, redactText } from '../redact';
+import { conceal, redact, redactText } from '../redact';
 
 export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()(
   'ProcessFailure',
@@ -63,8 +63,11 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
   env?: Record<string, string | undefined>;
   transcript: string;
   timeoutMs?: number;
+  stdin?: string;
+  concealed?: readonly string[];
 }) {
   const fs = yield* FileSystem.FileSystem;
+  const hide = (value: string) => conceal(value, options.concealed ?? []);
   const startedAt = DateTime.formatIso(yield* DateTime.now);
   let stdout = '';
   let stderr = '';
@@ -74,7 +77,10 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
       ChildProcess.make(options.command, options.args, {
         cwd: options.cwd,
         ...(options.env === undefined ? {} : { env: options.env }),
-        stdin: 'ignore',
+        stdin:
+          options.stdin === undefined
+            ? 'ignore'
+            : Stream.make(new TextEncoder().encode(options.stdin)),
         stdout: 'pipe',
         stderr: 'pipe',
         forceKillAfter: '2 seconds',
@@ -108,7 +114,7 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
       return yield* new ProcessFailure({
         command: options.command,
         exitCode,
-        stderr: redactText(stderr),
+        stderr: hide(redactText(stderr)),
         message: `${options.command} exited with code ${exitCode}; see transcript.jsonl for original output`,
       });
     }
@@ -126,14 +132,14 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
           `${JSON.stringify(
             redact({
               command: options.command,
-              args: options.args,
+              args: options.args.map(hide),
               startedAt,
               finishedAt,
-              stdout: redactText(stdout),
-              stderr: redactText(stderr),
+              stdout: hide(redactText(stdout)),
+              stderr: hide(redactText(stderr)),
               outcome: Exit.isSuccess(exit)
                 ? 'complete'
-                : Cause.pretty(exit.cause),
+                : hide(Cause.pretty(exit.cause)),
             }),
           )}\n`,
           { flag: 'a' },

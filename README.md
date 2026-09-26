@@ -49,6 +49,15 @@ HTTP(S) origins, such as `["http://127.0.0.1:4000"]`. Request checks match the
 application origin by default; set the check's `origin` to one of those allowed
 origins to check that service. Observations version 2 records each request's origin.
 
+A `fill` step's `value` is either literal text, exported as written, or an
+environment reference such as `{ "env": "LOGIN_PASSWORD" }`. Recipes and evidence
+keep only the variable name. Observed reads the variable when the capture runs,
+and a missing or empty variable fails the capture. The value reaches agent-browser
+on stdin, not in process arguments. Observed removes it from the transcript and
+other text evidence, including JSON-escaped and URL-encoded copies. Screenshots
+keep whatever the page draws, so fill secrets only into fields that mask them,
+such as password inputs.
+
 `capture`, `compare`, and `view` support individual steps and saved evidence.
 `compare none <capture>` exports a preview and uses the same exit codes as `observe`.
 `view` opens a saved bundle as it was evaluated at export. It still rejects
