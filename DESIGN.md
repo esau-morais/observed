@@ -255,7 +255,11 @@ Use the Pixel focus composition as the default: centered headline, one pixel wor
 
 ### Evidence viewer
 
-Start with the behavior and conclusion, then comparable before/after observations. Keep evidence and source references one action away. Show the active filter and total result count. Unknowns should remain discoverable even when the default view emphasizes differences.
+Start with the captured application. Show both versions when a comparison was
+requested; otherwise show the standalone capture. Keep the page name, selected
+revisions, and unavailable captures visible. Keep checks, requests, and source
+details easy to reach without crowding the main view. A capture with no configured
+check must not imply a pass.
 
 A code diff, screenshot, request list, timing comparison, or state transition can each be the primary view. Pick the view that explains this change; do not force every case into a component tree or network graph.
 

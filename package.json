@@ -8,25 +8,49 @@
     "bun": "1.4.2"
   },
   "scripts": {
+    "start": "bun scripts/start.ts",
+    "setup": "bun node_modules/agent-browser/bin/agent-browser.js install",
+    "observe": "bun src/workflow-cli.ts run",
+    "capture": "bun src/workflow-cli.ts capture",
+    "compare": "bun src/workflow-cli.ts compare",
+    "view": "bun src/workflow-cli.ts view",
+    "verify": "bun run --bun vitest run --config vitest.browser.config.ts",
     "report": "bun src/cli.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "typecheck": "bun run --bun tsc --noEmit",
     "lint": "bun run --bun eslint . && bun run --bun prettier --check .",
+    "lint:fix": "bun run --bun eslint --fix",
     "format": "bun run --bun prettier --write .",
     "test": "bun run --bun vitest run",
-    "build": "bun run --bun tsc -p tsconfig.build.json"
+    "build": "bun run --bun tsc -p tsconfig.build.json && bun run --bun vite build"
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.0-rc.117",
-    "effect": "4.0.0-rc.117"
+    "@fontsource/geist": "5.3.0",
+    "@fontsource/geist-mono": "5.3.0",
+    "@stylexjs/stylex": "0.19.1",
+    "effect": "4.0.0-rc.117",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@stylexjs/eslint-plugin": "0.19.1",
+    "@stylexjs/unplugin": "0.19.1",
+    "@stylistic/eslint-plugin": "5.10.0",
+    "@types/bun": "1.4.2",
     "@types/node": "22.19.15",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "agent-browser": "0.38.1",
     "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.9",
     "typescript": "5.9.3",
     "typescript-eslint": "8.70.1",
+    "unplugin": "2.3.11",
+    "vite": "8.3.0",
     "vitest": "5.0.1"
   }
 }

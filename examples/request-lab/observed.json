@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "name": "Request lab",
+  "source": {
+    "entry": "server.ts",
+    "paths": [
+      "App.tsx",
+      "base.ts",
+      "main.tsx",
+      "items.ts",
+      "index.html",
+      "style.css",
+      "tokens.stylex.ts",
+      "build.ts",
+      "server.ts",
+      "package.json",
+      "bun.lock"
+    ]
+  },
+  "setup": [
+    ["bun", "install", "--frozen-lockfile"],
+    ["bun", "run", "build"]
+  ],
+  "start": ["bun", "run", "start"],
+  "ready": { "path": "/", "status": 200 },
+  "capture": {
+    "name": "Load items",
+    "path": "/",
+    "ready": [
+      { "kind": "wait-text", "text": "Load items" },
+      { "kind": "network-idle" }
+    ],
+    "steps": [
+      { "kind": "click-role", "role": "button", "name": "Load items" },
+      { "kind": "wait-text", "text": "Items loaded" },
+      { "kind": "network-idle" }
+    ],
+    "check": {
+      "kind": "request-count",
+      "id": "one-items-request",
+      "name": "One request per load action",
+      "scope": "One Load items click through completion and network idle.",
+      "method": "GET",
+      "path": "/api/items",
+      "expectedCount": 1,
+      "status": 200
+    },
+    "browserArguments": ["--no-sandbox"],
+    "viewport": { "width": 1120, "height": 800, "scale": 1 }
+  }
+}

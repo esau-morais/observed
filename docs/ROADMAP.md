@@ -1,10 +1,14 @@
 # Observed roadmap
 
-## Current state and next action
+## Implementation priority
 
-Specifications and visual concepts exist. No runnable Observed application, pilot, or production integration has been verified. Stack and workflow decisions are in [AGENTS.md](../AGENTS.md).
+The next implementation milestone is Phase 1: open a code change and see the
+running result. Support a standalone preview for a new screen, and a comparison
+when an earlier version is useful.
 
-Start with Phase 0. Assemble a report from real existing artifacts while observing repeated verification work. Do not build the full adapter list before checking whether people use the report.
+The first milestone requires two projects using the same capture path without
+core edits. Keep the adoption study separate: working code does not establish
+that people find it useful.
 
 Read only the document relevant to the task:
 
@@ -18,29 +22,29 @@ Read only the document relevant to the task:
 
 ## Milestones
 
-Estimates assume one experienced builder and pilot access. They are planning ranges, not commitments. Advance when the exit condition holds.
+Advance when the exit condition holds.
 
-| Phase | Effort | Deliverable and exit condition |
-| --- | --- | --- |
-| 0. Validate | About 1 week | Reports from existing artifacts. Developers use the combined view and repeated verification pain is observed |
-| 1. First report | About 2 weeks | One capture adapter, bundle, local viewer, explicit checks. A seeded runtime regression, intentional change, and missing baseline produce truthful results |
-| 2. Repeatable use | About 2 weeks | Executed recipes, isolated runs, one existing hook or CI trigger, export. Fresh-checkout runs need no recurring setup help; stale or failed captures never pass |
-| 3. One extension | About 1 to 2 weeks | Choose Slack delivery, an existing-test importer, deeper performance, or an API operation from pilot demand. It saves work and preserves the report contract |
-| 4. Bounded repair | About 2 weeks after reliable checks | Agent handoff, isolated patches, protected checks, budgets, independent reruns. Repair stops correctly and improves on manual handoff |
-| Later | Demand-led | Database, jobs, traces, additional frameworks, and optional proof adapters, each tied to a recurring workflow |
+| Phase | Deliverable and exit condition |
+| --- | --- |
+| 0. Validate | Reports from existing artifacts. Developers use the combined view and repeated verification pain is observed |
+| 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, including non-React, use the same runner without core edits. Optional checks distinguish failed expectations from visual changes; missing requested captures stay visible |
+| 2. Repeatable use | Executed recipes, isolated runs, one existing hook or CI trigger, export. Fresh-checkout runs need no recurring setup help; stale or failed captures never pass |
+| 3. One extension | Choose Slack delivery, an existing-test importer, deeper performance, or an API operation from pilot demand. It saves work and preserves the report contract |
+| 4. Bounded repair | Agent handoff, isolated patches, protected checks, budgets, independent reruns. Repair stops correctly and improves on manual handoff |
+| Later | Database, jobs, traces, additional frameworks, and optional proof adapters, each tied to a recurring workflow |
 
 ## First implementation sequence
 
 Do not create code merely to satisfy every row at once. Each item should support a reviewable change.
 
-1. Define the bundle using attributable fixtures, including an unavailable check. Preserve identity through export.
-2. Render the report from fixtures. A reader can find the changed behavior and distinguish observations from suggestions.
-3. Add agent-browser capture for one real journey. Pin its version and expose unsupported evidence.
-4. Compare a base and candidate under recorded conditions. A duplicate-request regression fails; an intentional visual change does not become a regression automatically.
-5. Handle missing auth, collector crashes, fixture mismatch, stale revisions, and interrupted runs without false passes.
-6. Execute and save a recipe that works after a fresh checkout. Cleanup retains evidence.
-7. Add one existing trigger and export destination. Retries update one revision-bound result without duplicate jobs or comments.
-8. Validate another agent environment and a non-React browser app without changing core evidence types. Add an API-only operation when backend expansion begins.
+1. Define the project configuration and immutable evidence contract. Agents can prepare configuration; Observed generates capture manifests.
+2. Run project-supplied startup commands and browser actions from isolated, identified source. Pin the recipe and expectations before either capture.
+3. Open the captured application first, with a comparison when requested. Keep source details and requests available on demand.
+4. Evaluate optional expectations independently of application routes or framework. Preserve unknown results for missing, stale, corrupted, and failed evidence.
+5. Exercise the same public workflow on two separate projects with different startup commands, actions, endpoints, and expected results. Include a non-React app. Neither application may require a core branch or fixture import.
+6. Retain focused integration tests for seeded regressions, intentional changes, missing baselines, timeout/cancellation, and evidence faults. Use the existing test runner; do not build an application-specific verification product.
+7. Repeat from a fresh checkout and inspect a relocated bundle. Cleanup retains immutable evidence and stops owned resources.
+8. Add one existing trigger and export destination after the project workflow works. Validate another agent environment. Add an API-only operation when backend expansion begins.
 
 ## Pilot and continuation gates
 
@@ -73,7 +77,7 @@ Follow the focused test policy in AGENTS.md. Avoid feature-existence checks, pro
 ## Optional experiments
 
 - Jev: after real routing cases accumulate, compare it with rules and the existing model on roughly 150 to 300 labeled cases, split by repository or later time. Measure missed required checks, abstentions, latency, and total cost. Include stale and adversarial inputs. Keep it optional and retain it only with a demonstrated advantage. This is screening, not rare-event safety evidence.
-- Lean and Bend: after Phase 1, allow two or three days outside the critical path. Use the same small retry/cancellation invariant and correct and faulty examples. Pin tools; compare setup, specification effort, proof maintenance, and clean/incremental checking. Inspect incomplete proofs, assumptions, and escape mechanisms. Default to Lean for a production proof adapter unless evidence favors Bend for a specific case.
+- Lean and Bend: after Phase 1, use the same small retry/cancellation invariant and correct and faulty examples. Pin tools; compare setup, specification effort, proof maintenance, and clean/incremental checking. Inspect incomplete proofs, assumptions, and escape mechanisms. Default to Lean for a production proof adapter unless evidence favors Bend for a specific case.
 - Existing TypeScript invariants: try property-based testing before translating code into another language. For state-machine exploration, evaluate TLA+/TLC with explicit model bounds. A model result still needs a justified connection to implementation.
 
 Revisit Slack versus backend priority, a persistent runner, and native React instrumentation only when pilot evidence identifies a repeated need.

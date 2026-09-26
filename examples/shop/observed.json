@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "Sample shop",
+  "source": {
+    "entry": "server.ts",
+    "paths": ["server.ts", "app.ts", "index.html"]
+  },
+  "setup": [
+    ["bun", "build", "app.ts", "--outdir", "dist", "--target", "browser"]
+  ],
+  "start": ["bun", "server.ts"],
+  "ready": { "path": "/", "status": 200 },
+  "capture": {
+    "name": "Place an order",
+    "path": "/",
+    "ready": [{ "kind": "wait-selector", "selector": "#name" }],
+    "steps": [
+      { "kind": "fill", "selector": "#name", "value": "Ada" },
+      { "kind": "click-role", "role": "button", "name": "Place order" },
+      { "kind": "wait-text", "text": "Order received" },
+      { "kind": "network-idle" }
+    ],
+    "browserArguments": ["--no-sandbox"]
+  }
+}

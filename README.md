@@ -1,35 +1,60 @@
 # Observed
 
-Observed shows what a software change did, using evidence from the running system. Compare revisions, inspect changed behavior, and follow findings back to code. When a check fails, an existing coding agent can use the evidence to fix it, then Observed runs verification again.
+See what you just built.
 
-Planned as an open-source, self-hostable tool for any coding agent and application framework, with local operation, portable reports, and optional AI. Browser applications come first.
+Observed captures the result of a code change in the running app. Preview a new
+screen, put two versions side by side, or inspect the requests behind a click.
+Your coding agent can prepare the project configuration and run captures. You
+open the result.
 
-> **Status: Phase 0 report CLI.** Observed generates Markdown from imported evidence,
-> validates artifact references, and checks supplied hashes. Behavior results remain
-> labeled as imported. The flow below describes the intended final system,
-> including unimplemented capture, comparison, viewer, and repair paths.
+Everything runs locally. No model or account is required to capture or view it.
 
-## Generate a report
+## Try it
 
-Install the Bun version declared in `package.json`, then run:
+With Bun **1.4.2** installed, run from the checkout:
 
 ```bash
-bun install --frozen-lockfile
-mkdir -p evidence
-run_dir="$(mktemp -d evidence/report-example.XXXXXX)"
-cp -R tests/fixtures/todomvc/. "$run_dir/"
-bun run report "$run_dir/manifest.json" "$run_dir/report.md"
+bun start
 ```
 
-Expect **1 imported passed, 0 imported failed, and 1 unknown check** from the
-[TodoMVC excerpt](tests/fixtures/todomvc/README.md). Revision comparison is unknown.
+This installs dependencies and the browser, captures the Request lab example,
+and starts the viewer. Open the printed localhost URL. Press Ctrl+C to stop.
 
-For your evidence, place a version 1 manifest and artifacts in one directory, then
-run `bun run report path/to/manifest.json path/to/new-report.md`. The output parent
-must exist and the output file must be new. Missing evidence is reported as unknown.
-Exit success means written, not behavior verified. See the
-[schema](src/schema.ts) and [example manifest](tests/fixtures/todomvc/manifest.json).
-Keep the input bundle immutable during generation and review.
+Observed creates the evidence files. You don't write a manifest or collect
+screenshots by hand.
+
+<details>
+<summary>Agent capture and import interfaces</summary>
+
+Create `observed.json` using the [project contract](src/project.ts). It supplies
+the source paths, setup/start commands, readiness, and page actions. Checks are
+optional. The [React example](examples/request-lab/observed.json) and
+[plain browser example](examples/shop/observed.json) use the same entry point.
+
+Use `bun run observe /path/to/app --json` for a preview, or add `--base HEAD` to
+compare the worktree with a commit. The JSON result includes the viewer directory
+and check outcomes. Exit codes: `0` completed, `1` unavailable, `2` a named check
+failed. A completed capture is not a claim that the whole application is correct.
+
+For an app using a separate API or asset host, set `capture.allowedOrigins` to its
+HTTP(S) origins, such as `["http://127.0.0.1:4000"]`. Request checks match the
+application origin by default; set the check's `origin` to one of those allowed
+origins to check that service. Observations version 2 records each request's origin.
+
+`capture`, `compare`, and `view` support individual steps and saved evidence.
+`compare none <capture>` exports a preview and uses the same exit codes as `observe`.
+`view` opens a saved bundle as it was evaluated at export. It still rejects
+evidence whose bytes changed afterward.
+
+The version 1 importer accepts generated evidence bundles through
+`bun run report <manifest.json> <new-report.md>`. The output parent must exist and
+the output file must be new. Behavior claims remain labeled imported; missing
+evidence is unknown. Exit success means written, not behavior verified.
+
+See the [schema](src/schema.ts), [example manifest](tests/fixtures/todomvc/manifest.json),
+and [TodoMVC provenance](tests/fixtures/todomvc/README.md). Keep input bundles immutable.
+
+</details>
 
 Development checks:
 
@@ -37,9 +62,12 @@ Development checks:
 bun run check
 ```
 
+`bun run test` runs the Vitest unit tests. `bun run verify` exercises capture and
+the viewer against both example projects. Plain `bun test` stops with a pointer to
+these scripts.
 Reports and captures stay local under gitignored `evidence/`.
 
-## The complete flow
+## The planned complete flow
 
 ```mermaid
 flowchart TD

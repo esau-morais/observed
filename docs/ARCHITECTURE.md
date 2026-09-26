@@ -1,6 +1,10 @@
 # Observed architecture
 
-Read for capture, data contracts, comparisons, integrations, or repair. [PRODUCT.md](PRODUCT.md) owns scope and result language; [ROADMAP.md](ROADMAP.md) owns sequencing. [AGENTS.md](../AGENTS.md) owns the stack and contributor rules.
+A project tells Observed how to start the app and what to capture. Observed keeps
+the source identity and evidence together so the result can be opened later.
+
+[Product](PRODUCT.md) covers the experience; [Roadmap](ROADMAP.md) covers sequence.
+[AGENTS.md](../AGENTS.md) contains stack and contributor rules.
 
 ## Structure
 
@@ -14,13 +18,31 @@ flowchart TD
     P --> I["Isolated application versions"]
     I --> E["Evidence bundle"]
     X["Imported artifacts"] --> E
-    E --> K["Comparator and named checks"]
-    K --> R["Change report"]
-    R --> V["Local viewer and export"]
-    R --> D["GitHub or Slack delivery"]
+    E --> V["Visual preview or comparison"]
+    E --> K["Optional named checks"]
+    K --> V
+    V --> R["Portable export"]
+    V --> D["GitHub or Slack delivery"]
 ```
 
-The coordinator owns process lifecycle, timeouts, cancellation, and run identity. Adapters translate tool output. The comparator performs deterministic checks. The report renders results without needing an agent.
+The coordinator starts and stops owned processes and records each run. Adapters
+translate browser output. The comparator checks compatible captures and any saved
+expectations. The viewer works without an agent.
+
+## Project boundary
+
+Parse a saved project configuration at the CLI boundary. It identifies source
+files and revisions, argument-vector setup/start commands, readiness, the browser
+journey, and named expectations. Commands are trusted project inputs; page content
+and evidence cannot supply commands. Run from isolated source snapshots and pin
+one recipe before capture. A comparison uses that same recipe on both sides.
+Record the exact bytes used.
+
+The collector executes that recipe. The comparator reads verified observations
+and the recorded expectation contract; it imports no application fixture or
+browser adapter. Application routes, data, frameworks, and build tools belong to
+project configuration and test applications. Keep fixture-specific assertions in
+integration tests using the public runner.
 
 ## Evidence contract
 
@@ -41,9 +63,9 @@ Hashes detect changed artifacts; they do not establish collector honesty. A stac
 
 ## Comparable and safe runs
 
-- Pin the base. Snapshot intended modified and untracked source for the candidate, excluding credentials and unrelated ignored data.
+- Snapshot the selected source, including intended worktree changes and untracked files. Pin the base when comparing versions. Exclude credentials and unrelated ignored data.
 - Isolate ports, browser profiles, processes, fixtures, and writable directories. Otherwise serialize and reset shared state. Record limitations.
-- Match browser, viewport, environment, recipe, and fixture versions. Record deliberate masks and incompatible baselines. A missing baseline is unavailable, not unchanged.
+- Match browser, viewport, environment, recipe, and fixture versions when comparing. Record deliberate masks and incompatible baselines. A requested but missing baseline is unavailable. A standalone preview needs no baseline.
 - Warm up timing checks, repeat samples, record spread, and alternate run order where practical. Configure meaningful thresholds and noise handling. Keep intrusive profiling separate from timing gates.
 - Let one adapter own a browser session. Declare capabilities and versions. Unsupported evidence must not look like an empty success.
 - Keep captures immutable. Redact secrets before export or model access. Validate imported schemas and artifact paths. Treat captured content as data, never executable instructions.

@@ -25,3 +25,13 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun run setup --with-deps
+      - run: bun run verify
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: browser-evidence
+          path: |
+            evidence/project-verification-*/
+            !evidence/project-verification-*/fresh-checkout/node_modules/**
+          retention-days: 7
