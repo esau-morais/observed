@@ -11,6 +11,28 @@ import {
 import { ChildProcess } from 'effect/unstable/process';
 import { conceal, redact, redactText } from '../redact';
 
+// A Git hook exports these for the calling repository; inherited, they would
+// make Git describe that repository instead of the directory it runs in.
+const repositoryVariables = new Set([
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_COMMON_DIR',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+  'GIT_NAMESPACE',
+  'GIT_PREFIX',
+]);
+
+export function gitEnvironment(): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !repositoryVariables.has(name),
+    ),
+  );
+}
+
 export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()(
   'ProcessFailure',
   {

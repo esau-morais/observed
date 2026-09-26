@@ -129,6 +129,11 @@ const loadSide = Effect.fnUntraced(
         'source-transcript.jsonl',
         'Source revision selection',
       ],
+      [
+        'observed-transcript',
+        'observed-transcript.jsonl',
+        "Observed's source commit detection",
+      ],
       ['owner', 'owner.json', 'Run ownership'],
     ] as const) {
       const artifact = { id, path: filename, description };

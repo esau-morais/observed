@@ -412,13 +412,15 @@ test('compares a React commit with a duplicate-request worktree through the publ
     source: {
       kind: 'git',
       commit: (await command(['git', 'rev-parse', 'HEAD'])).trim(),
-      trackedChanges:
-        (await command([
-          'git',
-          'status',
-          '--porcelain',
-          '--untracked-files=no',
-        ])) !== '',
+      trackedChanges: (await command(['git', 'diff', '--name-only', 'HEAD']))
+        .split('\n')
+        .some(
+          (file) =>
+            file !== '' &&
+            !`/${file}`.startsWith(
+              `/${path.relative(root, project).split(path.sep).join('/')}/`,
+            ),
+        ),
     },
   };
   expect(before.observed).toEqual(observed);

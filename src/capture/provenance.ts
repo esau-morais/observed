@@ -1,43 +1,42 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { commitSchema, text, type Observed } from './model';
-import { processOutput } from './process';
+import { gitEnvironment, processOutput } from './process';
 
 const packageSchema = Schema.fromJsonString(
   Schema.Struct({ name: Schema.Literal('observed'), version: text }),
 );
-
-// A Git hook exports these for the calling repository; inherited, they would
-// make Git describe that repository instead of Observed's checkout.
-const repositoryVariables = new Set([
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_INDEX_FILE',
-  'GIT_COMMON_DIR',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_CEILING_DIRECTORIES',
-  'GIT_NAMESPACE',
-  'GIT_PREFIX',
-]);
 
 class SourceUnavailable extends Schema.TaggedError<SourceUnavailable>()(
   'SourceUnavailable',
   { reason: Schema.String },
 ) {}
 
+export const observedVersion = Effect.fn('observedVersion')(function* (
+  toolRoot: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const { version } = yield* Schema.decodeUnknownEffect(packageSchema)(
+    yield* fs.readFileString(path.join(toolRoot, 'package.json')),
+  );
+
+  return version;
+});
+
 export const observedProvenance = Effect.fn('observedProvenance')(
-  function* (options: { toolRoot: string; transcript: string }) {
+  function* (options: {
+    toolRoot: string;
+    projectRoot: string;
+    transcript: string;
+  }) {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.realPath(options.toolRoot);
-    const { version } = yield* Schema.decodeUnknownEffect(packageSchema)(
-      yield* fs.readFileString(path.join(root, 'package.json')),
+    const version = yield* observedVersion(root);
+    const project = path.relative(
+      root,
+      yield* fs.realPath(options.projectRoot),
     );
-    const env = Object.fromEntries(
-      Object.entries(process.env).filter(
-        ([name]) => !repositoryVariables.has(name),
-      ),
-    );
+    const env = gitEnvironment();
 
     const git = (args: readonly string[], failure: string) =>
       processOutput({
@@ -97,8 +96,25 @@ export const observedProvenance = Effect.fn('observedProvenance')(
           "Observed's checkout has no HEAD commit",
         )).trim(),
       );
+      // An application inside Observed's checkout, such as an example, is the
+      // captured source; its edits are not changes to Observed.
+      const nested =
+        project !== '' &&
+        project !== '..' &&
+        !project.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(project);
       const status = yield* git(
-        ['status', '--porcelain', '-z', '--untracked-files=no'],
+        [
+          'status',
+          '--porcelain',
+          '-z',
+          '--untracked-files=no',
+          '--',
+          '.',
+          ...(nested
+            ? [`:(exclude,literal)${project.split(path.sep).join('/')}`]
+            : []),
+        ],
         "Git could not report changes in Observed's checkout",
       );
 

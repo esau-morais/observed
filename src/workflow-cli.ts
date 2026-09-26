@@ -4,6 +4,7 @@ import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { captureApplication } from './capture/coordinator';
+import { observedVersion } from './capture/provenance';
 import type { Comparison } from './comparison-model';
 import { json } from './encoding';
 import { exportComparison } from './export';
@@ -231,9 +232,13 @@ const view = Command.make(
   }),
 ).pipe(Command.withDescription('View a saved comparison'));
 
-Command.make('observed').pipe(
-  Command.withSubcommands([run, capture, compare, view]),
-  Command.run({ version: '0.1.0' }),
+observedVersion(toolRoot).pipe(
+  Effect.flatMap((version) =>
+    Command.make('observed').pipe(
+      Command.withSubcommands([run, capture, compare, view]),
+      Command.run({ version }),
+    ),
+  ),
   Effect.provideService(
     Console.Console,
     process.argv.some(

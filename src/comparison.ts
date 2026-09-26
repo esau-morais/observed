@@ -28,7 +28,6 @@ import {
 import { nodeIo } from './node-io';
 import { decodePng, type DecodedPng } from './png';
 import { relativePathSchema } from './project';
-import { describeObserved } from './provenance-text';
 import { comparePixels } from './visual';
 
 const requiredArtifacts = [
@@ -691,17 +690,43 @@ function observedSourceNotes(base: Side, candidate: Side): string[] {
     return [];
   }
 
-  const modified = [before, after].some(
-    ({ source }) => source.kind === 'git' && source.trackedChanges,
+  const sides = [
+    { name: 'base', source: before.source },
+    { name: 'candidate', source: after.source },
+  ] as const;
+  const notes: string[] = [];
+  const unknown = sides.flatMap(({ name, source }) =>
+    source.kind === 'unavailable' ? [{ name, reason: source.reason }] : [],
   );
 
-  if (!modified && isDeepStrictEqual(before.source, after.source)) {
-    return [];
+  const [first, second] = unknown;
+
+  if (first !== undefined) {
+    const subject =
+      second === undefined ? `the ${first.name} capture` : 'both captures';
+
+    notes.push(
+      `Observed's source commit is unknown for ${subject}, so the same Observed ${after.version} code cannot be confirmed on both sides. ${unknown.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}.`,
+    );
+  } else if (
+    before.source.kind === 'git' &&
+    after.source.kind === 'git' &&
+    before.source.commit !== after.source.commit
+  ) {
+    notes.push(
+      `Both captures report Observed ${after.version}, but from different commits (base ${before.source.commit}, candidate ${after.source.commit}), so the observations may come from different code.`,
+    );
   }
 
-  return [
-    `Both captures report Observed ${after.version}, but its commits differ or include uncommitted tracked changes, so the observations may come from different code. Base: ${describeObserved(before)}. Candidate: ${describeObserved(after)}.`,
-  ];
+  for (const side of sides) {
+    if (side.source.kind === 'git' && side.source.trackedChanges) {
+      notes.push(
+        `The ${side.name} capture ran Observed ${after.version} with uncommitted tracked changes, so commit ${side.source.commit} does not identify its code.`,
+      );
+    }
+  }
+
+  return notes;
 }
 
 export function compareCaptures({

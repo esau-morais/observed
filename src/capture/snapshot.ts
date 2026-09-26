@@ -6,7 +6,7 @@ import { json, sha256 } from '../encoding';
 import { nodeIo, type EvidenceIoError } from '../node-io';
 import { relativePathSchema, type Project } from '../project';
 import { commitSchema, sourceSchema, type Source } from './model';
-import { processOutput } from './process';
+import { gitEnvironment, processOutput } from './process';
 
 export class SourceFailure extends Schema.TaggedError<SourceFailure>()(
   'SourceFailure',
@@ -82,6 +82,7 @@ const workingFiles = Effect.fnUntraced(function* (
 const readGitBlob = Effect.fnUntraced(function* (root: string, object: string) {
   const handle = yield* ChildProcess.make('git', ['cat-file', 'blob', object], {
     cwd: root,
+    env: gitEnvironment(),
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'ignore',
@@ -123,6 +124,7 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
         command: 'git',
         args,
         cwd: root,
+        env: gitEnvironment(),
         transcript: path.join(options.directory, 'source-transcript.jsonl'),
       });
 

@@ -51,10 +51,11 @@ function git(cwd: string, ...args: string[]) {
   ).trim();
 }
 
-function provenance(toolRoot: string) {
+function provenance(toolRoot: string, projectRoot = toolRoot) {
   return Effect.runPromise(
     observedProvenance({
       toolRoot,
+      projectRoot,
       transcript: path.join(toolRoot, 'observed-transcript.jsonl'),
     }).pipe(Effect.provide(BunServices.layer)),
   );
@@ -126,5 +127,30 @@ test('flags tracked changes but not untracked files in Observed checkout', async
   expect(await provenance(root)).toEqual({
     version: '9.9.10-test',
     source: { kind: 'git', commit, trackedChanges: true },
+  });
+});
+
+test('edits to an application inside Observed checkout are not Observed changes', async () => {
+  const root = await observedRoot(await temporary());
+  const application = path.join(root, 'examples/app [1]');
+  await mkdir(application, { recursive: true });
+  await writeFile(path.join(application, 'server.ts'), 'export {};\n');
+  git(root, 'init', '--quiet');
+  git(root, 'add', '.');
+  git(root, 'commit', '--quiet', '-m', 'Observed with an example');
+
+  await writeFile(path.join(application, 'server.ts'), 'export const a = 1;\n');
+  expect((await provenance(root, application)).source).toMatchObject({
+    kind: 'git',
+    trackedChanges: false,
+  });
+
+  await writeFile(
+    path.join(root, 'package.json'),
+    JSON.stringify({ name: 'observed', version: '9.9.11-test' }),
+  );
+  expect((await provenance(root, application)).source).toMatchObject({
+    kind: 'git',
+    trackedChanges: true,
   });
 });

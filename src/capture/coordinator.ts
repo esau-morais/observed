@@ -66,6 +66,7 @@ export const captureApplication = Effect.fn('captureApplication')(
 
     const observed = yield* observedProvenance({
       toolRoot: options.toolRoot,
+      projectRoot: options.projectRoot,
       transcript: path.join(directory, 'observed-transcript.jsonl'),
     });
 

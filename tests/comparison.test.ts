@@ -36,7 +36,6 @@ import {
   type Visual,
 } from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
-import { describeObserved } from '../src/provenance-text';
 import { exportComparison } from '../src/export';
 import { encodeRgbPng } from '../src/png';
 import { serveReport } from '../src/view';
@@ -922,19 +921,55 @@ test.each(['application', 'conditions', 'producer', 'observed'] as const)(
   },
 );
 
+const dirtySource = { ...observed.source, trackedChanges: true } as const;
+const unknownSource = {
+  kind: 'unavailable',
+  reason: 'Synthetic tarball install',
+} as const;
+
 test.each([
-  { commit: 'c'.repeat(40), trackedChanges: false },
-  { commit: observed.source.commit, trackedChanges: true },
+  {
+    name: 'different commits',
+    base: observed.source,
+    candidate: { ...observed.source, commit: 'c'.repeat(40) },
+    expected: [
+      `from different commits (base ${'a'.repeat(40)}, candidate ${'c'.repeat(40)})`,
+    ],
+  },
+  {
+    name: 'uncommitted changes on both sides of one commit',
+    base: dirtySource,
+    candidate: dirtySource,
+    expected: [
+      'The base capture ran Observed 0.0.0-synthetic with uncommitted tracked changes',
+      'The candidate capture ran Observed 0.0.0-synthetic with uncommitted tracked changes',
+    ],
+  },
+  {
+    name: 'one unknown commit',
+    base: observed.source,
+    candidate: unknownSource,
+    expected: [
+      "Observed's source commit is unknown for the candidate capture",
+      'candidate: Synthetic tarball install',
+    ],
+  },
+  {
+    name: 'two unknown commits',
+    base: unknownSource,
+    candidate: unknownSource,
+    expected: ["Observed's source commit is unknown for both captures"],
+  },
 ])(
-  'discloses Observed code that may differ under one version without blocking the comparison (%o)',
-  async (candidateSource) => {
+  'discloses Observed code that may differ under one version without blocking the comparison: $name',
+  async (sources) => {
     const base = await syntheticBundle();
     const candidate = await syntheticBundle();
-    const source = { kind: 'git', ...candidateSource } as const;
 
-    for (const bundle of candidateSource.trackedChanges
-      ? [base, candidate]
-      : [candidate]) {
+    for (const [bundle, source] of [
+      [base, sources.base],
+      [candidate, sources.candidate],
+    ] as const) {
       await saveManifest(bundle.directory, {
         ...bundle.capture,
         observed: { ...observed, source },
@@ -947,11 +982,17 @@ test.each([
       candidate: await inspect(candidate.directory),
       evaluatedAt,
     });
+    const limitations = result.limitations.join('\n');
 
     expect(result.comparison.kind).toBe('available');
-    expect(result.limitations.join('\n')).toContain(
-      `Candidate: ${describeObserved({ ...observed, source })}.`,
-    );
+
+    for (const text of sources.expected) {
+      expect(limitations).toContain(text);
+    }
+
+    if (sources.name !== 'different commits') {
+      expect(limitations).not.toContain('different commits');
+    }
   },
 );
 
@@ -1010,6 +1051,20 @@ test('marks a schema version 3 capture unavailable with the reason instead of re
     'Baseline unavailable: Capture manifest schema version 3 is unsupported',
   );
   expect(exported.result.candidate.check.outcome).toBe('passed');
+});
+
+test('tells the reader to update Observed for a newer capture schema instead of recapturing', async () => {
+  const bundle = await syntheticBundle();
+
+  await saveManifest(bundle.directory, { ...bundle.capture, schemaVersion: 5 });
+
+  const side = await inspect(bundle.directory);
+
+  expect(side.execution).toBe('unavailable');
+  expect(side.check.detail).toContain(
+    'Capture manifest schema version 5 is unsupported. It was written by a newer Observed',
+  );
+  expect(side.check.detail).toContain('Update Observed.');
 });
 
 test.each([
