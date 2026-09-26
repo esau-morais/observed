@@ -90,9 +90,9 @@ Reports and captures stay local under gitignored `evidence/`.
 
 Observed's GitHub Action captures your saved journey on the pull request's base
 and candidate, compares the two, and uploads the evidence as a workflow artifact.
-Your repository needs a committed `observed.json` (see the agent interfaces
-above). The job needs an Ubuntu runner with passwordless `sudo`, which
-GitHub-hosted runners provide.
+Your repository needs a committed `observed.json` following the
+[project contract](src/project.ts). The job needs an Ubuntu runner with
+passwordless `sudo`, which GitHub-hosted runners provide.
 
 Add `.github/workflows/observed.yml`:
 
@@ -133,8 +133,9 @@ jobs:
 - Keep the `pull_request` trigger. Do not use `pull_request_target`: the action
   needs no secrets or write access, and pull request code must not receive them.
 
-The action installs Bun 1.4.2 and runs your setup and start commands with it on
-`PATH`. It installs the browser and its system packages with apt.
+The action installs the Bun version pinned in Observed's `package.json` and runs
+your setup and start commands with it on `PATH`. It installs the browser and its
+system packages with apt.
 
 | Exit code | Conclusion | Job |
 | --- | --- | --- |
@@ -143,13 +144,14 @@ The action installs Bun 1.4.2 and runs your setup and start commands with it on
 | 2 | A named check failed or regressed | Fails |
 
 The job summary states the conclusion and each side's revision, capture state,
-and check outcome. The `observed-bundle` artifact is uploaded for failed runs too
-and kept for 7 days. It holds the raw captures, `result.json`, and the exported
-viewer. To open it, download it and run `bun run view <download>/run/report` from
-an Observed checkout.
+and check outcome. Whenever the capture step ran, including failed comparisons,
+the `observed-bundle` artifact is uploaded and kept for 7 days. It holds the raw
+captures, `result.json`, and the exported viewer. To open it, download it and run
+`bun run view <download>/run/report` from an Observed checkout.
 
 Optional inputs: `candidate` (default `HEAD`), `timeout` per capture in
-milliseconds (default `120000`), `artifact-name`, and `retention-days`.
+milliseconds (default `120000`), `artifact-name`, and `retention-days`. Give each
+call a distinct `artifact-name` when one job runs the action more than once.
 
 Journeys with `fill` steps are not supported yet. Observed writes fill values
 into the exported evidence, so a typed password or token would be published in

@@ -26,19 +26,27 @@ test('CI summaries never present unavailable or unreadable results as passing', 
     exitCode: 1,
     artifact: 'observed-bundle',
   });
+  const mismatched = summarize({
+    output: json({ directory: '/bundle', result }),
+    exitCode: 0,
+    artifact: 'observed-bundle',
+  });
   const unreadable = summarize({
     output: '{"result":{"conclusion":{"kind":"no-regression"}}}',
     exitCode: 0,
     artifact: 'observed-bundle',
   });
 
-  expect(unavailable.readable).toBe(true);
+  expect(unavailable.trusted).toBe(true);
   expect(unavailable.markdown).toContain('## Observed: Unavailable');
   expect(unavailable.markdown).toContain('This is not a pass');
-  expect(unreadable.readable).toBe(false);
-  expect(unreadable.markdown).toContain('## Observed: no result');
 
-  for (const { markdown } of [unavailable, unreadable]) {
+  for (const summary of [mismatched, unreadable]) {
+    expect(summary.trusted).toBe(false);
+    expect(summary.markdown).toContain('## Observed: no result');
+  }
+
+  for (const { markdown } of [unavailable, mismatched, unreadable]) {
     expect(markdown).not.toContain('job passes');
   }
 });

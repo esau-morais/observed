@@ -213,6 +213,15 @@ export const comparisonSchema = Schema.Struct({
 
 export type Comparison = typeof comparisonSchema.Type;
 
+export const conclusionExitCodes = {
+  regression: 2,
+  'check-failed': 2,
+  unavailable: 1,
+  'no-regression': 0,
+  'not-checked': 0,
+  preview: 0,
+} satisfies Record<Comparison['conclusion']['kind'], number>;
+
 export type Side = typeof sideSchema.Type;
 
 export type Check = Side['check'];

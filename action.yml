@@ -21,11 +21,6 @@ inputs:
     description: Days GitHub keeps the artifact.
     default: '7'
 
-outputs:
-  exit-code:
-    description: 0 no failure found, 1 evidence unavailable, 2 a named check failed or regressed.
-    value: ${{ steps.observe.outputs.exit-code }}
-
 runs:
   using: composite
   steps:
