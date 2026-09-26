@@ -15,6 +15,12 @@ Next, run the pilot gates below. They choose the Phase 3 extension. Keep the
 adoption study separate: working code does not establish that people find it
 useful.
 
+Decision, 2026-09-26: the maintainer moved GitHub App and Slack delivery ahead of
+the pilot, so pilot participants see results where they already work. Slack is
+therefore no longer a Phase 3 option. [PRODUCT.md](PRODUCT.md#github-slack-and-unattended-use)
+and [ARCHITECTURE.md](ARCHITECTURE.md#reuse-and-adapters) own the delivery rules;
+remote actions still wait for authorization and run identity work.
+
 Read only the document relevant to the task:
 
 | Task | Document |
@@ -34,7 +40,7 @@ Advance when the exit condition holds.
 | 0. Validate | Reports from existing artifacts. Developers use the combined view and repeated verification pain is observed |
 | 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, including non-React, use the same runner without core edits. Optional checks distinguish failed expectations from visual changes; missing requested captures stay visible |
 | 2. Repeatable use | Executed recipes, isolated runs, one existing hook or CI trigger, export. Fresh-checkout runs need no recurring setup help; stale or failed captures never pass |
-| 3. One extension | Choose Slack delivery, an existing-test importer, deeper performance, or an API operation from pilot demand. It saves work and preserves the report contract |
+| 3. One extension | Choose an existing-test importer, deeper performance, or an API operation from pilot demand. It saves work and preserves the report contract |
 | 4. Bounded repair | Agent handoff, isolated patches, protected checks, budgets, independent reruns. Repair stops correctly and improves on manual handoff |
 | Later | Database, jobs, traces, additional frameworks, and optional proof adapters, each tied to a recurring workflow |
 
@@ -85,7 +91,7 @@ Follow the focused test policy in AGENTS.md. Avoid feature-existence checks, pro
 - Lean and Bend: after Phase 1, use the same small retry/cancellation invariant and correct and faulty examples. Pin tools; compare setup, specification effort, proof maintenance, and clean/incremental checking. Inspect incomplete proofs, assumptions, and escape mechanisms. Default to Lean for a production proof adapter unless evidence favors Bend for a specific case.
 - Existing TypeScript invariants: try property-based testing before translating code into another language. For state-machine exploration, evaluate TLA+/TLC with explicit model bounds. A model result still needs a justified connection to implementation.
 
-Revisit Slack versus backend priority, a persistent runner, and native React instrumentation only when pilot evidence identifies a repeated need.
+Revisit backend priority, a persistent runner, and native React instrumentation only when pilot evidence identifies a repeated need.
 
 References for experiments: [Jev](https://docs.typesafe.ai/introduction), [Lean](https://lean-lang.org/), [Bend](https://bend-lang.com/), [fast-check](https://fast-check.dev/), [TLA+](https://lamport.azurewebsites.net/tla/tla.html). Recheck current documentation before selecting versions or claiming support.
 
