@@ -87,7 +87,12 @@ const stageCapture = Effect.fnUntraced(function* (
 
   const capture = yield* parseCapture(
     new TextDecoder().decode(manifest.bytes),
-  ).pipe(Effect.catchTag('SchemaError', () => Effect.succeed(null)));
+  ).pipe(
+    Effect.catchTags({
+      SchemaError: () => Effect.succeed(null),
+      UnsupportedCapture: () => Effect.succeed(null),
+    }),
+  );
 
   if (capture === null) {
     return;

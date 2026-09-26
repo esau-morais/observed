@@ -392,8 +392,37 @@ test('compares a React commit with a duplicate-request worktree through the publ
     200,
   );
   expect(before.source.sha256).not.toBe(after.source.sha256);
-  expect(before.source.revision).toMatch(/^[a-f0-9]{40}$/);
-  expect(after.source.revision).toBe('worktree');
+  expect(before.source.revision).toEqual({
+    kind: 'commit',
+    commit: await command(['git', 'rev-parse', 'HEAD'], project).then(
+      (output) => output.trim(),
+    ),
+  });
+  expect(after.source.revision).toEqual({
+    kind: 'worktree',
+    head: before.source.revision,
+  });
+  const observed = {
+    version: (
+      await readJson(
+        path.join(root, 'package.json'),
+        Schema.Struct({ version: Schema.String }),
+      )
+    ).version,
+    source: {
+      kind: 'git',
+      commit: (await command(['git', 'rev-parse', 'HEAD'])).trim(),
+      trackedChanges:
+        (await command([
+          'git',
+          'status',
+          '--porcelain',
+          '--untracked-files=no',
+        ])) !== '',
+    },
+  };
+  expect(before.observed).toEqual(observed);
+  expect(after.observed).toEqual(observed);
   expect(await pageTree(path.join(result.directory, 'candidate'))).toEqual(
     await pageTree(path.join(result.directory, 'base')),
   );

@@ -109,6 +109,11 @@ const loadSide = Effect.fnUntraced(
             kind: 'unavailable',
             issue: `${label} manifest is malformed or unsupported`,
           } as const),
+        UnsupportedCapture: (error) =>
+          Effect.succeed({
+            kind: 'unavailable',
+            issue: `${label} unavailable: ${error.message}`,
+          } as const),
       }),
     );
 

@@ -70,6 +70,13 @@ test('source identity includes executable permissions and preserves binary and u
   const after = await snapshot(root, 'after');
 
   expect(before.sha256).not.toBe(after.sha256);
+  expect(after.revision).toEqual({
+    kind: 'worktree',
+    head: {
+      kind: 'unavailable',
+      reason: 'The project is not in a Git work tree',
+    },
+  });
   expect(after.files.map((file) => file.path)).toEqual([
     'app/asset.bin',
     'app/start.sh',

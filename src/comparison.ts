@@ -28,6 +28,7 @@ import {
 import { nodeIo } from './node-io';
 import { decodePng, type DecodedPng } from './png';
 import { relativePathSchema } from './project';
+import { describeObserved } from './provenance-text';
 import { comparePixels } from './visual';
 
 const requiredArtifacts = [
@@ -412,13 +413,19 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
 
     const parsed = yield* parseCapture(manifestText.text).pipe(
       Effect.map((capture) => ({ kind: 'parsed', capture }) as const),
-      Effect.catchTag('SchemaError', () =>
-        Effect.succeed({ kind: 'invalid' } as const),
-      ),
+      Effect.catchTags({
+        SchemaError: () =>
+          Effect.succeed({
+            kind: 'invalid',
+            reason: 'Capture manifest is malformed or unsupported',
+          } as const),
+        UnsupportedCapture: ({ message }) =>
+          Effect.succeed({ kind: 'invalid', reason: message } as const),
+      }),
     );
 
     if (parsed.kind === 'invalid') {
-      return unavailable('Capture manifest is malformed or unsupported');
+      return unavailable(parsed.reason);
     }
 
     const capture = parsed.capture;
@@ -649,6 +656,12 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
       reasons.push('Capture producers differ');
     }
 
+    if (before.observed.version !== after.observed.version) {
+      reasons.push(
+        `Observed versions differ (base ${before.observed.version}, candidate ${after.observed.version}), so observations may be derived differently`,
+      );
+    }
+
     if (
       !isDeepStrictEqual(
         comparableConditions(before),
@@ -664,6 +677,24 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
   }
 
   return reasons;
+}
+
+function observedSourceNotes(base: Side, candidate: Side): string[] {
+  const before = base.capture?.manifest.observed;
+  const after = candidate.capture?.manifest.observed;
+
+  if (
+    before === undefined ||
+    after === undefined ||
+    before.version !== after.version ||
+    isDeepStrictEqual(before.source, after.source)
+  ) {
+    return [];
+  }
+
+  return [
+    `Both captures report Observed ${after.version} from different sources, so their observations may come from different code. Base: ${describeObserved(before)}. Candidate: ${describeObserved(after)}.`,
+  ];
 }
 
 export function compareCaptures({
@@ -685,7 +716,7 @@ export function compareCaptures({
   const firstReason = reasons[0];
 
   const common = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     mode,
     title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
     evaluatedAt,
@@ -697,6 +728,7 @@ export function compareCaptures({
       'Checks cover only their stated expectations. Browser errors remain available as evidence.',
       'Screenshot differences are observations of rendered pixels, not a visual regression.',
       'Artifact hashes detect changed bytes; they do not establish collector honesty or source causation.',
+      ...(mode === 'comparison' ? observedSourceNotes(base, candidate) : []),
     ],
   } as const;
 
@@ -757,7 +789,7 @@ export function compareCaptures({
     comparison: {
       kind: 'available',
       basis:
-        'Complete, intact captures with the same protected recipe, application, producer, and recorded conditions.',
+        'Complete, intact captures with the same protected recipe, application, producer, Observed version, and recorded conditions.',
       requestDifference:
         candidate.observations.requests.length -
         base.observations.requests.length,

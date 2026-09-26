@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
+import { describeRevision } from '../provenance-text';
 import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
 import { colors } from './tokens.stylex';
@@ -170,7 +171,7 @@ export function Screenshot({
         {capture?.label ?? 'No capture'}
         {capture === null
           ? ''
-          : ` · ${capture.source.revision ?? 'snapshot'} · ${capture.source.sha256.slice(0, 12)}`}
+          : ` · ${describeRevision(capture.source.revision)} · ${capture.source.sha256.slice(0, 12)}`}
       </p>
       {side.screenshot === null ? (
         <p {...stylex.props(styles.missing)}>

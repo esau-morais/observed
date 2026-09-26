@@ -178,7 +178,7 @@ export type Visual = typeof visualSchema.Type;
 export type VisualRegion = typeof visualRegion.Type;
 
 export const comparisonSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(4),
+  schemaVersion: Schema.Literal(5),
   mode: Schema.Literals(['preview', 'comparison']),
   title: text,
   evaluatedAt: timestamp,

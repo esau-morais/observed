@@ -30,4 +30,8 @@ export const recipe = {
 export const recipeText = json(recipe);
 export const recipeHash = sha256(recipeText);
 export const producer = { name: 'synthetic-tests', version: '1' };
+export const observed = {
+  version: '0.0.0-synthetic',
+  source: { kind: 'git', commit: 'a'.repeat(40), trackedChanges: false },
+} as const;
 export const fixtureHash = sha256('synthetic test inputs');

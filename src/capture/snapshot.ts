@@ -5,7 +5,7 @@ import path from 'node:path';
 import { json, sha256 } from '../encoding';
 import { nodeIo, type EvidenceIoError } from '../node-io';
 import { relativePathSchema, type Project } from '../project';
-import { sourceSchema, type Source } from './model';
+import { commitSchema, sourceSchema, type Source } from './model';
 import { processOutput } from './process';
 
 export class SourceFailure extends Schema.TaggedError<SourceFailure>()(
@@ -115,7 +115,8 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
       string,
       { object: string | null; executable: boolean }
     >();
-    let revision = 'worktree';
+    let label = 'worktree';
+    let revision: Source['revision'];
 
     const git = (args: readonly string[]) =>
       processOutput({
@@ -135,9 +136,11 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
         '--',
         '.',
       ];
+      let tracked = true;
       const inventory = yield* git(listArguments).pipe(
         Effect.catchTag('ProcessFailure', () =>
           Effect.gen(function* () {
+            tracked = false;
             const emptyGit = yield* fs.makeTempDirectoryScoped({
               prefix: 'observed-index-',
             });
@@ -153,6 +156,26 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
           }),
         ),
       );
+      revision = {
+        kind: 'worktree',
+        head: tracked
+          ? yield* git(['rev-parse', '--verify', 'HEAD^{commit}']).pipe(
+              Effect.flatMap((output) =>
+                Schema.decodeUnknownEffect(commitSchema)(output.trim()),
+              ),
+              Effect.map((commit) => ({ kind: 'commit', commit }) as const),
+              Effect.catchTag('ProcessFailure', () =>
+                Effect.succeed({
+                  kind: 'unavailable',
+                  reason: 'The Git repository has no HEAD commit',
+                } as const),
+              ),
+            )
+          : {
+              kind: 'unavailable',
+              reason: 'The project is not in a Git work tree',
+            },
+      };
       const included = new Set(
         inventory
           .split('\0')
@@ -192,10 +215,9 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
         '--end-of-options',
         `${options.revision}^{commit}`,
       ])).trim();
-      yield* Schema.decodeUnknownEffect(
-        Schema.String.check(Schema.isPattern(/^[a-f0-9]{40,64}$/)),
-      )(commit);
-      revision = commit;
+      yield* Schema.decodeUnknownEffect(commitSchema)(commit);
+      label = commit;
+      revision = { kind: 'commit', commit };
       const prefix = (yield* git(['rev-parse', '--show-prefix'])).trim();
       const tree = yield* git(['ls-tree', '-rz', '--full-tree', commit]);
 
@@ -233,7 +255,7 @@ export const snapshotApplication = Effect.fn('snapshotApplication')(
 
     if (!files.has(options.source.entry)) {
       return yield* new SourceFailure({
-        message: `Source entry ${options.source.entry} is absent or excluded in ${revision}`,
+        message: `Source entry ${options.source.entry} is absent or excluded in ${label}`,
       });
     }
 

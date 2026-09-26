@@ -3,8 +3,14 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { ApplicationFailure, startApplication } from './application';
 import { captureBrowser, producer } from './agent-browser';
-import { captureSchema, type Capture, type CaptureArtifact } from './model';
+import {
+  captureSchema,
+  captureSchemaVersion,
+  type Capture,
+  type CaptureArtifact,
+} from './model';
 import { processOutput } from './process';
+import { observedProvenance } from './provenance';
 import { json, sha256 } from '../encoding';
 import { conceal } from '../redact';
 import type { Project } from '../project';
@@ -57,6 +63,11 @@ export const captureApplication = Effect.fn('captureApplication')(
       }),
       { flag: 'wx' },
     );
+
+    const observed = yield* observedProvenance({
+      toolRoot: options.toolRoot,
+      transcript: path.join(directory, 'observed-transcript.jsonl'),
+    });
 
     const source = yield* snapshotApplication({
       projectRoot: options.projectRoot,
@@ -118,6 +129,11 @@ export const captureApplication = Effect.fn('captureApplication')(
       'source-transcript',
       'source-transcript.jsonl',
       'Source revision selection',
+    );
+    addArtifact(
+      'observed-transcript',
+      'observed-transcript.jsonl',
+      "Observed's source commit detection",
     );
     addArtifact('application', 'application.json', 'Owned application process');
     addArtifact('application-log', 'application.log', 'Application output');
@@ -315,7 +331,7 @@ export const captureApplication = Effect.fn('captureApplication')(
           }
 
           manifest = yield* Schema.decodeUnknownEffect(captureSchema)({
-            schemaVersion: 3,
+            schemaVersion: captureSchemaVersion,
             kind: 'capture',
             id,
             label: options.label,
@@ -323,6 +339,7 @@ export const captureApplication = Effect.fn('captureApplication')(
             source,
             recipe: { id: recipe.id, sha256: recipeHash },
             producer,
+            observed,
             conditions,
             startedAt,
             finishedAt,
