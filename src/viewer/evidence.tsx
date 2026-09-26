@@ -196,44 +196,42 @@ export function Screenshot({
           Screenshot unavailable. See unresolved evidence.
         </p>
       ) : (
-        <>
-          <a
-            href={resolve(side.screenshot)}
-            {...stylex.props(styles.link, styles.imageLink)}
-          >
-            {failed ? (
-              <p {...stylex.props(styles.missing)}>
-                Image could not be displayed. Open original screenshot.
-              </p>
-            ) : (
-              <span {...stylex.props(styles.frame)}>
-                <img
-                  src={resolve(side.screenshot)}
-                  alt={`${label} captured application. Open full-size screenshot.`}
-                  loading="eager"
-                  onError={() => setFailed(true)}
-                  {...stylex.props(styles.image)}
+        <a
+          href={resolve(side.screenshot)}
+          {...stylex.props(styles.link, styles.imageLink)}
+        >
+          {failed ? (
+            <p {...stylex.props(styles.missing)}>
+              Image could not be displayed. Open original screenshot.
+            </p>
+          ) : (
+            <span {...stylex.props(styles.frame)}>
+              <img
+                src={resolve(side.screenshot)}
+                alt={`${label} captured application. Open full-size screenshot.`}
+                loading="eager"
+                onError={() => setFailed(true)}
+                {...stylex.props(styles.image)}
+              />
+              {highlight?.regions.map((region, index) => (
+                <span
+                  key={index}
+                  aria-hidden="true"
+                  data-region=""
+                  {...stylex.props(
+                    styles.region,
+                    styles.regionBox(
+                      percent(region.x, highlight.width),
+                      percent(region.y, highlight.height),
+                      percent(region.width, highlight.width),
+                      percent(region.height, highlight.height),
+                    ),
+                  )}
                 />
-                {highlight?.regions.map((region, index) => (
-                  <span
-                    key={index}
-                    aria-hidden="true"
-                    data-region=""
-                    {...stylex.props(
-                      styles.region,
-                      styles.regionBox(
-                        percent(region.x, highlight.width),
-                        percent(region.y, highlight.height),
-                        percent(region.width, highlight.width),
-                        percent(region.height, highlight.height),
-                      ),
-                    )}
-                  />
-                ))}
-              </span>
-            )}
-          </a>
-        </>
+              ))}
+            </span>
+          )}
+        </a>
       )}
     </figure>
   );

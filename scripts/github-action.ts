@@ -42,10 +42,10 @@ const alerts = {
 const consequences = {
   regression: 'The job fails.',
   'check-failed': 'The job fails.',
-  unavailable: 'This is not a pass. The job fails.',
+  unavailable: 'Missing evidence is not a pass. The job fails.',
   'no-regression': 'The job passes.',
   'not-checked': 'The job passes.',
-  preview: 'A preview verifies no behavior. The job passes.',
+  preview: 'A preview compares no revisions. The job passes.',
 } satisfies Record<Kind, string>;
 
 // GitHub autolinks bare URLs even when their punctuation is escaped.
@@ -225,7 +225,7 @@ export function summarize(options: {
     ...(links.length === 0 ? [] : [links.join(' · ')]),
     ...(page === null ? [`No report page was uploaded. ${bundle}`] : []),
     collapsed('Limits and raw evidence', [
-      ...(result.comparison.kind === 'unavailable'
+      ...(result.comparison.kind === 'unavailable' && failures.length > 0
         ? result.comparison.reasons.map(inlineText)
         : []),
       ...result.limitations

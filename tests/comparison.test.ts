@@ -833,6 +833,19 @@ test.each([
         expected
       ],
     );
+    const compared = compareCaptures({
+      visual: pixelsNotInspected,
+      base: candidate,
+      candidate,
+      evaluatedAt,
+    });
+    expect(compared.conclusion.kind).toBe(
+      {
+        passed: 'no-regression',
+        failed: 'check-failed',
+        unknown: 'unavailable',
+      }[expected],
+    );
   },
 );
 

@@ -29,6 +29,13 @@ export const toneSymbols = {
   neutral: '–',
 } satisfies Record<Tone, string>;
 
+export const checkTones = {
+  passed: 'checked',
+  failed: 'regression',
+  'not-run': 'neutral',
+  unknown: 'unknown',
+} satisfies Record<Side['check']['outcome'], Tone>;
+
 export const executionLabels = {
   complete: 'Complete',
   'capture-failed': 'Capture failed',

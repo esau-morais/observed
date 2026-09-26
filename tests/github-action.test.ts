@@ -47,7 +47,7 @@ test('CI summaries never present unavailable or unreadable results as passing', 
 
   expect(unavailable.trusted).toBe(true);
   expect(unavailable.markdown).toMatch(/^> \[!WARNING\]\n> \*\*Unavailable: /);
-  expect(unavailable.markdown).toContain('This is not a pass');
+  expect(unavailable.markdown).toContain('Missing evidence is not a pass');
 
   for (const summary of [mismatched, unreadable]) {
     expect(summary.trusted).toBe(false);

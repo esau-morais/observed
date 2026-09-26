@@ -10,14 +10,11 @@ import {
   Screenshot,
   type Highlight,
 } from './evidence';
-import {
-  describeObserved,
-  describeRevision,
-  shortSource,
-} from '../provenance-text';
+import { describeObserved, describeRevision } from '../provenance-text';
 import {
   checkLabels,
   conclusionLabels,
+  checkTones,
   conclusionTones,
   coverage,
   executionLabels,
@@ -71,12 +68,6 @@ const styles = stylex.create({
     maxWidth: '40ch',
   },
   lead: { fontSize: '1.0625rem', maxWidth: '68ch' },
-  revisions: {
-    color: colors.textSecondary,
-    fontFamily: fonts.mono,
-    fontSize: '0.8125rem',
-    overflowWrap: 'anywhere',
-  },
   notice: {
     backgroundColor: colors.unknownFill,
     borderRadius: geometry.radius,
@@ -100,7 +91,7 @@ const styles = stylex.create({
   },
   disclosureTitle: {
     display: 'inline',
-    fontSize: '1.0625rem',
+    fontSize: '1.25rem',
     fontWeight: 500,
   },
   disclosureBody: { paddingBottom: 32, paddingTop: 8 },
@@ -229,7 +220,6 @@ function Field({
 
 function Check({ side, label }: { side: Side; label: string }) {
   const check = side.check;
-  const symbols = { passed: '✓', failed: '!', unknown: '?', 'not-run': '–' };
 
   return (
     <section
@@ -240,15 +230,8 @@ function Check({ side, label }: { side: Side; label: string }) {
         {label} · {check.authority}
       </p>
       <h3 {...stylex.props(styles.subheading)}>{check.name}</h3>
-      <span
-        {...stylex.props(
-          styles.badge,
-          check.outcome === 'passed' && styles.checked,
-          check.outcome === 'failed' && styles.regression,
-          check.outcome === 'unknown' && styles.unknown,
-        )}
-      >
-        <span aria-hidden="true">{symbols[check.outcome]}</span>
+      <span {...stylex.props(styles.badge, styles[checkTones[check.outcome]])}>
+        <span aria-hidden="true">{toneSymbols[checkTones[check.outcome]]}</span>
         {checkLabels[check.outcome]}
       </span>
       <p>{check.detail}</p>
@@ -401,7 +384,7 @@ function Availability({ result }: { result: Comparison }) {
       {comparison.kind === 'unavailable' ? (
         <>
           <span {...stylex.props(styles.badge, styles.unknown)}>
-            <span aria-hidden="true">?</span>Unavailable
+            <span aria-hidden="true">{toneSymbols.unknown}</span>Unavailable
           </span>
           <ul {...stylex.props(styles.list)}>
             {comparison.reasons.map((reason, index) => (
@@ -462,9 +445,17 @@ export function ComparisonReport({ result }: { result: Comparison }) {
           { side: result.base, label: 'Before' },
           { side: result.candidate, label: 'After' },
         ];
-  const unresolved = sides.flatMap(({ side, label }) =>
-    side.unresolved.map((reason) => `${label}: ${reason}`),
-  );
+  const sideIssues = sides.flatMap(({ side }) => side.unresolved);
+  const unresolved = [
+    ...sides.flatMap(({ side, label }) =>
+      side.unresolved.map((reason) => `${label}: ${reason}`),
+    ),
+    ...(result.comparison.kind === 'unavailable'
+      ? result.comparison.reasons.filter(
+          (reason) => !sideIssues.some((issue) => reason.endsWith(issue)),
+        )
+      : []),
+  ];
   const tone = conclusionTones[result.conclusion.kind];
   const scope = coverage(result);
   const [highlighted, setHighlighted] = useState(false);
@@ -492,15 +483,7 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             {...stylex.props(styles.stack)}
             aria-labelledby="report-title"
           >
-            <span
-              {...stylex.props(
-                styles.badge,
-                tone === 'regression' && styles.regression,
-                tone === 'unknown' && styles.unknown,
-                tone === 'checked' && styles.checked,
-                tone === 'neutral' && styles.neutral,
-              )}
-            >
+            <span {...stylex.props(styles.badge, styles[tone])}>
               <span aria-hidden="true">{toneSymbols[tone]}</span>
               {conclusionLabels[result.conclusion.kind]}
             </span>
@@ -511,28 +494,12 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             {scope === null ? null : (
               <p {...stylex.props(styles.text)}>Covered: {scope}</p>
             )}
-            <p {...stylex.props(styles.revisions)}>
-              {sides.map(({ side, label }, index) => (
-                <span key={label}>
-                  {index > 0 ? ' → ' : ''}
-                  {label}{' '}
-                  {side.capture === null ? (
-                    'unavailable'
-                  ) : (
-                    <span
-                      title={describeRevision(
-                        side.capture.manifest.source.revision,
-                      )}
-                    >
-                      {shortSource(side.capture.manifest.source)}
-                    </span>
-                  )}
-                </span>
-              ))}
-            </p>
             {unresolved.length === 0 ? null : (
               <div {...stylex.props(styles.notice)}>
-                <p {...stylex.props(styles.noticeTitle)}>Unresolved</p>
+                <p {...stylex.props(styles.noticeTitle)}>
+                  <span aria-hidden="true">{toneSymbols.unknown}</span>{' '}
+                  Unresolved
+                </p>
                 <ul {...stylex.props(styles.list)}>
                   {unresolved.map((reason, index) => (
                     <li key={index}>{reason}</li>
@@ -553,7 +520,12 @@ export function ComparisonReport({ result }: { result: Comparison }) {
           >
             {visual === null ? null : (
               <div {...stylex.props(styles.stack)}>
-                <p {...stylex.props(styles.text)}>{describeVisual(visual)}</p>
+                <p {...stylex.props(styles.text)}>
+                  {describeVisual(visual)}
+                  {visual.kind === 'changed' || visual.kind === 'size-differs'
+                    ? ' An observation, not a check.'
+                    : ''}
+                </p>
                 {visual.kind === 'changed' ? (
                   <div {...stylex.props(styles.nav)}>
                     <label {...stylex.props(styles.toggle)}>
@@ -574,9 +546,9 @@ export function ComparisonReport({ result }: { result: Comparison }) {
                     </span>
                   </div>
                 ) : null}
-                {highlight === null ? null : (
+                {visual.kind === 'changed' ? (
                   <p {...stylex.props(styles.small)}>{diffLegend}</p>
-                )}
+                ) : null}
               </div>
             )}
             <div {...stylex.props(result.mode === 'comparison' && styles.grid)}>
@@ -648,9 +620,11 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             </Disclosure>
             <Disclosure id="limits" title="Limits">
               <ul {...stylex.props(styles.list)}>
-                {result.limitations.map((limitation, index) => (
-                  <li key={index}>{limitation}</li>
-                ))}
+                {result.limitations
+                  .filter((limitation) => limitation !== scope)
+                  .map((limitation, index) => (
+                    <li key={index}>{limitation}</li>
+                  ))}
               </ul>
             </Disclosure>
           </div>

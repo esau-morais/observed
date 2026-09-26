@@ -1,3 +1,4 @@
+import { checkLabels } from './result-text';
 import { DateTime, Effect, Schema } from 'effect';
 import { readFile, realpath } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
@@ -180,7 +181,7 @@ function conclusion(
     text:
       base.check.outcome === 'passed'
         ? `${candidate.check.name} passed on base and candidate.`
-        : `${candidate.check.name} passed on candidate. Base: ${base.check.outcome}.`,
+        : `${candidate.check.name} failed on base and passed on candidate.`,
   };
 }
 
@@ -784,7 +785,7 @@ export function compareCaptures({
       },
       conclusion: {
         kind: 'unavailable',
-        text: 'The capture is unavailable, so the check result is unknown.',
+        text: 'The capture is unavailable. Nothing was checked.',
       },
     };
   }
@@ -811,7 +812,7 @@ export function compareCaptures({
             }
           : {
               kind: 'unavailable',
-              text: `The revisions were not compared, so the candidate check is ${candidate.check.outcome}.`,
+              text: `The revisions were not compared. Candidate check: ${checkLabels[candidate.check.outcome].toLowerCase()}.`,
             },
     };
   }
