@@ -19,7 +19,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: ./
+      - uses: esau-morais/observed@5ae345291f9b010937bf57320798b4d9054b3abe
         with:
           project: examples/request-lab
           base: origin/${{ github.base_ref }}
