@@ -42,6 +42,9 @@ application origin by default; set the check's `origin` to one of those allowed
 origins to check that service. Observations version 2 records each request's origin.
 
 `capture`, `compare`, and `view` support individual steps and saved evidence.
+`compare none <capture>` exports a preview and uses the same exit codes as `observe`.
+`view` opens a saved bundle as it was evaluated at export. It still rejects
+evidence whose bytes changed afterward.
 
 The version 1 importer accepts generated evidence bundles through
 `bun run report <manifest.json> <new-report.md>`. The output parent must exist and
@@ -59,7 +62,9 @@ Development checks:
 bun run check
 ```
 
-`bun run verify` exercises capture and the viewer against both example projects.
+`bun run test` runs the Vitest unit tests. `bun run verify` exercises capture and
+the viewer against both example projects. Plain `bun test` stops with a pointer to
+these scripts.
 Reports and captures stay local under gitignored `evidence/`.
 
 ## The planned complete flow

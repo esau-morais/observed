@@ -293,13 +293,13 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   baseDirectory,
   candidateDirectory,
   directory,
-  projectRoot,
+  viewerDirectory,
   mode = 'comparison',
 }: {
   baseDirectory: string | null;
   candidateDirectory: string;
   directory: string;
-  projectRoot: string;
+  viewerDirectory: string;
   mode?: 'preview' | 'comparison';
 }) {
   const fs = yield* FileSystem.FileSystem;
@@ -309,8 +309,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
   const parent = yield* fs.realPath(path.dirname(path.resolve(directory)));
   const destination = path.join(parent, path.basename(path.resolve(directory)));
-  const project = yield* fs.realPath(projectRoot);
-  const viewer = path.join(project, 'dist', 'viewer');
+  const viewer = yield* fs.realPath(viewerDirectory);
 
   if (
     (candidate.root !== null && contains(candidate.root, destination)) ||
@@ -333,9 +332,9 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   for (const file of viewerFiles) {
     yield* Schema.decodeUnknownEffect(viewerPath)(file);
 
-    const asset = yield* readVerifiedArtifact(project, {
+    const asset = yield* readVerifiedArtifact(viewer, {
       id: file,
-      path: `dist/viewer/${file}`,
+      path: file,
       description: 'Built viewer asset',
     });
 

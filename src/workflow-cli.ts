@@ -4,6 +4,7 @@ import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { captureApplication } from './capture/coordinator';
+import type { Comparison } from './comparison-model';
 import { json } from './encoding';
 import { exportComparison } from './export';
 import { loadProject } from './project';
@@ -44,6 +45,15 @@ const saveLatest = Effect.fnUntraced(function* (directory: string) {
     json({ directory }),
   );
 });
+
+const exitCodes = {
+  regression: 2,
+  'check-failed': 2,
+  unavailable: 1,
+  'no-regression': 0,
+  'not-checked': 0,
+  preview: 0,
+} satisfies Record<Comparison['conclusion']['kind'], number>;
 
 const openViewer = Effect.fnUntraced(function* (
   directory: string,
@@ -98,15 +108,7 @@ const run = Command.make(
     }
 
     if (machine || headless) {
-      if (exported.result.candidate.check.outcome === 'failed') {
-        process.exitCode = 2;
-      } else if (
-        exported.result.candidate.execution !== 'complete' ||
-        exported.result.comparison.kind === 'unavailable' ||
-        exported.result.candidate.check.outcome === 'unknown'
-      ) {
-        process.exitCode = 1;
-      }
+      process.exitCode = exitCodes[exported.result.conclusion.kind];
 
       return;
     }
@@ -175,13 +177,17 @@ const compare = Command.make(
   },
   Effect.fn('compareCommand')(function* ({ base, candidate, output, machine }) {
     const directory = yield* chooseDirectory(output, 'comparison');
-    yield* buildViewer(toolRoot, path.dirname(directory));
-    const exported = yield* exportComparison({
-      baseDirectory: base === 'none' ? null : path.resolve(base),
-      candidateDirectory: path.resolve(candidate),
-      directory,
-      projectRoot: toolRoot,
-    });
+    const exported = yield* Effect.scoped(
+      Effect.gen(function* () {
+        return yield* exportComparison({
+          baseDirectory: base === 'none' ? null : path.resolve(base),
+          candidateDirectory: path.resolve(candidate),
+          directory,
+          viewerDirectory: yield* buildViewer(toolRoot),
+          mode: base === 'none' ? 'preview' : 'comparison',
+        });
+      }),
+    );
     yield* saveLatest(exported.directory);
     if (machine) {
       yield* printJson(exported);
@@ -190,6 +196,8 @@ const compare = Command.make(
         `${exported.result.conclusion.text}\nEvidence: ${directory}`,
       );
     }
+
+    process.exitCode = exitCodes[exported.result.conclusion.kind];
   }),
 ).pipe(
   Command.withDescription('Compare captured evidence and export the viewer'),
@@ -225,7 +233,7 @@ const view = Command.make(
 
 Command.make('observed').pipe(
   Command.withSubcommands([run, capture, compare, view]),
-  Command.run({ version: '0.2.0' }),
+  Command.run({ version: '0.1.0' }),
   Effect.provideService(
     Console.Console,
     process.argv.some(

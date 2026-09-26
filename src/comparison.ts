@@ -1,6 +1,5 @@
 import { DateTime, Effect, Schema } from 'effect';
 import { readFile, realpath } from 'node:fs/promises';
-import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
   parseCapture,
@@ -15,6 +14,7 @@ import { json, sha256 } from './encoding';
 import type { Comparison, Selection, Side } from './comparison-model';
 import { inspectArtifact, type ArtifactResult } from './evidence';
 import { nodeIo } from './node-io';
+import { relativePathSchema } from './project';
 
 const requiredArtifacts = [
   'recipe',
@@ -157,6 +157,13 @@ function conclusion(
     };
   }
 
+  if (candidate.check.outcome === 'failed') {
+    return {
+      kind: 'check-failed',
+      text: `${candidate.check.name} failed. Base also failed, so this is not a regression. Base: ${String(base.check.actual)}; candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
+    };
+  }
+
   return {
     kind: 'no-regression',
     text: `No passing-to-failed transition in ${candidate.check.name}. Base: ${base.check.outcome}; candidate: ${candidate.check.outcome}.`,
@@ -177,13 +184,8 @@ function unavailable(reason: string): Side {
   };
 }
 
-function safeRelativePath(value: string): boolean {
-  return (
-    !path.isAbsolute(value) &&
-    !/[\\:\p{Cc}]/u.test(value) &&
-    value.split('/').every((part) => !['', '.', '..'].includes(part))
-  );
-}
+const isRelativePath = Schema.is(relativePathSchema);
+const safeRelativePath = (value: string): boolean => isRelativePath(value);
 
 function artifactLink(prefix: string, artifactPath: string): string {
   return [...prefix.split('/'), ...artifactPath.split('/')]
@@ -689,10 +691,16 @@ export function compareCaptures({
         kind: 'unavailable',
         reasons: [firstReason, ...reasons.slice(1)],
       },
-      conclusion: {
-        kind: 'unavailable',
-        text: `Revision comparison unavailable. Candidate check: ${candidate.check.outcome}.`,
-      },
+      conclusion:
+        candidate.check.outcome === 'failed'
+          ? {
+              kind: 'check-failed',
+              text: `${candidate.check.name} failed. Revision comparison unavailable, so a regression cannot be established. Candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
+            }
+          : {
+              kind: 'unavailable',
+              text: `Revision comparison unavailable. Candidate check: ${candidate.check.outcome}.`,
+            },
     };
   }
 

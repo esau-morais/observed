@@ -66,8 +66,8 @@ export const harSchema = Schema.Struct({
   log: Schema.Struct({
     version: Schema.Literal('1.2'),
     creator: Schema.Struct({
-      name: Schema.Literal('agent-browser'),
-      version: Schema.Literal('0.38.1'),
+      name: Schema.Literal(producer.name),
+      version: Schema.Literal(producer.version),
     }),
     browser: Schema.Struct({
       name: Schema.NonEmptyString,

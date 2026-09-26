@@ -1,4 +1,5 @@
-import { Effect, Schema } from 'effect';
+import { BunServices } from '@effect/platform-bun';
+import { Clock, Effect, Schema } from 'effect';
 import {
   mkdir,
   mkdtemp,
@@ -26,6 +27,8 @@ import {
 } from '../src/comparison';
 import { comparisonSchema, type Selection } from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
+import { exportComparison } from '../src/export';
+import { serveReport } from '../src/view';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
 const directories: string[] = [];
@@ -205,6 +208,67 @@ afterEach(async () => {
   );
 });
 
+function clockAt(iso: string): Clock.Clock {
+  const millis = Date.parse(iso);
+  const nanos = BigInt(millis) * 1_000_000n;
+
+  return {
+    currentTimeMillisUnsafe: () => millis,
+    currentTimeMillis: Effect.succeed(millis),
+    currentTimeNanosUnsafe: () => nanos,
+    currentTimeNanos: Effect.succeed(nanos),
+    monotonicTimeNanosUnsafe: () => nanos,
+    monotonicTimeNanos: Effect.succeed(nanos),
+    sleep: () => Effect.void,
+  };
+}
+
+test('the viewer serves the result evaluated at export instead of re-grading capture age when opened later', async () => {
+  const base = await syntheticBundle();
+  const candidate = await syntheticBundle({ count: 4 });
+  const root = await mkdtemp(path.join(tmpdir(), 'observed-view-later-'));
+  directories.push(root);
+  await mkdir(path.join(root, 'dist/viewer'), { recursive: true });
+  await writeFile(
+    path.join(root, 'dist/viewer/index.html'),
+    '<!doctype html><title>Synthetic viewer asset</title>',
+  );
+
+  const exported = await Effect.runPromise(
+    exportComparison({
+      baseDirectory: base.directory,
+      candidateDirectory: candidate.directory,
+      directory: path.join(root, 'report'),
+      viewerDirectory: path.join(root, 'dist/viewer'),
+    }).pipe(
+      Effect.provideService(Clock.Clock, clockAt(evaluatedAt)),
+      Effect.provide(BunServices.layer),
+    ),
+  );
+  expect(exported.result.conclusion.kind).toBe('regression');
+
+  const served = await Effect.runPromise(
+    Effect.gen(function* () {
+      const url = yield* serveReport({
+        directory: exported.directory,
+        port: 0,
+      });
+
+      return yield* Effect.promise(async () =>
+        (await fetch(new URL('result.json', url))).text(),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provideService(Clock.Clock, clockAt('2026-09-25T12:00:00.000Z')),
+      Effect.provide(BunServices.layer),
+    ),
+  );
+
+  expect(
+    Schema.decodeUnknownSync(Schema.fromJsonString(comparisonSchema))(served),
+  ).toEqual(exported.result);
+});
+
 test('derives a regression from verified request observations despite unchanged image bytes and raw PASS text', async () => {
   const base = await syntheticBundle();
   const candidate = await syntheticBundle({ count: 4 });
@@ -326,9 +390,11 @@ test.each([0, 2])(
 
     expect(result.comparison.kind).toBe('available');
 
-    expect(result.conclusion.kind).toBe('no-regression');
+    expect(result.conclusion.kind).toBe('check-failed');
 
-    expect(result.conclusion.text).toContain('Base: failed; candidate: failed');
+    expect(result.conclusion.text).toContain(
+      'Base also failed, so this is not a regression',
+    );
   },
 );
 
@@ -468,25 +534,33 @@ test('serializes empty and newline-terminated browser errors without losing thei
   expect(decoded.candidate.unresolved).toHaveLength(2);
 });
 
-test('keeps the independent candidate check with a missing baseline', async () => {
-  const candidate = await syntheticBundle();
+test.each([
+  [1, 'passed', 'unavailable'],
+  [4, 'failed', 'check-failed'],
+] as const)(
+  'keeps the independent candidate check with a missing baseline (%i requests)',
+  async (count, outcome, conclusion) => {
+    const candidate = await syntheticBundle({ count });
 
-  const result = await Effect.runPromise(
-    inspectComparison({
-      baseDirectory: null,
-      candidateDirectory: candidate.directory,
-      evaluatedAt,
-    }),
-  );
+    const result = await Effect.runPromise(
+      inspectComparison({
+        baseDirectory: null,
+        candidateDirectory: candidate.directory,
+        evaluatedAt,
+      }),
+    );
 
-  expect(result.candidate.check.outcome).toBe('passed');
+    expect(result.candidate.check.outcome).toBe(outcome);
 
-  expect(result.base.check.outcome).toBe('unknown');
+    expect(result.base.check.outcome).toBe('unknown');
 
-  expect(result.comparison.kind).toBe('unavailable');
+    expect(result.comparison.kind).toBe('unavailable');
 
-  expect(result.conclusion.kind).toBe('unavailable');
-});
+    expect(result.conclusion.kind).toBe(conclusion);
+
+    expect(result.conclusion.text).toContain('Revision comparison unavailable');
+  },
+);
 
 test('previews without a baseline or a named check, while a requested missing baseline remains unavailable', async () => {
   const bundle = await syntheticBundle({

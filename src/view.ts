@@ -1,4 +1,4 @@
-import { DateTime, Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { parseCapture, type CaptureArtifact } from './capture/model';
 import { json } from './encoding';
@@ -210,15 +210,13 @@ const preloadReport = Effect.fnUntraced(function* (directory: string) {
     );
   }
 
-  const evaluatedAt = DateTime.formatIso(yield* DateTime.now);
-
   const result = yield* inspectComparison({
     baseDirectory:
       selection.base === null && selection.baseIssue === undefined
         ? null
         : path.join(staging, 'base'),
     candidateDirectory: path.join(staging, 'candidate'),
-    evaluatedAt,
+    evaluatedAt: selection.evaluatedAt,
     selection,
   });
 

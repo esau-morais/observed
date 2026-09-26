@@ -6,14 +6,32 @@ import { json } from './encoding';
 import { exportComparison } from './export';
 import { loadProject } from './project';
 
-export const buildViewer = (toolRoot: string, directory: string) =>
-  processOutput({
+export const buildViewer = Effect.fnUntraced(function* (
+  toolRoot: string,
+  transcript?: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* fs.makeTempDirectoryScoped({
+    prefix: 'observed-viewer-',
+  });
+  const directory = path.join(root, 'viewer');
+
+  yield* processOutput({
     command: process.execPath,
-    args: [path.join(toolRoot, 'node_modules/vite/bin/vite.js'), 'build'],
+    args: [
+      path.join(toolRoot, 'node_modules/vite/bin/vite.js'),
+      'build',
+      '--outDir',
+      directory,
+      '--emptyOutDir',
+    ],
     cwd: toolRoot,
-    transcript: path.join(directory, 'viewer-build.jsonl'),
+    transcript: transcript ?? path.join(root, 'viewer-build.jsonl'),
     timeoutMs: 60_000,
   });
+
+  return directory;
+});
 
 export const runProject = Effect.fn('runProject')(function* (options: {
   projectRoot: string;
@@ -82,13 +100,18 @@ export const runProject = Effect.fn('runProject')(function* (options: {
     );
   }
 
-  yield* buildViewer(options.toolRoot, directory);
+  return yield* Effect.gen(function* () {
+    const viewerDirectory = yield* buildViewer(
+      options.toolRoot,
+      path.join(directory, 'viewer-build.jsonl'),
+    );
 
-  return yield* exportComparison({
-    projectRoot: options.toolRoot,
-    baseDirectory,
-    candidateDirectory,
-    directory: path.join(directory, 'report'),
-    mode: options.baseRevision === null ? 'preview' : 'comparison',
-  });
+    return yield* exportComparison({
+      viewerDirectory,
+      baseDirectory,
+      candidateDirectory,
+      directory: path.join(directory, 'report'),
+      mode: options.baseRevision === null ? 'preview' : 'comparison',
+    });
+  }).pipe(Effect.scoped);
 });

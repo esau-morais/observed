@@ -25,7 +25,9 @@ async function loadReport() {
   }
 
   const input: unknown = await response.json();
-  const result = await Schema.decodeUnknownPromise(comparisonSchema)(input);
+  const result = await Schema.decodeUnknownPromise(comparisonSchema, {
+    onExcessProperty: 'error',
+  })(input);
 
   document.title = `${result.title} | Observed`;
 

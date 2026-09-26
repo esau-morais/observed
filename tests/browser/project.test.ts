@@ -1,6 +1,13 @@
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Schema } from 'effect';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { beforeAll, expect, test } from 'vitest';
 import { captureSchema } from '../../src/capture/model';
@@ -175,6 +182,19 @@ async function rawCapture(
   return manifest;
 }
 
+// Screenshot bytes are not asserted: the duplicate response re-renders the list,
+// and Chromium can then rasterize antialiased edges one intensity level apart.
+async function pageTree(directory: string) {
+  const snapshot = await readJson(
+    path.join(directory, 'snapshot.json'),
+    Schema.Struct({
+      data: Schema.Struct({ snapshot: Schema.String, refs: Schema.Unknown }),
+    }),
+  );
+
+  return snapshot.data;
+}
+
 async function viewer(
   directory: string,
   mode: 'preview' | 'comparison',
@@ -309,14 +329,31 @@ test('compares a React commit with a duplicate-request worktree through the publ
   expect(before.source.sha256).not.toBe(after.source.sha256);
   expect(before.source.revision).toMatch(/^[a-f0-9]{40}$/);
   expect(after.source.revision).toBe('worktree');
-  expect(
-    sha256(await readFile(path.join(result.directory, 'base/screenshot.png'))),
-  ).toBe(
-    sha256(
-      await readFile(path.join(result.directory, 'candidate/screenshot.png')),
-    ),
+  expect(await pageTree(path.join(result.directory, 'candidate'))).toEqual(
+    await pageTree(path.join(result.directory, 'base')),
   );
   await viewer(result.directory, 'comparison', after.source.sha256);
+
+  const previewed = Schema.decodeUnknownSync(
+    Schema.fromJsonString(exportedSchema),
+  )(
+    await command(
+      [
+        process.execPath,
+        'run',
+        'compare',
+        'none',
+        path.join(result.directory, 'candidate'),
+        '--json',
+        '--output',
+        path.join(evidence, 'react-duplicate-preview'),
+      ],
+      root,
+      2,
+    ),
+  );
+  expect(previewed.result.comparison.kind).toBe('preview');
+  expect(previewed.result.conclusion.kind).toBe('check-failed');
 
   await cp(path.join(project, 'visual.ts'), path.join(project, 'base.ts'));
   const visual = await observe(project, 'react-visual', ['--base', 'HEAD']);
@@ -339,7 +376,9 @@ test('previews a non-React app without checks and then applies its own POST expe
     '/orders',
     201,
   );
-  await viewer(preview.directory, 'preview', captured.source.sha256);
+  const relocated = path.join(evidence, 'shop-preview-relocated');
+  await rename(preview.directory, relocated);
+  await viewer(relocated, 'preview', captured.source.sha256);
   const config = await readJson(
     path.join(project, 'observed.json'),
     projectSchema,

@@ -43,7 +43,7 @@ test.each(['base', 'candidate'] as const)(
               ? capture
               : path.join(root, 'missing-candidate'),
           directory: path.join(root, 'report'),
-          projectRoot: root,
+          viewerDirectory: path.join(root, 'dist/viewer'),
         }).pipe(Effect.provide(BunServices.layer)),
       );
       expect(exported.result[side]).toMatchObject({
@@ -147,7 +147,7 @@ test.each(['missing', 'malformed'])(
           baseDirectory: null,
           candidateDirectory: candidate,
           directory: path.join(root, 'report'),
-          projectRoot: root,
+          viewerDirectory: path.join(root, 'dist/viewer'),
         }).pipe(Effect.provide(BunServices.layer)),
       );
 
