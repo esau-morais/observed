@@ -11,7 +11,16 @@ import {
 
 export class SlackError extends Schema.TaggedError<SlackError>()('SlackError', {
   message: Schema.String,
+  gone: Schema.Boolean,
 }) {}
+
+// These chat.update errors mean the earlier message can no longer be edited.
+const goneErrors = [
+  'message_not_found',
+  'cant_update_message',
+  'channel_not_found',
+  'edit_window_closed',
+];
 
 const icons = {
   regression: ':red_circle:',
@@ -20,12 +29,27 @@ const icons = {
   neutral: ':white_circle:',
 } satisfies Record<Tone, string>;
 
+// Slack channels can reach people who can't read the repository, so the
+// message carries outcomes and links, never captured values.
+const consequences = {
+  regression: 'The job fails.',
+  'check-failed': 'The job fails.',
+  unavailable: 'Missing evidence is not a pass. The job fails.',
+  'no-regression': 'The job passes.',
+  'not-checked': 'No named check ran. The job passes.',
+  preview: 'A preview compares no revisions. The job passes.',
+} satisfies Record<Comparison['conclusion']['kind'], string>;
+
 // Slack reads <...> as links and mentions, so captured text must not keep them.
 export function slackText(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
+}
+
+function clip(value: string, length: number): string {
+  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }
 
 const httpsUrl = Schema.String.check(Schema.isPattern(/^https:\/\/[^\s<>|]+$/));
@@ -37,6 +61,7 @@ function slackLink(label: string, url: string | null): string | null {
 }
 
 export type SlackLinks = {
+  name: string;
   pullRequest: string | null;
   pullRequestLabel: string;
   report: string | null;
@@ -54,17 +79,25 @@ function sideLine(label: string, side: Side): string {
 }
 
 export function slackMessage(result: Comparison | null, links: SlackLinks) {
-  const title =
+  const title = clip(
     result === null
       ? 'No result: treat this run as unavailable'
-      : headline(result);
+      : headline(result),
+    300,
+  );
   const icon =
     result === null
       ? icons.unknown
       : icons[conclusionTones[result.conclusion.kind]];
+  const detail =
+    result === null
+      ? 'Observed wrote no readable result. The job fails.'
+      : consequences[result.conclusion.kind];
   const where =
     slackLink(links.pullRequestLabel, links.pullRequest) ??
     slackText(links.pullRequestLabel);
+  const run =
+    links.name === 'Observed' ? '' : ` · ${slackText(clip(links.name, 200))}`;
   const labelled: [string, Side][] = [];
 
   if (result?.mode === 'preview') {
@@ -73,35 +106,32 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
     labelled.push(['Base', result.base], ['Candidate', result.candidate]);
   }
 
-  const sides = labelled.map(([label, side]) => sideLine(label, side));
-  const actions = [
+  const context: string[] = [];
+
+  for (const item of [
+    ...labelled.map(([label, side]) => sideLine(label, side)),
     slackLink('Open the report', links.report),
     slackLink('GitHub check', links.check),
     slackLink('Workflow run', links.run),
-  ].filter((item) => item !== null);
-  const detail =
-    result === null
-      ? 'Observed wrote no readable result. The job fails.'
-      : result.conclusion.text;
+  ]) {
+    if (item !== null && [...context, item].join(' · ').length <= 2900) {
+      context.push(item);
+    }
+  }
 
   return {
-    text: `${title} · ${links.pullRequestLabel}`,
+    text: slackText(`${title} · ${links.pullRequestLabel}`),
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${icon} *${slackText(title)}* · ${where}\n${slackText(detail).slice(0, 2500)}`,
+          text: `${icon} *${slackText(title)}* · ${where}${run}\n${detail}`,
         },
       },
       {
         type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: [...sides, ...actions].join(' · ').slice(0, 2900),
-          },
-        ],
+        elements: [{ type: 'mrkdwn', text: context.join(' · ') }],
       },
     ],
   };
@@ -145,8 +175,10 @@ export function slackAction(
 
 const slackResponse = Schema.Struct({
   ok: Schema.Boolean,
-  ts: Schema.optionalKey(Schema.String),
-  channel: Schema.optionalKey(Schema.String),
+  ts: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^\d+\.\d+$/))),
+  channel: Schema.optionalKey(
+    Schema.String.check(Schema.isPattern(/^[A-Z0-9]+$/)),
+  ),
   error: Schema.optionalKey(Schema.String),
 });
 
@@ -168,7 +200,7 @@ export async function callSlack(
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    throw new SlackError({ message: `${method} did not answer` });
+    throw new SlackError({ message: `${method} did not answer`, gone: false });
   }
 
   const decoded = Schema.decodeUnknownOption(slackResponse)(
@@ -178,6 +210,7 @@ export async function callSlack(
   if (Option.isNone(decoded)) {
     throw new SlackError({
       message: `${method} answered HTTP ${String(response.status)} unexpectedly`,
+      gone: false,
     });
   }
 
@@ -188,7 +221,10 @@ export async function callSlack(
       ? (answer.error ?? '')
       : 'unknown_error';
 
-    throw new SlackError({ message: `${method} answered ${error}` });
+    throw new SlackError({
+      message: `${method} answered ${error}`,
+      gone: goneErrors.includes(error),
+    });
   }
 
   return { channel: answer.channel, ts: answer.ts };

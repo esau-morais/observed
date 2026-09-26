@@ -347,45 +347,51 @@ The action can also post to one Slack channel. It sends a message when a pull
 request's result starts failing: a regression, a failed check, or unavailable
 evidence. Later runs of that pull request edit the same message, including a
 recovery to no regression, so retries don't notify anyone again. A pull request
-that never fails posts nothing. The message links the pull request, the report
-page and the GitHub check, and uses the same wording as the check.
+that never fails posts nothing, and runs outside pull requests post nothing.
 
-Editing the earlier message needs the GitHub App above, because the comment
+The message has the same headline as the GitHub check, each side's revision,
+capture and check outcome, and links to the pull request, report page, check and
+workflow run. It leaves out measured values and captured text, because a
+channel can include people who can't read the repository. A workflow that runs
+the action more than once gets one message per `artifact-name`.
+
+Editing the earlier message needs the GitHub App above, because its comment
 remembers which Slack message belongs to the pull request. Without the App,
 every failing run posts a new message.
 
 1. Create a Slack app at https://api.slack.com/apps with **From a manifest** and
    give its bot only the `chat:write` scope:
 
-```yaml
-display_information:
-  name: Observed
-features:
-  bot_user:
-    display_name: Observed
-    always_online: false
-oauth_config:
-  scopes:
-    bot:
-      - chat:write
-settings:
-  org_deploy_enabled: false
-  socket_mode_enabled: false
-  token_rotation_enabled: false
-```
+   ```yaml
+   display_information:
+     name: Observed
+   features:
+     bot_user:
+       display_name: Observed
+       always_online: false
+   oauth_config:
+     scopes:
+       bot:
+         - chat:write
+   settings:
+     org_deploy_enabled: false
+     socket_mode_enabled: false
+     token_rotation_enabled: false
+   ```
 
 2. Install it to the workspace and copy the **Bot User OAuth Token**
    (`xoxb-...`). Store it as the repository secret `OBSERVED_SLACK_BOT_TOKEN`.
    The app needs no app-level token.
-3. Invite the bot to the channel with `/invite @Observed`. Copy the channel ID
-   from the bottom of the channel's **About** tab and store it as the repository
-   variable `OBSERVED_SLACK_CHANNEL`.
+3. Invite the bot to the channel with `/invite @Observed`. Copy the channel ID,
+   such as `C0123456789`, from the bottom of the channel's **About** tab and
+   store it as the repository variable `OBSERVED_SLACK_CHANNEL`. A channel name
+   doesn't work.
 4. Add both to the action:
 
-```yaml
-          slack-bot-token: ${{ secrets.OBSERVED_SLACK_BOT_TOKEN }}
-          slack-channel: ${{ vars.OBSERVED_SLACK_CHANNEL }}
-```
+   ```yaml
+             slack-bot-token: ${{ secrets.OBSERVED_SLACK_BOT_TOKEN }}
+             slack-channel: ${{ vars.OBSERVED_SLACK_CHANNEL }}
+   ```
 
 The report link needs a GitHub account that can read the repository. Pull
 requests from forks and Dependabot receive no secrets, so they post nothing to

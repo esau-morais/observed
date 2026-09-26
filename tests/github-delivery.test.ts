@@ -4,7 +4,8 @@ import {
   checkConclusions,
   commentMarker,
   DeliveryError,
-  upsertComment,
+  findComment,
+  writeComment,
   type Target,
 } from '../scripts/github-delivery';
 import { deliveryNote, inlineText } from '../scripts/github-action';
@@ -71,7 +72,7 @@ test('the pull request comment edits only the marked comment the App wrote', asy
     { id: 2, login: 'observed-sofware[bot]', body: `${marker}\nold` },
   ]);
 
-  await upsertComment(target, marker, 'new');
+  await writeComment(target, await findComment(target, marker), marker, 'new');
 
   expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
     'GET /repos/o/r/issues/7/comments',
@@ -85,7 +86,7 @@ test('a marker copied into another user comment leads to a new App comment', asy
     { id: 1, login: 'someone', body: `${marker}\nforged` },
   ]);
 
-  await upsertComment(target, marker, 'new');
+  await writeComment(target, await findComment(target, marker), marker, 'new');
 
   expect(calls.at(-1)).toMatchObject({
     method: 'POST',
@@ -117,7 +118,7 @@ test('a rejected request reports its status without echoing the response body', 
     fetch: () => Response.json({ message: 'secret-marker' }, { status: 422 }),
   });
 
-  const failure = await upsertComment(
+  const failure = await findComment(
     {
       api: String(server.url).replace(/\/$/, ''),
       repository: 'o/r',
@@ -128,7 +129,6 @@ test('a rejected request reports its status without echoing the response body', 
       botLogin: 'observed-sofware[bot]',
     },
     commentMarker('observed-bundle'),
-    'new',
   ).catch((error: unknown) => error);
 
   expect(failure).toBeInstanceOf(DeliveryError);

@@ -6,10 +6,12 @@ import {
   slackMessage,
   writeSlackState,
 } from '../scripts/slack-delivery';
+import { slackSkipReason } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 
 const evaluatedAt = '2026-09-26T12:00:00.000Z';
 const links = {
+  name: 'Observed',
   pullRequest: 'https://github.com/o/r/pull/7',
   pullRequestLabel: 'o/r#7',
   report: 'https://github.com/o/r/actions/runs/1/artifacts/2',
@@ -51,23 +53,22 @@ test('an unavailable or unreadable result never gets a passing icon in Slack', a
   }
 });
 
-test('captured text cannot mention, notify or link anyone in Slack', async () => {
+test('captured names cannot mention anyone in Slack, and captured values stay out of the message', async () => {
   const result = await unavailable();
   const message = JSON.stringify(
     slackMessage(
       {
         ...result,
-        conclusion: {
-          kind: 'unavailable',
-          text: 'Saw <!here> <@U123> <https://evil.test|click>',
-        },
+        title: 'Checkout <!channel> <@U123>',
+        conclusion: { kind: 'unavailable', text: 'Captured page text' },
       },
       links,
     ),
   );
 
-  expect(message).not.toMatch(/<!here>|<@U123>|<https:\/\/evil/);
-  expect(message).toContain('&lt;!here&gt;');
+  expect(message).not.toMatch(/<!channel>|<@U123>/);
+  expect(message).toContain('&lt;!channel&gt;');
+  expect(message).not.toContain('Captured page text');
 });
 
 test('the Slack message identity stored in a comment round-trips and ignores malformed markers', () => {
@@ -78,4 +79,22 @@ test('the Slack message identity stored in a comment round-trips and ignores mal
     readSlackState('<!-- observed-slack:C1/<script>/failing -->'),
   ).toBeNull();
   expect(readSlackState(null)).toBeNull();
+});
+
+test('Slack is skipped with a reason instead of posting duplicates or to a guessed channel', () => {
+  const reason = (options: Partial<Parameters<typeof slackSkipReason>[0]>) =>
+    slackSkipReason({
+      token: 'token',
+      channel: 'C0123',
+      pullRequest: 7,
+      lookupFailed: false,
+      ...options,
+    });
+
+  expect(reason({})).toBeNull();
+  expect(reason({ token: '', channel: '' })).toBeNull();
+  expect(reason({ channel: '' })).toContain('set both');
+  expect(reason({ channel: '#observed-test' })).toContain('channel ID');
+  expect(reason({ pullRequest: null })).toContain('only for pull requests');
+  expect(reason({ lookupFailed: true })).toContain('could not be looked up');
 });

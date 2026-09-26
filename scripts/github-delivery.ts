@@ -200,16 +200,3 @@ export async function writeComment(
 
   return written.html_url;
 }
-
-export async function upsertComment(
-  target: Target,
-  marker: string,
-  markdown: string,
-): Promise<string | null> {
-  return writeComment(
-    target,
-    await findComment(target, marker),
-    marker,
-    markdown,
-  );
-}
