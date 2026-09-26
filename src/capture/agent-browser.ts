@@ -29,12 +29,51 @@ const filledSchema = Schema.Tuple([
   Schema.Struct({ success: Schema.Literal(true) }),
 ]);
 
+// agent-browser 0.38.1 omits the status of a request answered by a redirect,
+// and the next request in the chain reuses its requestId. Its HAR records the
+// same request with status 0.
 const requestSchema = Schema.Struct({
   requestId: Schema.NonEmptyString,
   url: Schema.URLFromString,
   method: Schema.NonEmptyString,
-  status: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  status: Schema.optionalKey(
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  ),
 });
+
+// Returns null when the log is inconsistent: a request without a status must
+// be followed by its redirect under the same requestId, and only the last
+// request in a chain may carry a status.
+export function requestLedger(
+  requests: readonly (typeof requestSchema.Type)[],
+): string[] | null {
+  const chains = new Map<string, (typeof requestSchema.Type)[]>();
+
+  for (const request of requests) {
+    chains.set(request.requestId, [
+      ...(chains.get(request.requestId) ?? []),
+      request,
+    ]);
+  }
+
+  for (const chain of chains.values()) {
+    if (
+      chain.some(
+        (request, index) =>
+          (request.status === undefined) !== index < chain.length - 1,
+      )
+    ) {
+      return null;
+    }
+  }
+
+  return requests
+    .map(
+      (request) =>
+        `${request.method} ${request.url.href} ${request.status ?? 0}`,
+    )
+    .sort();
+}
 
 const requestsSchema = response(
   Schema.Struct({ requests: Schema.Array(requestSchema) }),
@@ -438,15 +477,9 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     )
     .sort();
 
-  const requestLedger = requests.data.requests
-    .map((request) => `${request.method} ${request.url.href} ${request.status}`)
-    .sort();
+  const requestEntries = requestLedger(requests.data.requests);
 
-  if (
-    json(harLedger) !== json(requestLedger) ||
-    new Set(requests.data.requests.map((request) => request.requestId)).size !==
-      requests.data.requests.length
-  ) {
+  if (requestEntries === null || json(harLedger) !== json(requestEntries)) {
     return yield* new BrowserFailure({
       message: 'HAR and request log disagree; capture completeness is unknown',
     });
