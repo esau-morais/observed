@@ -48,8 +48,9 @@ export const captureApplication = Effect.fn('captureApplication')(
     yield* fs.makeDirectory(directory);
 
     const id = randomUUID();
-    // agent-browser derives a Unix socket path from the session name. macOS
-    // limits it to 103 bytes, and $TMPDIR there already takes about 60.
+    // agent-browser puts a Unix socket named after the session in a
+    // per-capture directory under $TMPDIR. macOS limits the socket path to
+    // 103 bytes, and that directory already takes about 65.
     const session = `obs-${id.replaceAll('-', '').slice(0, 12)}`;
     const startedAt = DateTime.formatIso(yield* DateTime.now);
     const recipe = options.recipe;
