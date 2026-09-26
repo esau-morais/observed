@@ -35,7 +35,7 @@ runs:
         bun install --frozen-lockfile
         bun run setup --with-deps
 
-    - name: Refuse projects with fill steps
+    - name: Check observed.json
       shell: bash
       env:
         OBSERVED_PROJECT: ${{ inputs.project }}

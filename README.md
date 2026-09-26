@@ -137,8 +137,9 @@ jobs:
   candidate when `candidate` is `HEAD`, and uses it for both revisions. A pull
   request that edits it changes the check for both sides, so review those edits
   like code.
-- Keep the `pull_request` trigger. Do not use `pull_request_target`: the action
-  needs no secrets or write access, and pull request code must not receive them.
+- Keep the `pull_request` trigger. Do not use `pull_request_target`: it gives
+  pull requests from forks the repository's secrets and a write token, and pull
+  request code must not receive them.
 
 The action installs the Bun version pinned in Observed's `package.json` and runs
 your setup and start commands with it on `PATH`. It installs the browser and its
@@ -163,9 +164,22 @@ Optional inputs: `candidate` (default `HEAD`), `timeout` per capture in
 milliseconds (default `120000`), `artifact-name`, and `retention-days`. Give each
 call a distinct `artifact-name` when one job runs the action more than once.
 
-The action does not run journeys with `fill` steps yet and stops before capture
-for these projects. Literal fill values are exported as written, and the action
-does not yet supply the environment variables that fill references read.
+A journey that signs in reads its secret from an environment variable, as in
+`{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
+
+```yaml
+      - uses: esau-morais/observed@OBSERVED_COMMIT_SHA
+        env:
+          LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+        with:
+          project: .
+          base: ${{ github.event.pull_request.base.sha }}
+```
+
+GitHub gives no secrets to pull requests from forks. The variable is then empty,
+both captures fail, and the job reports unavailable. Use a disposable account:
+the uploaded bundle holds screenshots of every page the journey reaches. Literal
+fill values, such as a username, appear in the bundle as written.
 
 This repository runs the same action on the Request lab example in
 [.github/workflows/observe.yml](.github/workflows/observe.yml).

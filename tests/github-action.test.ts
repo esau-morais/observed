@@ -52,10 +52,11 @@ test('CI summaries never present unavailable or unreadable results as passing', 
 });
 
 test.each([
-  { project: 'examples/shop', code: 1 },
-  { project: 'examples/request-lab', code: 0 },
+  { project: 'examples/shop', code: 0 },
+  { project: 'tests/fixtures/access-code', code: 0 },
+  { project: 'tests', code: 1 },
 ])(
-  'CI preflight exits $code for $project because fill values would be exported',
+  'CI preflight exits $code for $project so only a loadable observed.json reaches capture',
   async ({ project, code }) => {
     const child = Bun.spawn(
       [process.execPath, 'scripts/github-action.ts', 'preflight', project],
