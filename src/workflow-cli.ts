@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { captureApplication } from './capture/coordinator';
 import { observedVersion } from './capture/provenance';
-import type { Comparison } from './comparison-model';
+import { conclusionExitCodes as exitCodes } from './comparison-model';
 import { json } from './encoding';
 import { exportComparison } from './export';
 import { loadProject } from './project';
@@ -46,15 +46,6 @@ const saveLatest = Effect.fnUntraced(function* (directory: string) {
     json({ directory }),
   );
 });
-
-const exitCodes = {
-  regression: 2,
-  'check-failed': 2,
-  unavailable: 1,
-  'no-regression': 0,
-  'not-checked': 0,
-  preview: 0,
-} satisfies Record<Comparison['conclusion']['kind'], number>;
 
 const openViewer = Effect.fnUntraced(function* (
   directory: string,
