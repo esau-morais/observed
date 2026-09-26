@@ -280,9 +280,11 @@ written, so never write a password as a literal value.
 ### Post results to the pull request
 
 With a GitHub App, the action also posts each result as an **Observed** check run
-and as one pull request comment. The check shows in the merge box, and its
+and as a pull request comment. The check shows in the merge box, and its
 Details link opens the report page. The comment has the same verdict, revisions
-and report link, and later runs edit it instead of adding new ones. The App needs
+and report link, and later runs edit it instead of adding new ones. A workflow
+that calls the action more than once, such as a matrix, gets one check and one
+comment per `artifact-name`. The App needs
 no server or webhook: the job creates a short-lived token after capture finishes.
 
 1. Create a GitHub App under your account or organization's Developer settings.
@@ -290,18 +292,36 @@ no server or webhook: the job creates a short-lived token after capture finishes
    Leave the webhook inactive and subscribe to no events.
 2. Install it on the repositories that run Observed, and only those.
 3. Generate a private key. Store it as the repository secret
-   `OBSERVED_APP_PRIVATE_KEY` and the App ID as the repository variable
-   `OBSERVED_APP_ID`, then delete the downloaded key file.
-4. Pass both to the action and grant nothing extra to the workflow token:
+   `OBSERVED_APP_PRIVATE_KEY` and the App's Client ID as the repository variable
+   `OBSERVED_APP_CLIENT_ID`, then delete the downloaded key file.
+4. Pass both to the action and grant nothing extra to the workflow token. The
+   `concurrency` block cancels an older run, so it can't overwrite the comment
+   with a stale result:
 
 ```yaml
+concurrency:
+  group: observed-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: esau-morais/observed@OBSERVED_COMMIT_SHA
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
-          github-app-id: ${{ vars.OBSERVED_APP_ID }}
+          github-app-client-id: ${{ vars.OBSERVED_APP_CLIENT_ID }}
           github-app-private-key: ${{ secrets.OBSERVED_APP_PRIVATE_KEY }}
 ```
+
+The action posts only when the captured candidate is the pull request's head
+commit or the merge commit GitHub checks out for it.
 
 | Result | Check conclusion |
 | --- | --- |

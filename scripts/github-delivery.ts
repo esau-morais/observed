@@ -1,10 +1,10 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import type { Comparison } from '../src/comparison-model';
 
 type Kind = Comparison['conclusion']['kind'];
 
-// Required checks accept success, neutral and skipped alike, so anything short
-// of a verified result must be a failure.
+// Required checks accept success, neutral and skipped alike. Missing or
+// unreadable evidence therefore fails; a run that checked nothing is neutral.
 export const checkConclusions = {
   regression: 'failure',
   'check-failed': 'failure',
@@ -34,7 +34,10 @@ function limit(markdown: string): string {
     : `${markdown.slice(0, maxBody)}\n\nThe summary was cut to fit GitHub's limit. Open the report for the rest.`;
 }
 
-export class DeliveryError extends Error {}
+export class DeliveryError extends Schema.TaggedError<DeliveryError>()(
+  'DeliveryError',
+  { message: Schema.String },
+) {}
 
 export type Target = {
   api: string;
@@ -46,7 +49,10 @@ export type Target = {
   botLogin: string;
 };
 
-const created = Schema.Struct({ id: Schema.Number, html_url: Schema.String });
+const created = Schema.Struct({
+  id: Schema.Number,
+  html_url: Schema.NullOr(Schema.String),
+});
 
 const comments = Schema.Array(
   Schema.Struct({
@@ -63,24 +69,40 @@ async function request<A>(
   path: string,
   body?: unknown,
 ): Promise<A> {
-  const response = await fetch(`${target.api}${path}`, {
-    method,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${target.token}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const route = `${method} ${path.split('?')[0] ?? path}`;
+  let response: Response;
 
-  if (!response.ok) {
-    throw new DeliveryError(
-      `${method} ${path.split('?')[0] ?? path} answered HTTP ${String(response.status)}`,
-    );
+  try {
+    response = await fetch(`${target.api}${path}`, {
+      method,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${target.token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new DeliveryError({ message: `${route} did not answer` });
   }
 
-  return Schema.decodeUnknownSync(schema)(await response.json());
+  if (!response.ok) {
+    throw new DeliveryError({
+      message: `${route} answered HTTP ${String(response.status)}`,
+    });
+  }
+
+  const decoded = Schema.decodeUnknownOption(schema)(
+    await response.json().catch(() => null),
+  );
+
+  if (Option.isNone(decoded)) {
+    throw new DeliveryError({ message: `${route} answered unexpectedly` });
+  }
+
+  return decoded.value;
 }
 
 export async function postCheckRun(
@@ -91,7 +113,7 @@ export async function postCheckRun(
     markdown: string;
     conclusion: 'success' | 'failure' | 'neutral';
   },
-): Promise<string> {
+): Promise<string | null> {
   const run = await request(
     target,
     created,

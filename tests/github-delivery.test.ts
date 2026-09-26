@@ -3,6 +3,7 @@ import {
   checkConclusion,
   checkConclusions,
   commentMarker,
+  DeliveryError,
   upsertComment,
   type Target,
 } from '../scripts/github-delivery';
@@ -93,9 +94,45 @@ test('a marker copied into another user comment leads to a new App comment', asy
   });
 });
 
-test('runs without the App key say why nothing was posted, and captured text cannot mention anyone', () => {
-  expect(
-    deliveryNote({ note: '', keyProvided: false, tokenOutcome: '' }),
-  ).toContain('Pull requests from forks and Dependabot never receive it');
-  expect(inlineText('ping @maintainer')).not.toMatch(/@maintainer/);
+test('fork and Dependabot runs say why nothing was posted, and runs without the App add no note', () => {
+  const note = (options: { configured: boolean; untrustedSource: boolean }) =>
+    deliveryNote({ note: '', tokenOutcome: '', ...options });
+
+  expect(note({ configured: false, untrustedSource: true })).toContain(
+    'forks and Dependabot receive no secrets',
+  );
+  expect(note({ configured: false, untrustedSource: false })).toBeNull();
+});
+
+test('captured text cannot mention people or reference issues from a comment', () => {
+  expect(inlineText('ping @maintainer about o/r#12')).not.toMatch(
+    /@maintainer|r\\?#12/,
+  );
+});
+
+test('a rejected request reports its status without echoing the response body', async () => {
+  server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => Response.json({ message: 'secret-marker' }, { status: 422 }),
+  });
+
+  const failure = await upsertComment(
+    {
+      api: String(server.url).replace(/\/$/, ''),
+      repository: 'o/r',
+      token: 'test-token',
+      headSha: 'a'.repeat(40),
+      pullRequest: 7,
+      detailsUrl: 'https://github.test/report',
+      botLogin: 'observed-sofware[bot]',
+    },
+    commentMarker('observed-bundle'),
+    'new',
+  ).catch((error: unknown) => error);
+
+  expect(failure).toBeInstanceOf(DeliveryError);
+  expect(failure).toMatchObject({
+    message: 'GET /repos/o/r/issues/7/comments answered HTTP 422',
+  });
 });

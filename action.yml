@@ -20,8 +20,8 @@ inputs:
   retention-days:
     description: Days GitHub keeps the artifact.
     default: '7'
-  github-app-id:
-    description: ID of a GitHub App with Checks and Pull requests write access. With github-app-private-key, the result is posted as a check run and a pull request comment.
+  github-app-client-id:
+    description: Client ID of a GitHub App with Checks and Pull requests write access. With github-app-private-key, the result is posted as a check run and a pull request comment.
     default: ''
   github-app-private-key:
     description: Private key of that GitHub App. Pass it from a repository secret.
@@ -105,21 +105,22 @@ runs:
         path: ${{ steps.observe.outputs.bundle }}
         retention-days: ${{ inputs.retention-days }}
 
-    # Minted after capture, so no App token exists while pull request code runs.
+    # Minted after capture: the token never sits in the environment of the
+    # capture step, which runs pull request code.
     - name: Create a GitHub App token
       id: app-token
-      if: always() && steps.observe.outputs.bundle != '' && inputs.github-app-id != '' && inputs.github-app-private-key != ''
+      if: ${{ !cancelled() && steps.observe.outputs.bundle != '' && inputs.github-app-client-id != '' && inputs.github-app-private-key != '' }}
       continue-on-error: true
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.github-app-id }}
+        client-id: ${{ inputs.github-app-client-id }}
         private-key: ${{ inputs.github-app-private-key }}
         permission-checks: write
         permission-pull-requests: write
 
     - name: Post the result to the pull request
       id: deliver
-      if: always() && steps.app-token.outputs.token != ''
+      if: ${{ !cancelled() && steps.app-token.outputs.token != '' }}
       continue-on-error: true
       shell: bash
       env:
@@ -142,7 +143,8 @@ runs:
         OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
         OBSERVED_PAGE_URL: ${{ steps.upload-page.outputs.artifact-url }}
         OBSERVED_DELIVERY_NOTE: ${{ steps.deliver.outputs.note }}
-        OBSERVED_APP_KEY_PROVIDED: ${{ inputs.github-app-private-key != '' }}
+        OBSERVED_APP_CONFIGURED: ${{ inputs.github-app-client-id != '' || inputs.github-app-private-key != '' }}
+        OBSERVED_UNTRUSTED_SOURCE: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
         OBSERVED_APP_TOKEN_OUTCOME: ${{ steps.app-token.outcome }}
       run: bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 

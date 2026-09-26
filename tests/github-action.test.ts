@@ -2,6 +2,7 @@ import { Effect } from 'effect';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
+  capturedRevision,
   describeFailure,
   inlineText,
   pageMatchesRun,
@@ -169,4 +170,22 @@ test('a URL in check text renders as code so GitHub cannot autolink the captured
     'Exactly 1 GET `http://127.0.0.1:4010/api/books` request\\(s\\) with status 200\\.',
   );
   expect(inlineText('See https://x.test/a.')).toBe('See `https://x.test/a`.');
+});
+
+test('a result is posted to a pull request only when its candidate is that head or its merge commit', () => {
+  const head = 'a'.repeat(40);
+
+  expect(capturedRevision(null, [head])).toBe('unavailable');
+  expect(capturedRevision({ kind: 'commit', commit: head }, [head])).toBe(
+    'match',
+  );
+  expect(
+    capturedRevision({ kind: 'commit', commit: 'c'.repeat(40) }, [head]),
+  ).toBe('other');
+  expect(
+    capturedRevision(
+      { kind: 'worktree', head: { kind: 'commit', commit: head } },
+      [head],
+    ),
+  ).toBe('other');
 });
