@@ -686,6 +686,7 @@ test.each([
     );
     expect(manifest.execution).toMatchObject({
       kind: 'failed',
+      category: 'configuration',
       reason:
         'Fill value unavailable. Missing or empty environment variables: OBSERVED_ACCESS_CODE',
     });

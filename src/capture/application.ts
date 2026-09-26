@@ -24,7 +24,7 @@ export const startApplication = Effect.fn('startApplication')(
     workspace: string;
     evidenceDirectory: string;
     project: Project;
-    concealed?: readonly string[];
+    concealed: readonly string[];
   }) {
     const fs = yield* FileSystem.FileSystem;
     const reservation = yield* Effect.sync(() =>

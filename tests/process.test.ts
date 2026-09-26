@@ -99,6 +99,7 @@ test.each([
               ...shop,
               start: [process.execPath, helper],
             }),
+            concealed: [],
           });
         }
 

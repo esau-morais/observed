@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { redact, redactText } from '../src/redact';
+import { conceal, redact, redactText } from '../src/redact';
 
 test.each([
   'url=https://alice:credential@example.test/orders?sort=name',
@@ -76,4 +76,22 @@ test('redacts each JSON log record in a mixed output stream', () => {
 
   expect(result).not.toContain('sensitive-value');
   expect(result).toContain('"ready":true');
+});
+
+const secret = "hunter 2'x<&>ä`{}🔑";
+
+test.each([
+  [
+    'a query the browser encoded',
+    new URL(`/search?q=${secret}`, 'http://app.test').search,
+  ],
+  [
+    'a path the browser encoded',
+    new URL(`/session/${secret}`, 'http://app.test').pathname,
+  ],
+  ['lowercase percent escapes', encodeURIComponent(secret).toLowerCase()],
+  ['ASCII-only JSON escapes', '{"v":"hunter 2\'x<&>\\u00e4`{}\\ud83d\\udd11"}'],
+  ['HTML-safe JSON escapes', '{"v":"hunter 2\'x\\u003c\\u0026\\u003eä`{}🔑"}'],
+])('conceals a fill value written as %s', (_, text) => {
+  expect(conceal(text, [secret])).not.toContain('hunter');
 });

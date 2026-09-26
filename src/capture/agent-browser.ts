@@ -221,9 +221,9 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         const value = options.fillValues.get(action.value.env);
 
         if (value === undefined) {
-          return yield* new BrowserFailure({
-            message: `Fill value for ${action.value.env} was not resolved`,
-          });
+          return yield* Effect.die(
+            `Fill value for ${action.value.env} was not resolved`,
+          );
         }
 
         // Batch input arrives on stdin, so the value stays out of process

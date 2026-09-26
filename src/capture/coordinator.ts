@@ -8,13 +8,18 @@ import { processOutput } from './process';
 import { json, sha256 } from '../encoding';
 import { conceal } from '../redact';
 import type { Project } from '../project';
-import { resolveFillValues, type Recipe } from './recipe';
+import { FillValueFailure, resolveFillValues, type Recipe } from './recipe';
 import { snapshotApplication } from './snapshot';
 
 class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
   'CaptureFailure',
   {
-    category: Schema.Literals(['timeout', 'application', 'producer']),
+    category: Schema.Literals([
+      'timeout',
+      'application',
+      'configuration',
+      'producer',
+    ]),
     message: Schema.String,
     cause: Schema.Defect(),
   },
@@ -224,6 +229,14 @@ export const captureApplication = Effect.fn('captureApplication')(
         if (cause instanceof ApplicationFailure) {
           return new CaptureFailure({
             category: 'application',
+            message: cause.message,
+            cause,
+          });
+        }
+
+        if (cause instanceof FillValueFailure) {
+          return new CaptureFailure({
+            category: 'configuration',
             message: cause.message,
             cause,
           });

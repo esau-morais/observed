@@ -129,17 +129,53 @@ export function redactText(
   }
 }
 
+// The WHATWG URL parser leaves most reserved characters as typed, so a value
+// concatenated into a query or path matches no encodeURI* output.
+function urlEncode(secret: string, set: RegExp): string {
+  return Array.from(new TextEncoder().encode(secret), (byte) =>
+    byte < 0x21 || byte > 0x7e || set.test(String.fromCharCode(byte))
+      ? `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
+      : String.fromCharCode(byte),
+  ).join('');
+}
+
+// Python's json.dumps escapes non-ASCII and Go's encoding/json escapes <, >
+// and &, both as lowercase \uXXXX.
+function jsonEscapes(secret: string): string[] {
+  const escape = (pattern: RegExp) => (text: string) =>
+    text.replace(
+      pattern,
+      (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    );
+  const ascii = escape(/[\u0080-\uffff]/g);
+  const html = escape(/[<>&\u2028\u2029]/g);
+  const json = JSON.stringify(secret).slice(1, -1);
+
+  return [json, ascii(json), html(json), ascii(html(json))];
+}
+
 // agent-browser echoes batch input as JSON, and pages can send a value in a
 // path, a query string, or a form body.
 export function conceal(value: string, secrets: readonly string[]): string {
   const forms = secrets
-    .flatMap((secret) => [
-      secret,
-      JSON.stringify(secret).slice(1, -1),
-      encodeURIComponent(secret),
-      encodeURI(secret),
-      new URLSearchParams([['', secret]]).toString().slice(1),
-    ])
+    .flatMap((secret) => {
+      const encoded = [
+        encodeURIComponent(secret),
+        encodeURI(secret),
+        new URLSearchParams([['', secret]]).toString().slice(1),
+        urlEncode(secret, /["#<>']/),
+        urlEncode(secret, /["#<>?`{}]/),
+      ];
+
+      return [
+        secret,
+        ...jsonEscapes(secret),
+        ...encoded,
+        ...encoded.map((form) =>
+          form.replace(/%[0-9A-F]{2}/g, (escape) => escape.toLowerCase()),
+        ),
+      ];
+    })
     .filter((form) => form !== '')
     .sort((left, right) => right.length - left.length);
 

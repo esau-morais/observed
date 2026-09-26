@@ -54,7 +54,9 @@ environment reference such as `{ "env": "LOGIN_PASSWORD" }`. Recipes and evidenc
 keep only the variable name. Observed reads the variable when the capture runs,
 and a missing or empty variable fails the capture. The value reaches agent-browser
 on stdin, not in process arguments. Observed removes it from the transcript and
-other text evidence, including JSON-escaped and URL-encoded copies. Screenshots
+other text evidence, including JSON-escaped and URL-encoded copies. It matches
+whole values only: a page that splits, truncates or transforms the value, such as
+a URL cut at `#`, can leave part of it in evidence. Screenshots
 keep whatever the page draws, so fill secrets only into fields that mask them,
 such as password inputs.
 

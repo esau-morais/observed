@@ -4,7 +4,8 @@
 
 Phase 1 is complete: one command previews or compares a running change, and two
 separate applications, including a non-React one, use the same capture path
-without core edits.
+without core edits. Named checks decide the result while pixel changes stay
+observations, and missing requested captures show as unavailable.
 
 The next implementation milestone is Phase 2: repeatable use. Keep the adoption
 study separate: working code does not establish that people find it useful.
