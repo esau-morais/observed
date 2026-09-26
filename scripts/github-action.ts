@@ -156,6 +156,7 @@ export function summarize(options: {
   page: string | null;
   repository?: string | null;
   delivery?: string | null;
+  headline?: boolean;
 }): Summary {
   const decoded =
     options.output === null
@@ -172,7 +173,9 @@ export function summarize(options: {
   const untrusted = (reason: string) => ({
     markdown: [
       alert('WARNING', [
-        '**No result. Treat this run as unavailable, not passed.**',
+        ...(options.headline === false
+          ? []
+          : ['**No result. Treat this run as unavailable, not passed.**']),
         `${reason} The job fails. The job log has details.`,
       ]),
       bundle,
@@ -236,7 +239,9 @@ export function summarize(options: {
 
   const markdown = [
     alert(alerts[conclusionTones[kind]], [
-      `**${inlineText(headline(result))}**`,
+      ...(options.headline === false
+        ? []
+        : [`**${inlineText(headline(result))}**`]),
       `${inlineText(result.conclusion.text.replace(/\.?$/, '.'))} ${consequences[kind]}`,
     ]),
     [
@@ -479,16 +484,32 @@ if (import.meta.main) {
       }
     };
 
+    const name = checkName(artifact);
     const check = await attempt('GitHub check', () =>
       postCheckRun(target, {
-        name: checkName(artifact),
+        name,
         title: summary.title,
-        markdown: summary.markdown,
+        markdown: summarize({
+          output,
+          exitCode: Option.getOrNull(
+            Schema.decodeUnknownOption(exitCodeSchema)(exitCode),
+          ),
+          artifact,
+          page: page === '' ? null : page,
+          repository,
+          headline: false,
+        }).markdown,
         conclusion: checkConclusion(summary.kind),
       }),
     );
     const comment = await attempt('pull request comment', () =>
-      upsertComment(target, commentMarker(artifact), summary.markdown),
+      upsertComment(
+        target,
+        commentMarker(artifact),
+        name === 'Observed'
+          ? summary.markdown
+          : `<sub>${inlineText(name)}</sub>\n\n${summary.markdown}`,
+      ),
     );
 
     await writeOutput(

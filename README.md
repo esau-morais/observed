@@ -321,7 +321,9 @@ jobs:
 ```
 
 The action posts only when the captured candidate is the pull request's head
-commit or the merge commit GitHub checks out for it.
+commit or the merge commit GitHub checks out for it. To run Observed again, re-run the
+workflow. The **Re-run** button on the Observed check itself does nothing,
+because the App has no server to receive it.
 
 | Result | Check conclusion |
 | --- | --- |
