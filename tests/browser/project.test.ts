@@ -337,13 +337,12 @@ test('compares a React commit with a duplicate-request worktree through the publ
     2,
   );
   expect(result.result.conclusion.kind).toBe('regression');
-  expect(result.result.comparison).toMatchObject({ kind: 'available' });
-  expect(
-    result.result.comparison.kind === 'available' &&
-      ['identical', 'below-threshold'].includes(
-        result.result.comparison.visual.kind,
-      ),
-  ).toBe(true);
+  expect(result.result.comparison.kind).toBe('available');
+  expect(['identical', 'below-threshold']).toContain(
+    result.result.comparison.kind === 'available'
+      ? result.result.comparison.visual.kind
+      : result.result.comparison.kind,
+  );
   const before = await rawCapture(
     path.join(result.directory, 'base'),
     1,

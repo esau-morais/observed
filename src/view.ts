@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { parseCapture, type CaptureArtifact } from './capture/model';
-import { json } from './encoding';
+import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
 import { selectionSchema, type Selection } from './comparison-model';
 import { readVerifiedArtifact } from './evidence';
@@ -223,7 +223,11 @@ const preloadReport = Effect.fnUntraced(function* (directory: string) {
 
   if (visualDiff !== null) {
     assets.set(`/${visualDiff.path}`, {
-      bytes: new Uint8Array(visualDiff.bytes),
+      bytes: yield* readRequired(
+        root,
+        visualDiff.path,
+        sha256(visualDiff.bytes),
+      ),
       type: 'image/png',
       evidence: true,
     });

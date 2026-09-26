@@ -425,6 +425,45 @@ test('exports changed pixels as a located observation with a served difference i
   );
 
   expect(sha256(served)).toBe(diff.sha256);
+
+  await writeFile(
+    path.join(exported.directory, diff.path),
+    encodeRgbPng(4, 4, changed),
+  );
+
+  const tampered = await Effect.runPromise(
+    serveReport({ directory: exported.directory, port: 0 }).pipe(
+      Effect.flip,
+      Effect.scoped,
+      Effect.provide(BunServices.layer),
+    ),
+  );
+
+  expect(tampered.message).toContain('visual-diff.png: SHA-256 mismatch');
+});
+
+test('writes no difference image when changed screenshots belong to captures that cannot be compared', async () => {
+  const changed = new Uint8Array(4 * 4 * 3).fill(255);
+  changed.set([0, 0, 0], 0);
+  const base = await syntheticBundle();
+  const candidate = await syntheticBundle({
+    contract: { ...recipe, maxAgeMs: recipe.maxAgeMs + 1 },
+    image: encodeRgbPng(4, 4, changed),
+  });
+
+  const { result, visualDiff } = await Effect.runPromise(
+    inspectComparison({
+      baseDirectory: base.directory,
+      candidateDirectory: candidate.directory,
+      evaluatedAt,
+    }),
+  );
+
+  expect(result.comparison).toEqual({
+    kind: 'unavailable',
+    reasons: ['Capture recipes differ'],
+  });
+  expect(visualDiff).toBeNull();
 });
 
 test('identical but undecodable screenshots leave the pixel observation unavailable instead of identical', async () => {

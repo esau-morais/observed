@@ -4,6 +4,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 import { decodePng, type RgbaImage } from '../src/png';
 import { comparePixels } from '../src/visual';
+import { describeVisual } from '../src/visual-text';
 
 type Chunk = [type: string, data: Uint8Array];
 
@@ -243,6 +244,16 @@ test.each([
   ],
   ['trailing bytes', Buffer.concat([valid, Buffer.from('x')]), 'after IEND'],
   [
+    'transparency key',
+    png([
+      header(2, 2),
+      ['tRNS', new Uint8Array(6)],
+      ['IDAT', deflateSync(new Uint8Array(14))],
+      ['IEND', new Uint8Array()],
+    ]),
+    'tRNS chunk changes colors',
+  ],
+  [
     'unknown critical chunk',
     png([header(2, 2), ['ABCD', new Uint8Array()], ['IEND', new Uint8Array()]]),
     'critical chunk ABCD',
@@ -282,6 +293,7 @@ test('a Chromium re-render of the same UI stays below the threshold while a head
     height: 800,
     threshold: 0.1,
     differingPixels: 8,
+    bounds: { x: 853, y: 64, width: 5, height: 2 },
   });
 
   const heading = comparePixels(base, await screenshot('heading-change.png'));
@@ -292,7 +304,7 @@ test('a Chromium re-render of the same UI stays below the threshold while a head
     regionCount: 1,
     regions: [{ x: 286, y: 129, width: 205, height: 29 }],
   });
-  expect(heading.diffImage).not.toBeNull();
+  expect(heading.diff?.path).toBe('visual-diff.png');
 });
 
 test('reports differing dimensions instead of comparing overlapping pixels', () => {
@@ -323,5 +335,33 @@ test('separates distant changes into regions and keeps the count when listing is
   ).visual;
 
   expect(result).toMatchObject({ kind: 'changed', regionCount: 12 });
-  expect(result.kind === 'changed' ? result.regions : []).toHaveLength(10);
+
+  const regions = result.kind === 'changed' ? result.regions : [];
+
+  expect(regions).toHaveLength(10);
+  expect(regions[0]).toEqual({
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 16,
+    changedPixels: 16,
+  });
+});
+
+test('a uniform shift under the threshold still reports how many pixels differ and where', () => {
+  const white = Array.from({ length: 100 * 100 }, () => [255, 255, 255]);
+  const gray = white.map(() => [230, 230, 230]);
+  const { visual } = comparePixels(
+    image(100, 100, white),
+    image(100, 100, gray),
+  );
+
+  expect(visual).toMatchObject({
+    kind: 'below-threshold',
+    differingPixels: 10_000,
+    bounds: { x: 0, y: 0, width: 100, height: 100 },
+  });
+  expect(describeVisual(visual)).toBe(
+    '10,000 pixels (100.00%) differ within 100 × 100 px at x 0, y 0. None exceed the 0.1 color threshold.',
+  );
 });

@@ -1,15 +1,23 @@
-import type { Visual, VisualRegion } from './comparison-model';
+import {
+  maxVisualRegions,
+  type Visual,
+  type VisualRegion,
+} from './comparison-model';
 import { sha256 } from './encoding';
 import { encodeRgbPng, type RgbaImage } from './png';
 
 const visualThreshold = 0.1;
+const maxYiqDelta = 35215;
 const regionTile = 16;
-const maxVisualRegions = 10;
 
-type PixelComparison = {
-  visual: Exclude<Visual, { kind: 'unavailable' }>;
-  diffImage: Uint8Array | null;
-};
+type ChangedVisual = Extract<Visual, { kind: 'changed' }>;
+
+export type PixelComparison =
+  | { visual: ChangedVisual; diff: { path: string; bytes: Uint8Array } }
+  | {
+      visual: Exclude<Visual, { kind: 'changed' | 'unavailable' }>;
+      diff: null;
+    };
 
 function blend(value: number, alpha: number): number {
   return 255 + ((value - 255) * alpha) / 255;
@@ -139,16 +147,20 @@ export function comparePixels(
         base: { width: base.width, height: base.height },
         candidate: { width: candidate.width, height: candidate.height },
       },
-      diffImage: null,
+      diff: null,
     };
   }
 
   const { width, height } = base;
-  const maxDelta = 35215 * visualThreshold * visualThreshold;
+  const maxDelta = maxYiqDelta * visualThreshold * visualThreshold;
   const changed = new Uint8Array(width * height);
   const diff = new Uint8Array(width * height * 3);
   let differingPixels = 0;
   let changedPixels = 0;
+  let left = width;
+  let top = height;
+  let right = 0;
+  let bottom = 0;
 
   for (let pixel = 0; pixel < width * height; pixel += 1) {
     const at = pixel * 4;
@@ -159,7 +171,14 @@ export function comparePixels(
       base.rgba[at + 3] === candidate.rgba[at + 3];
 
     if (!same) {
+      const x = pixel % width;
+      const y = Math.floor(pixel / width);
+
       differingPixels += 1;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
     }
 
     if (!same && colorDelta(base.rgba, candidate.rgba, at) > maxDelta) {
@@ -179,7 +198,7 @@ export function comparePixels(
   }
 
   if (differingPixels === 0) {
-    return { visual: { kind: 'identical', width, height }, diffImage: null };
+    return { visual: { kind: 'identical', width, height }, diff: null };
   }
 
   if (changedPixels === 0) {
@@ -190,8 +209,14 @@ export function comparePixels(
         height,
         threshold: visualThreshold,
         differingPixels,
+        bounds: {
+          x: left,
+          y: top,
+          width: right - left + 1,
+          height: bottom - top + 1,
+        },
       },
-      diffImage: null,
+      diff: null,
     };
   }
 
@@ -202,6 +227,7 @@ export function comparePixels(
   }
 
   const diffImage = encodeRgbPng(width, height, diff);
+  const path = 'visual-diff.png';
 
   return {
     visual: {
@@ -213,8 +239,8 @@ export function comparePixels(
       changedPixels,
       regionCount: others.length + 1,
       regions: [largest, ...others.slice(0, maxVisualRegions - 1)],
-      diff: { path: 'visual-diff.png', sha256: sha256(diffImage) },
+      diff: { path, sha256: sha256(diffImage) },
     },
-    diffImage,
+    diff: { path, bytes: diffImage },
   };
 }

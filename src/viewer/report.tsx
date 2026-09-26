@@ -7,10 +7,9 @@ import {
   EvidenceLink,
   RequestLedger,
   Screenshot,
-  units,
-  visualSummary,
   type Highlight,
 } from './evidence';
+import { describeRegion, describeVisual } from '../visual-text';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -363,14 +362,11 @@ function Availability({ result }: { result: Comparison }) {
               {comparison.requestDifference}
             </Field>
             <Field label="Screenshot pixels">
-              {visualSummary(comparison.visual)}
+              {describeVisual(comparison.visual)}
               {comparison.visual.kind === 'changed' ? (
                 <ul {...stylex.props(styles.list)}>
                   {comparison.visual.regions.map((region, index) => (
-                    <li key={index}>
-                      {region.width} × {region.height} px at x {region.x}, y{' '}
-                      {region.y}: {units(region.changedPixels, 'changed pixel')}
-                    </li>
+                    <li key={index}>{describeRegion(region)}</li>
                   ))}
                 </ul>
               ) : null}
@@ -448,7 +444,7 @@ export function ComparisonReport({ result }: { result: Comparison }) {
           >
             {visual === null ? null : (
               <div {...stylex.props(styles.stack)}>
-                <p {...stylex.props(styles.text)}>{visualSummary(visual)}</p>
+                <p {...stylex.props(styles.text)}>{describeVisual(visual)}</p>
                 {visual.kind === 'changed' ? (
                   <div {...stylex.props(styles.nav)}>
                     <label {...stylex.props(styles.toggle)}>

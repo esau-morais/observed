@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
-import type { Side, Visual, VisualRegion } from '../comparison-model';
+import type { Side, Visual } from '../comparison-model';
 import { fonts, geometry, media } from './constants.stylex';
 import { colors } from './tokens.stylex';
 
@@ -77,50 +77,31 @@ const styles = stylex.create({
   caption: { color: colors.textMuted, fontSize: '0.8125rem' },
   frame: { display: 'block', position: 'relative' },
   region: {
-    outlineColor: {
+    borderColor: {
       default: colors.changed,
       [media.forcedColors]: 'Highlight',
     },
-    outlineOffset: 4,
+    borderStyle: 'solid',
+    borderWidth: 2,
+    boxSizing: 'border-box',
+    outlineColor: colors.surface,
     outlineStyle: 'solid',
     outlineWidth: 2,
     pointerEvents: 'none',
     position: 'absolute',
   },
   regionBox: (left: string, top: string, width: string, height: string) => ({
-    height,
-    left,
-    top,
-    width,
+    height: `calc(${height} + 12px)`,
+    left: `calc(${left} - 6px)`,
+    top: `calc(${top} - 6px)`,
+    width: `calc(${width} + 12px)`,
   }),
 });
 
-const count = new Intl.NumberFormat('en-US');
-
-export type Highlight = {
-  width: number;
-  height: number;
-  regions: readonly VisualRegion[];
-};
-
-export function units(value: number, singular: string): string {
-  return `${count.format(value)} ${singular}${value === 1 ? '' : 's'}`;
-}
-
-export function visualSummary(visual: Visual): string {
-  switch (visual.kind) {
-    case 'identical':
-      return 'Screenshot pixels are identical.';
-    case 'below-threshold':
-      return `No visible change. ${units(visual.differingPixels, 'pixel')} differ, all below the ${visual.threshold} color threshold.`;
-    case 'size-differs':
-      return `Screenshots not compared. Base is ${visual.base.width} × ${visual.base.height} px; after is ${visual.candidate.width} × ${visual.candidate.height} px.`;
-    case 'unavailable':
-      return `Pixel comparison unavailable. ${visual.reason}`;
-    case 'changed':
-      return `${units(visual.changedPixels, 'pixel')} (${((visual.changedPixels / (visual.width * visual.height)) * 100).toFixed(2)}%) changed beyond the ${visual.threshold} color threshold, in ${units(visual.regionCount, 'region')}.`;
-  }
-}
+export type Highlight = Pick<
+  Extract<Visual, { kind: 'changed' }>,
+  'width' | 'height' | 'regions'
+>;
 
 function percent(value: number, total: number): string {
   return `${(value / total) * 100}%`;

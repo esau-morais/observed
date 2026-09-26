@@ -15,6 +15,10 @@ const maxPngPixels = 25_000_000;
 
 const signature = [137, 80, 78, 71, 13, 10, 26, 10];
 
+// Transparency keys and color profiles change the displayed pixels, so equal
+// stored bytes would no longer mean equal rendering.
+const colorChunks = new Set(['tRNS', 'gAMA', 'cHRM', 'iCCP', 'cICP']);
+
 const channelsByColorType: Partial<Record<number, number>> = { 2: 3, 6: 4 };
 
 function unsupported(reason: string): DecodedPng {
@@ -175,6 +179,8 @@ export function decodePng(bytes: Uint8Array): DecodedPng {
       ended = true;
     } else if ((type.charCodeAt(0) & 0x20) === 0) {
       return unsupported(`PNG critical chunk ${type} is unsupported`);
+    } else if (colorChunks.has(type)) {
+      return unsupported(`PNG ${type} chunk changes colors and is unsupported`);
     }
 
     previous = type;

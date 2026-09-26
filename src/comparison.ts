@@ -767,8 +767,8 @@ export function compareCaptures({
   };
 }
 
-function noVisual(reason: string): { visual: Visual; diffImage: null } {
-  return { visual: { kind: 'unavailable', reason }, diffImage: null };
+function noVisual(reason: string): { visual: Visual; diff: null } {
+  return { visual: { kind: 'unavailable', reason }, diff: null };
 }
 
 const loadScreenshot = Effect.fnUntraced(function* (
@@ -886,7 +886,7 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
         );
 
   const mode = selection?.mode ?? 'comparison';
-  const { visual, diffImage } =
+  const pixels =
     mode === 'comparison'
       ? yield* inspectVisual(baseDirectory, candidateDirectory, base, candidate)
       : noVisual('Preview has no baseline');
@@ -894,17 +894,12 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
     base,
     candidate,
     evaluatedAt,
-    visual,
+    visual: pixels.visual,
     mode,
   });
 
   return {
     result,
-    visualDiff:
-      diffImage !== null &&
-      result.comparison.kind === 'available' &&
-      result.comparison.visual.kind === 'changed'
-        ? { path: result.comparison.visual.diff.path, bytes: diffImage }
-        : null,
+    visualDiff: result.comparison.kind === 'available' ? pixels.diff : null,
   };
 });

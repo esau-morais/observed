@@ -36,10 +36,13 @@ compare the worktree with a commit. The JSON result includes the viewer director
 and check outcomes. Exit codes: `0` completed, `1` unavailable, `2` a named check
 failed. A completed capture is not a claim that the whole application is correct.
 
-A comparison also reports screenshot pixels. It counts pixels whose color moved
-past pixelmatch's default 0.1 YIQ threshold, lists the changed regions, and writes
-`visual-diff.png` beside `report.md`. A pixel change never fails a run by itself.
-Screenshots that can't be decoded make the pixel result unavailable.
+A comparison also reports screenshot pixels. It counts pixels whose YIQ color
+difference exceeds 0.1, on pixelmatch's threshold scale, and lists the changed
+regions. Pixelmatch's anti-aliasing detection is not implemented, so counts can
+differ from pixelmatch. When pixels change, Observed writes `visual-diff.png`
+beside `report.md`. Smaller differences are still counted and located. A pixel change
+never fails a run by itself, and screenshots that can't be decoded make the pixel
+result unavailable.
 
 For an app using a separate API or asset host, set `capture.allowedOrigins` to its
 HTTP(S) origins, such as `["http://127.0.0.1:4000"]`. Request checks match the

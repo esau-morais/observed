@@ -1,4 +1,5 @@
 import type { Comparison, Side, Visual } from './comparison-model';
+import { describeRegion, describeVisual } from './visual-text';
 
 function escapeText(value: string): string {
   return value
@@ -54,38 +55,17 @@ function renderCheck(side: Side, label: string): string {
   ].join('\n\n');
 }
 
-const count = new Intl.NumberFormat('en-US');
-
-function units(value: number, singular: string): string {
-  return `${count.format(value)} ${singular}${value === 1 ? '' : 's'}`;
-}
-
 function renderVisual(visual: Visual): string {
-  switch (visual.kind) {
-    case 'identical':
-      return `Identical pixels at ${visual.width} × ${visual.height} px.`;
-    case 'below-threshold':
-      return `No visible change. ${units(visual.differingPixels, 'pixel')} differ, all below the ${visual.threshold} color threshold.`;
-    case 'size-differs':
-      return `Not compared. Base is ${visual.base.width} × ${visual.base.height} px; candidate is ${visual.candidate.width} × ${visual.candidate.height} px.`;
-    case 'unavailable':
-      return `Unavailable. ${escapeText(visual.reason)}`;
-    case 'changed': {
-      const total = visual.width * visual.height;
-      const listed =
-        visual.regionCount > visual.regions.length
-          ? ` The ${visual.regions.length} largest are listed.`
-          : '';
+  const summary = escapeText(describeVisual(visual));
 
-      return [
-        `Changed. ${count.format(visual.changedPixels)} of ${units(total, 'pixel')} (${((visual.changedPixels / total) * 100).toFixed(2)}%) exceed the ${visual.threshold} color threshold, in ${units(visual.regionCount, 'region')}.${listed} ${link('Open pixel difference image', visual.diff.path)} (SHA-256 ${visual.diff.sha256}).`,
-        ...visual.regions.map(
-          (region) =>
-            `  - ${region.width} × ${region.height} px at x ${region.x}, y ${region.y}: ${units(region.changedPixels, 'changed pixel')}`,
-        ),
-      ].join('\n');
-    }
+  if (visual.kind !== 'changed') {
+    return summary;
   }
+
+  return [
+    `${summary} ${link('Open pixel difference image', visual.diff.path)} (SHA-256 ${visual.diff.sha256}).`,
+    ...visual.regions.map((box) => `  - ${escapeText(describeRegion(box))}`),
+  ].join('\n');
 }
 
 function renderAvailability(result: Comparison): string {
