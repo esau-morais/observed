@@ -22,11 +22,11 @@ function list(values: readonly string[]): string {
 }
 
 function renderIdentity(side: Side, label: string): string {
-  const capture = side.manifest;
-
-  if (capture === null) {
+  if (side.capture === null) {
     return `### ${label}\n\nCapture unavailable.\n\nExecution: ${side.execution}.`;
   }
+
+  const capture = side.capture.manifest;
 
   return [
     `### ${label}`,
@@ -73,11 +73,11 @@ function renderAvailability(result: Comparison): string {
 }
 
 function renderLedger(side: Side, label: string): string {
-  const observations = side.observations;
-
-  if (observations === null) {
+  if (side.execution !== 'complete') {
     return `### ${label}\n\nRequest evidence unavailable.`;
   }
+
+  const observations = side.observations;
 
   const requests =
     observations.requests.length === 0
@@ -107,12 +107,14 @@ function renderLedger(side: Side, label: string): string {
 function renderArtifacts(side: Side, label: string): string {
   const artifacts = side.artifacts.map((artifact) => {
     const reference =
-      artifact.path === null
-        ? escapeText(artifact.id)
-        : link(artifact.id, artifact.path);
+      artifact.integrity === 'verified'
+        ? link(artifact.id, artifact.path)
+        : escapeText(artifact.id);
 
     const reason =
-      artifact.reason === null ? '' : ` ${escapeText(artifact.reason)}`;
+      artifact.integrity === 'verified'
+        ? ''
+        : ` ${escapeText(artifact.reason)}`;
 
     return `- ${reference}: ${escapeText(artifact.description)}\n  - Artifact integrity: ${artifact.integrity}.${reason}`;
   });
@@ -133,11 +135,11 @@ function renderArtifacts(side: Side, label: string): string {
 }
 
 function renderProvenance(side: Side, label: string): string {
-  const capture = side.manifest;
-
-  if (capture === null) {
+  if (side.capture === null) {
     return `### ${label}\n\nCapture metadata unavailable.`;
   }
+
+  const capture = side.capture.manifest;
 
   const conditions = capture.conditions;
   let recordedConditions: string;
@@ -170,7 +172,7 @@ function renderProvenance(side: Side, label: string): string {
     [
       `- Application: ${escapeText(capture.application)}`,
       `- Capture ID: ${escapeText(capture.id)}`,
-      `- Manifest SHA-256: ${side.manifestHash ?? 'Unavailable'}`,
+      `- Manifest SHA-256: ${side.capture.sha256}`,
       `- Producer: ${escapeText(capture.producer.name)}; version ${escapeText(capture.producer.version)}`,
       `- Recipe: ${escapeText(capture.recipe.id)}`,
       `- Recipe SHA-256: ${escapeText(capture.recipe.sha256)}`,
@@ -222,9 +224,9 @@ export function renderComparison(result: Comparison): string {
     ...screenshots.map(({ side, label }) =>
       [
         `## ${label}`,
-        side.manifest === null
+        side.capture === null
           ? 'Capture unavailable.'
-          : `Source: ${escapeText(side.manifest.source.revision ?? 'snapshot')} · ${side.manifest.source.sha256}`,
+          : `Source: ${escapeText(side.capture.manifest.source.revision ?? 'snapshot')} · ${side.capture.manifest.source.sha256}`,
         side.screenshot === null
           ? 'Screenshot unavailable.'
           : `!${link(`${label} captured application`, side.screenshot)}`,

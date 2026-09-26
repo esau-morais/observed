@@ -93,15 +93,16 @@ export function EvidenceLink({
 
 export function Screenshot({ side, label }: { side: Side; label: string }) {
   const [failed, setFailed] = useState(false);
+  const capture = side.capture?.manifest ?? null;
 
   return (
     <figure {...stylex.props(styles.figure)}>
       <h2 {...stylex.props(styles.heading)}>{label}</h2>
       <p {...stylex.props(styles.caption)}>
-        {side.manifest?.label ?? 'No capture'}
-        {side.manifest === null
+        {capture?.label ?? 'No capture'}
+        {capture === null
           ? ''
-          : ` · ${side.manifest.source.revision ?? 'snapshot'} · ${side.manifest.source.sha256.slice(0, 12)}`}
+          : ` · ${capture.source.revision ?? 'snapshot'} · ${capture.source.sha256.slice(0, 12)}`}
       </p>
       {side.screenshot === null ? (
         <p {...stylex.props(styles.missing)}>
@@ -139,7 +140,7 @@ export function Screenshot({ side, label }: { side: Side; label: string }) {
 }
 
 export function RequestLedger({ side, label }: { side: Side; label: string }) {
-  const observations = side.observations;
+  const observations = side.execution === 'complete' ? side.observations : null;
 
   return (
     <section
@@ -254,15 +255,17 @@ export function Artifacts({ side, label }: { side: Side; label: string }) {
         <ul {...stylex.props(styles.list)}>
           {side.artifacts.map((artifact, index) => (
             <li key={index} {...stylex.props(styles.artifact)}>
-              {artifact.path === null ? (
-                artifact.id
-              ) : (
+              {artifact.integrity === 'verified' ? (
                 <EvidenceLink href={artifact.path}>{artifact.id}</EvidenceLink>
+              ) : (
+                artifact.id
               )}
               <p {...stylex.props(styles.text)}>{artifact.description}</p>
               <p {...stylex.props(styles.caption)}>
                 Artifact integrity: {artifact.integrity}.
-                {artifact.reason === null ? null : ` ${artifact.reason}`}
+                {artifact.integrity === 'verified'
+                  ? null
+                  : ` ${artifact.reason}`}
               </p>
             </li>
           ))}

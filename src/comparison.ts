@@ -11,7 +11,14 @@ import {
 } from './capture/model';
 import { parseRecipe, type Recipe } from './capture/recipe';
 import { json, sha256 } from './encoding';
-import type { Comparison, Selection, Side } from './comparison-model';
+import type {
+  Check,
+  Comparison,
+  Selection,
+  Side,
+  SideArtifact,
+  UnknownCheck,
+} from './comparison-model';
 import { inspectArtifact, type ArtifactResult } from './evidence';
 import { nodeIo } from './node-io';
 import { relativePathSchema } from './project';
@@ -54,7 +61,7 @@ function expectation(recipe: Recipe | null): string {
 function unknownCheck(
   detail: string,
   recipe: Recipe | null = null,
-): Side['check'] {
+): UnknownCheck {
   const definition = recipe?.check;
 
   return {
@@ -70,10 +77,7 @@ function unknownCheck(
   };
 }
 
-function evaluateCheck(
-  recipe: Recipe,
-  observations: Observations,
-): Side['check'] {
+function evaluateCheck(recipe: Recipe, observations: Observations): Check {
   const definition = recipe.check;
   const common = unknownCheck('Required check observation unavailable', recipe);
 
@@ -170,7 +174,7 @@ function conclusion(
   };
 }
 
-function previewConclusion(check: Side['check']): Comparison['conclusion'] {
+function previewConclusion(check: Check): Comparison['conclusion'] {
   switch (check.outcome) {
     case 'not-run':
       return { kind: 'preview', text: 'Current application capture.' };
@@ -188,14 +192,12 @@ function previewConclusion(check: Side['check']): Comparison['conclusion'] {
 
 function unavailable(reason: string): Side {
   return {
-    manifest: null,
-    manifestHash: null,
     execution: 'unavailable',
-    check: unknownCheck(reason),
+    capture: null,
     recipe: null,
-    observations: null,
-    artifacts: [],
     screenshot: null,
+    check: unknownCheck(reason),
+    artifacts: [],
     unresolved: [reason],
   };
 }
@@ -209,20 +211,17 @@ function artifactLink(prefix: string, artifactPath: string): string {
     .join('/');
 }
 
-function describeArtifact(
-  item: ArtifactResult,
-  prefix: string,
-): Side['artifacts'][number] {
-  return {
-    id: item.artifact.id,
-    path:
-      item.kind === 'available'
-        ? artifactLink(prefix, item.artifact.path)
-        : null,
-    description: item.artifact.description,
-    integrity: item.kind === 'available' ? 'verified' : 'unavailable',
-    reason: item.kind === 'available' ? null : item.reason,
-  };
+function describeArtifact(item: ArtifactResult, prefix: string): SideArtifact {
+  const { id, description } = item.artifact;
+
+  return item.kind === 'available'
+    ? {
+        id,
+        description,
+        integrity: 'verified',
+        path: artifactLink(prefix, item.artifact.path),
+      }
+    : { id, description, integrity: 'unavailable', reason: item.reason };
 }
 
 const inspectFailureSide = Effect.fnUntraced(function* (
@@ -515,39 +514,16 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       }
     }
 
-    let check = unknownCheck(
-      reasons.length === 0
-        ? 'Verified observations unavailable'
-        : reasons.join('; '),
-      recipe,
-    );
-
-    let execution: Side['execution'] = 'unavailable';
-
-    if (capture.execution.kind === 'failed') {
-      execution = 'capture-failed';
-    } else if (
-      reasons.length === 0 &&
-      observations !== null &&
-      recipe !== null
-    ) {
-      execution = 'complete';
-      check = evaluateCheck(recipe, observations);
-    }
-
-    const screenshot = artifacts.find(
+    const screenshotArtifact = artifacts.find(
       (artifact) => artifact.id === 'screenshot',
     );
-
-    return {
-      manifest: capture,
-      manifestHash: manifestArtifact.hash,
-      execution,
-      check,
-      recipe,
-      observations: reasons.length === 0 ? observations : null,
+    const screenshot =
+      screenshotArtifact?.integrity === 'verified'
+        ? screenshotArtifact.path
+        : null;
+    const captured = { manifest: capture, sha256: manifestArtifact.hash };
+    const evidence = {
       artifacts,
-      screenshot: screenshot?.path ?? null,
       unresolved: [
         ...reasons,
         ...(observations?.browserErrors.map(
@@ -555,6 +531,49 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
             `Browser error: ${error.trim() === '' ? '(empty message)' : error.trim()}`,
         ) ?? []),
       ],
+    };
+    const check = unknownCheck(
+      reasons.length === 0
+        ? 'Verified observations unavailable'
+        : reasons.join('; '),
+      recipe,
+    );
+
+    if (capture.execution.kind === 'failed') {
+      return {
+        execution: 'capture-failed',
+        capture: captured,
+        recipe,
+        screenshot,
+        check,
+        ...evidence,
+      } satisfies Side;
+    }
+
+    if (
+      reasons.length === 0 &&
+      observations !== null &&
+      recipe !== null &&
+      screenshot !== null
+    ) {
+      return {
+        execution: 'complete',
+        capture: captured,
+        recipe,
+        observations,
+        screenshot,
+        check: evaluateCheck(recipe, observations),
+        ...evidence,
+      } satisfies Side;
+    }
+
+    return {
+      execution: 'unavailable',
+      capture: captured,
+      recipe,
+      screenshot,
+      check,
+      ...evidence,
     } satisfies Side;
   }).pipe(
     Effect.catchTag('EvidenceIoError', (error) =>
@@ -566,21 +585,27 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
 });
 
 function sideAt(side: Side, evaluatedAt: string): Side {
-  if (side.manifest === null || side.execution !== 'complete') {
+  if (side.execution !== 'complete') {
     return side;
   }
 
-  const reasons = captureProblems(side.manifest, evaluatedAt, side.recipe);
+  const reasons = captureProblems(
+    side.capture.manifest,
+    evaluatedAt,
+    side.recipe,
+  );
 
   if (reasons.length === 0) {
     return side;
   }
 
   return {
-    ...side,
     execution: 'unavailable',
+    capture: side.capture,
+    recipe: side.recipe,
+    screenshot: side.screenshot,
     check: unknownCheck(reasons.join('; '), side.recipe),
-    observations: null,
+    artifacts: side.artifacts,
     unresolved: [...side.unresolved, ...reasons],
   };
 }
@@ -594,9 +619,6 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
   ] as const) {
     if (
       side.execution !== 'complete' ||
-      side.manifest === null ||
-      side.manifestHash === null ||
-      side.observations === null ||
       side.check.outcome === 'unknown' ||
       side.artifacts.some((artifact) => artifact.integrity !== 'verified')
     ) {
@@ -604,25 +626,26 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
     }
   }
 
-  if (base.manifest !== null && candidate.manifest !== null) {
-    if (base.manifest.application !== candidate.manifest.application) {
+  if (base.capture !== null && candidate.capture !== null) {
+    const before = base.capture.manifest;
+    const after = candidate.capture.manifest;
+
+    if (before.application !== after.application) {
       reasons.push('Captures belong to different applications');
     }
 
-    if (!isDeepStrictEqual(base.manifest.recipe, candidate.manifest.recipe)) {
+    if (!isDeepStrictEqual(before.recipe, after.recipe)) {
       reasons.push('Capture recipes differ');
     }
 
-    if (
-      !isDeepStrictEqual(base.manifest.producer, candidate.manifest.producer)
-    ) {
+    if (!isDeepStrictEqual(before.producer, after.producer)) {
       reasons.push('Capture producers differ');
     }
 
     if (
       !isDeepStrictEqual(
-        comparableConditions(base.manifest),
-        comparableConditions(candidate.manifest),
+        comparableConditions(before),
+        comparableConditions(after),
       )
     ) {
       reasons.push('Capture conditions differ');
@@ -668,11 +691,7 @@ export function compareCaptures({
     ],
   } as const;
 
-  if (
-    mode === 'preview' &&
-    candidate.execution === 'complete' &&
-    candidate.screenshot !== null
-  ) {
+  if (mode === 'preview' && candidate.execution === 'complete') {
     return {
       ...common,
       comparison: { kind: 'preview' },
@@ -694,12 +713,19 @@ export function compareCaptures({
     };
   }
 
-  if (firstReason !== undefined) {
+  if (
+    firstReason !== undefined ||
+    base.execution !== 'complete' ||
+    candidate.execution !== 'complete'
+  ) {
     return {
       ...common,
       comparison: {
         kind: 'unavailable',
-        reasons: [firstReason, ...reasons.slice(1)],
+        reasons: [
+          firstReason ?? 'Comparable captures unavailable',
+          ...reasons.slice(1),
+        ],
       },
       conclusion:
         candidate.check.outcome === 'failed'
@@ -717,28 +743,20 @@ export function compareCaptures({
   const regression =
     base.check.outcome === 'passed' && candidate.check.outcome === 'failed';
 
-  const baseScreenshot = base.manifest?.artifacts.find(
+  const baseScreenshot = base.capture.manifest.artifacts.find(
     (item) => item.id === 'screenshot',
   );
 
-  const candidateScreenshot = candidate.manifest?.artifacts.find(
+  const candidateScreenshot = candidate.capture.manifest.artifacts.find(
     (item) => item.id === 'screenshot',
   );
 
-  const baseCount = base.observations?.requests.length;
-  const candidateCount = candidate.observations?.requests.length;
-
-  if (
-    baseCount === undefined ||
-    candidateCount === undefined ||
-    baseScreenshot === undefined ||
-    candidateScreenshot === undefined
-  ) {
+  if (baseScreenshot === undefined || candidateScreenshot === undefined) {
     return {
       ...common,
       comparison: {
         kind: 'unavailable',
-        reasons: ['Verified request counts or screenshots unavailable'],
+        reasons: ['Verified screenshots unavailable'],
       },
       conclusion: {
         kind: 'unavailable',
@@ -753,7 +771,9 @@ export function compareCaptures({
       kind: 'available',
       basis:
         'Complete, intact captures with the same protected recipe, application, producer, and recorded conditions.',
-      requestDifference: candidateCount - baseCount,
+      requestDifference:
+        candidate.observations.requests.length -
+        base.observations.requests.length,
       visual:
         baseScreenshot.sha256 === candidateScreenshot.sha256
           ? 'unchanged'

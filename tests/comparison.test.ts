@@ -301,12 +301,45 @@ test('derives a regression from verified request observations despite unchanged 
   expect(
     result.base.artifacts.find(
       (artifact) => artifact.id === 'arbitrary-source-id-1',
-    )?.path,
-  ).toBe('base/source/ui/%23%20details.ts');
+    ),
+  ).toMatchObject({
+    integrity: 'verified',
+    path: 'base/source/ui/%23%20details.ts',
+  });
 
   expect(
     Schema.decodeUnknownSync(comparisonSchema)(JSON.parse(json(result))),
   ).toEqual(result);
+});
+
+test('rejects saved results whose side state contradicts its evidence', async () => {
+  const result = compareCaptures({
+    base: await inspect((await syntheticBundle()).directory),
+    candidate: await inspect((await syntheticBundle()).directory),
+    evaluatedAt,
+  });
+  const decode = Schema.decodeUnknownExit(comparisonSchema);
+
+  expect(decode(result)._tag).toBe('Success');
+
+  for (const candidate of [
+    { ...result.candidate, capture: null },
+    { ...result.candidate, execution: 'capture-failed' },
+    {
+      ...result.candidate,
+      artifacts: [
+        { id: 'screenshot', description: 'Image', integrity: 'verified' },
+      ],
+    },
+    {
+      ...result.candidate,
+      artifacts: [
+        { id: 'screenshot', description: 'Image', integrity: 'unavailable' },
+      ],
+    },
+  ]) {
+    expect(decode({ ...result, candidate })._tag).toBe('Failure');
+  }
 });
 
 test('reports image changes as observations while the named check continues to pass', async () => {
@@ -523,13 +556,19 @@ test('serializes empty and newline-terminated browser errors without losing thei
 
   expect(result.candidate.check.outcome).toBe('passed');
 
-  expect(result.candidate.observations?.browserErrors).toEqual(browserErrors);
+  expect(result.candidate).toMatchObject({
+    execution: 'complete',
+    observations: { browserErrors },
+  });
 
   const decoded = Schema.decodeUnknownSync(
     Schema.fromJsonString(comparisonSchema),
   )(json(result));
 
-  expect(decoded.candidate.observations?.browserErrors).toEqual(browserErrors);
+  expect(decoded.candidate).toMatchObject({
+    execution: 'complete',
+    observations: { browserErrors },
+  });
 
   expect(decoded.candidate.unresolved).toHaveLength(2);
 });
@@ -766,9 +805,12 @@ test('checks all supplied artifacts rather than only those used by the named che
 
   expect(side.check.outcome).toBe('unknown');
 
-  expect(
-    side.artifacts.find((artifact) => artifact.id === 'requests'),
-  ).toMatchObject({ integrity: 'unavailable', path: null });
+  const requests = side.artifacts.find(
+    (artifact) => artifact.id === 'requests',
+  );
+
+  expect(requests?.integrity).toBe('unavailable');
+  expect(requests).not.toHaveProperty('path');
 
   expect(side.check.detail).toContain('SHA-256 mismatch');
 });
@@ -1038,7 +1080,7 @@ test.each([
 
     expect(side.check.outcome).toBe('unknown');
 
-    expect(side.observations).toBeNull();
+    expect(side).not.toHaveProperty('observations');
   },
 );
 
@@ -1065,9 +1107,12 @@ test.each([
 
   expect(side.screenshot).toBeNull();
 
-  expect(
-    side.artifacts.find((artifact) => artifact.id === 'screenshot')?.path,
-  ).toBeNull();
+  const screenshot = side.artifacts.find(
+    (artifact) => artifact.id === 'screenshot',
+  );
+
+  expect(screenshot?.integrity).toBe('unavailable');
+  expect(screenshot).not.toHaveProperty('path');
 });
 
 test('rejects symlink artifacts even when their target has the expected bytes', async () => {

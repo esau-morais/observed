@@ -196,11 +196,11 @@ function Check({ side, label }: { side: Side; label: string }) {
 }
 
 function CaptureDetails({ side }: { side: Side }) {
-  const capture = side.manifest;
-
-  if (capture === null) {
+  if (side.capture === null) {
     return <p {...stylex.props(styles.text)}>Capture metadata unavailable.</p>;
   }
+
+  const capture = side.capture.manifest;
 
   return (
     <details>
@@ -213,7 +213,7 @@ function CaptureDetails({ side }: { side: Side }) {
           {capture.id}
         </Field>
         <Field label="Manifest SHA-256" mono>
-          {side.manifestHash ?? 'Unavailable'}
+          {side.capture.sha256}
         </Field>
         <Field label="Producer">
           {capture.producer.name} · {capture.producer.version}
@@ -277,7 +277,7 @@ function CaptureDetails({ side }: { side: Side }) {
 }
 
 function Identity({ side, label }: { side: Side; label: string }) {
-  const capture = side.manifest;
+  const capture = side.capture?.manifest ?? null;
 
   return (
     <section

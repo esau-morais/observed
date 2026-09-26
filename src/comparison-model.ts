@@ -9,41 +9,92 @@ import {
   timestamp,
 } from './capture/model';
 
-const artifact = Schema.Struct({
-  id: text,
-  path: Schema.NullOr(text),
-  description: text,
-  integrity: Schema.Literals(['verified', 'unavailable']),
-  reason: Schema.NullOr(text),
-});
+const artifact = Schema.Union([
+  Schema.Struct({
+    id: text,
+    description: text,
+    integrity: Schema.Literal('verified'),
+    path: text,
+  }),
+  Schema.Struct({
+    id: text,
+    description: text,
+    integrity: Schema.Literal('unavailable'),
+    reason: text,
+  }),
+]);
 
-const check = Schema.Struct({
+const checkIdentity = {
   id: text,
   name: text,
   authority: Schema.Literal('Executed by Observed'),
   scope: text,
   expectation: text,
-  outcome: Schema.Literals(['passed', 'failed', 'unknown', 'not-run']),
-  actual: Schema.NullOr(
-    Schema.Union([
-      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-      Schema.String,
-    ]),
-  ),
   detail: text,
+};
+
+const unknownCheck = Schema.Struct({
+  ...checkIdentity,
+  outcome: Schema.Literal('unknown'),
+  actual: Schema.Null,
 });
 
-export const sideSchema = Schema.Struct({
-  manifest: Schema.NullOr(captureSchema),
-  manifestHash: Schema.NullOr(digest),
-  execution: Schema.Literals(['complete', 'capture-failed', 'unavailable']),
-  check,
-  recipe: Schema.NullOr(recipeSchema),
-  observations: Schema.NullOr(observationsSchema),
-  artifacts: Schema.Array(artifact),
-  screenshot: Schema.NullOr(text),
-  unresolved: Schema.Array(text),
+const check = Schema.Union([
+  Schema.Struct({
+    ...checkIdentity,
+    outcome: Schema.Literals(['passed', 'failed']),
+    actual: Schema.NullOr(
+      Schema.Union([
+        Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+        Schema.String,
+      ]),
+    ),
+  }),
+  Schema.Struct({
+    ...checkIdentity,
+    outcome: Schema.Literal('not-run'),
+    actual: Schema.Null,
+  }),
+  unknownCheck,
+]);
+
+const capturedManifest = Schema.Struct({
+  manifest: captureSchema,
+  sha256: digest,
 });
+
+const sideEvidence = {
+  artifacts: Schema.Array(artifact),
+  unresolved: Schema.Array(text),
+};
+
+export const sideSchema = Schema.Union([
+  Schema.Struct({
+    execution: Schema.Literal('complete'),
+    capture: capturedManifest,
+    recipe: recipeSchema,
+    observations: observationsSchema,
+    screenshot: text,
+    check,
+    ...sideEvidence,
+  }),
+  Schema.Struct({
+    execution: Schema.Literal('capture-failed'),
+    capture: capturedManifest,
+    recipe: Schema.NullOr(recipeSchema),
+    screenshot: Schema.NullOr(text),
+    check: unknownCheck,
+    ...sideEvidence,
+  }),
+  Schema.Struct({
+    execution: Schema.Literal('unavailable'),
+    capture: Schema.NullOr(capturedManifest),
+    recipe: Schema.NullOr(recipeSchema),
+    screenshot: Schema.NullOr(text),
+    check: unknownCheck,
+    ...sideEvidence,
+  }),
+]);
 
 export const comparisonSchema = Schema.Struct({
   schemaVersion: Schema.Literal(3),
@@ -82,6 +133,12 @@ export const comparisonSchema = Schema.Struct({
 export type Comparison = typeof comparisonSchema.Type;
 
 export type Side = typeof sideSchema.Type;
+
+export type Check = Side['check'];
+
+export type UnknownCheck = typeof unknownCheck.Type;
+
+export type SideArtifact = Side['artifacts'][number];
 
 export const selectionSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),

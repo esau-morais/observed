@@ -47,7 +47,7 @@ test.each(['base', 'candidate'] as const)(
         }).pipe(Effect.provide(BunServices.layer)),
       );
       expect(exported.result[side]).toMatchObject({
-        manifest: null,
+        capture: null,
         execution: 'unavailable',
         check: { outcome: 'unknown' },
       });
