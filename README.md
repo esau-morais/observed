@@ -52,26 +52,33 @@ bun run observe /path/to/app --base HEAD --json  # compare it with a commit
 Without `--json`, `observe` opens the viewer and runs until you press Ctrl+C.
 Evidence goes to `evidence/` in the Observed checkout. The JSON output's
 `directory` is the report, and `bun run view <directory>` opens it again. Exit
-codes: `0` completed, `1` unavailable, `2` a named check failed.
+codes: `0` completed, `1` unavailable, `2` a named check failed. When Observed
+rejects `observed.json`, it prints no JSON and explains why on stderr.
+
+Each capture, from setup through the journey, must finish within `--timeout`
+milliseconds, 120000 by default. Raise it when installing and building the app
+takes longer.
 
 ### Write observed.json
 
-These rules come from how Observed runs the app. The
-[project schema](src/project.ts) and [step and check schema](src/capture/recipe.ts)
-list every field.
+The [project schema](src/project.ts) and
+[step and check schema](src/capture/recipe.ts) list every field.
 
 - `source.paths` lists every file or directory the app needs to build and run,
-  including lockfiles. Observed copies only these into a temporary directory,
-  from the revision being captured or from the working tree. It skips
-  `node_modules`, `dist`, `build`, `.git`, `.env*`, and credential and key
-  files, so `setup` must recreate build output. `source.entry` names one of the
-  listed files.
+  including lockfiles, relative to the directory that holds `observed.json`.
+  Observed copies only these into a temporary directory, from the revision being
+  captured or from the working tree. It skips gitignored files, `node_modules`,
+  `dist`, `build`, `.git`, `.env*`, and credential and key files, so `setup`
+  must recreate build output. Symlinks are rejected. `source.entry` names one of
+  the listed files.
 - `setup` commands run in order inside that copy. Each is an argument array with
   no shell; use `["sh", "-c", "..."]` when you need one. They see only `PATH`,
   `HOME`, `LANG` and `TZ`.
-- `start` is one command that keeps the app running. It gets `PORT`, and
-  `HOST=127.0.0.1`, and `{port}` in its arguments becomes the port. Its `HOME`
-  is the copy. The app must listen on `127.0.0.1` at that port.
+- `start` is one command that keeps the app running. It receives `PORT` and
+  `HOST=127.0.0.1`, and Observed replaces `{port}` in its arguments with the
+  port. Its only other variables are `PATH`, `LANG`, `TZ` and `HOME`, which is
+  the copy. Set anything else the app needs, such as `NODE_ENV`, inside an
+  `sh -c` command. The app must listen on `127.0.0.1` at that port.
 - An app with several processes, such as a frontend and a separate API, starts
   the real ones from one script or `sh -c` command. Don't write a replacement
   server: Observed would capture the replacement, not your code. A service on a
@@ -80,10 +87,11 @@ list every field.
 - `ready` is a path and status that Observed polls until the app answers. It
   doesn't follow redirects, so pick a path that answers with that status
   directly, such as `/login` with 200 rather than `/` with 302.
-- `capture.ready` steps prepare the page, and Observed doesn't record their
-  requests. `capture.steps` is the journey under test, and its requests are
-  recorded. Step kinds are `navigate`, `click`, `click-role`, `fill`, `press`,
-  `wait-text`, `wait-selector` and `network-idle`.
+- The browser opens `capture.path` and runs `capture.ready` without recording
+  requests. It records requests from `capture.steps`, the journey under test. To
+  record the page load itself, start `steps` with a `navigate` step. A request
+  during `steps` to an origin outside the app and `allowedOrigins`, such as a
+  font CDN or analytics, fails the capture.
 - `capture.check` is optional and holds one `request-count` or `text` check. A
   `text` check passes when exactly one element matches its selector and its text
   equals `expectedText`.
@@ -91,8 +99,12 @@ list every field.
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,
   such as the table rows, then check the value.
-- On Linux, Ubuntu 23.10 and later, including GitHub's `ubuntu-24.04` runners,
-  stop Chrome with "No usable sandbox". Add `"browserArguments": ["--no-sandbox"]`.
+- Sign in with a disposable account that `setup` or the committed seed data
+  creates. Observed can't complete a second factor such as a TOTP code, SMS or
+  email link, so give that account none.
+- Ubuntu 23.10 and later, including GitHub's `ubuntu-24.04` runners, block
+  Chrome's sandbox, and Chrome exits with "No usable sandbox". On those systems,
+  set `capture.browserArguments` to `["--no-sandbox"]`.
 - `--base` captures that commit's copy of `source.paths` but uses the working
   tree's `observed.json`. A start script that exists only in the working tree
   makes the base capture fail, so commit it before comparing.
