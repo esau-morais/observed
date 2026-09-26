@@ -86,7 +86,7 @@ export const renderReportPage = Effect.fn('renderReportPage')(function* (
     "form-action 'none'",
   ].join('; ');
 
-  return [
+  const page = [
     '<!doctype html>',
     '<html lang="en">',
     '<head>',
@@ -107,4 +107,11 @@ export const renderReportPage = Effect.fn('renderReportPage')(function* (
     '</html>',
     '',
   ].join('\n');
+  const result = assets.get('/result.json');
+
+  if (result === undefined) {
+    return yield* new ViewFailure({ message: 'The report holds no result' });
+  }
+
+  return { page, result: new TextDecoder().decode(result.bytes) };
 });

@@ -6,7 +6,9 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { exportComparison } from '../src/export';
 import { json } from '../src/encoding';
+import { comparisonSchema } from '../src/comparison-model';
 import { renderReportPage } from '../src/report-page';
+import { embeddedSchema } from '../src/viewer/embedded';
 
 test('captured text cannot close the embedded evidence block or add a script to the report page', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'observed-report-page-'));
@@ -35,7 +37,7 @@ test('captured text cannot close the embedded evidence block or add a script to 
         mode: 'preview',
       }).pipe(Effect.provide(BunServices.layer)),
     );
-    const page = await Effect.runPromise(
+    const { page } = await Effect.runPromise(
       renderReportPage(exported.directory).pipe(
         Effect.provide(BunServices.layer),
       ),
@@ -48,21 +50,18 @@ test('captured text cannot close the embedded evidence block or add a script to 
       /<script type="application\/json" id="observed-evidence">(.*?)<\/script>/s.exec(
         page,
       )?.[1];
-    const files = Schema.decodeUnknownSync(
-      Schema.fromJsonString(
-        Schema.Record(
-          Schema.String,
-          Schema.Struct({ type: Schema.String, data: Schema.String }),
-        ),
-      ),
-    )(data ?? '');
+    const files = Schema.decodeUnknownSync(embeddedSchema)(data ?? '');
     expect(
       Buffer.from(
         files['/candidate/source-transcript.jsonl']?.data ?? '',
         'base64',
       ).toString(),
     ).toBe(transcript);
-    expect(files['/result.json']?.type).toContain('application/json');
+    expect(
+      Schema.decodeUnknownSync(Schema.fromJsonString(comparisonSchema))(
+        Buffer.from(files['/result.json']?.data ?? '', 'base64').toString(),
+      ).candidate.execution,
+    ).toBe('unavailable');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -2,6 +2,7 @@ import { BunServices } from '@effect/platform-bun';
 import { Cause, Effect, Exit, Option, Schema } from 'effect';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import {
   comparisonSchema,
   conclusionExitCodes,
@@ -77,6 +78,22 @@ function formatExit(exitCode: number | null): string {
   return exitCode === null ? 'missing' : String(exitCode);
 }
 
+export function pageMatchesRun(page: string, output: string | null): boolean {
+  const run =
+    output === null
+      ? Option.none()
+      : Schema.decodeUnknownOption(runOutputSchema)(output);
+  const shown = Schema.decodeUnknownOption(
+    Schema.fromJsonString(comparisonSchema),
+  )(page);
+
+  return (
+    Option.isSome(run) &&
+    Option.isSome(shown) &&
+    isDeepStrictEqual(run.value.result, shown.value)
+  );
+}
+
 const pageUrlSchema = Schema.String.check(
   Schema.isPattern(/^https:\/\/[^\s()<>[\]]+$/),
 );
@@ -94,16 +111,16 @@ export function summarize(options: {
   const page = Option.getOrNull(
     Schema.decodeUnknownOption(pageUrlSchema)(options.page),
   );
-  const bundle = `workflow artifact ${escapeText(options.artifact)}`;
+  const bundle = `Evidence: workflow artifact ${escapeText(options.artifact)}. Download it and run \`bun run view <download>/run/report\` from an Observed checkout.`;
   const evidence =
     page === null
-      ? `No report page was uploaded. Evidence: ${bundle}. Download it and run \`bun run view <download>/run/report\` from an Observed checkout.`
-      : `**[Open the report](${page})** with the screenshots, checks and requests. GitHub shows it to signed-in users who can read this repository until the artifact expires. Raw evidence: ${bundle}.`;
+      ? `No report page was uploaded. ${bundle}`
+      : `**[Open the report](${page})** with the screenshots, checks and requests. GitHub shows it to signed-in users who can read this repository until the artifact expires. Raw evidence: workflow artifact ${escapeText(options.artifact)}.`;
   const untrusted = (reason: string) => ({
     markdown: [
       '## Observed: no result',
       `${reason} The job fails. Treat this run as unavailable, not passed. The job log has details.`,
-      evidence,
+      bundle,
     ].join('\n\n'),
     trusted: false,
   });
@@ -200,13 +217,31 @@ if (import.meta.main) {
         `observed.json could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-  } else if (command === 'page' && args.length === 2) {
-    const [directory = '', output = ''] = args;
-    const page = await Effect.runPromise(
+  } else if (command === 'page' && args.length === 3) {
+    const [directory = '', resultFile = '', output = ''] = args;
+    const rendered = await Effect.runPromiseExit(
       renderReportPage(path.resolve(directory)).pipe(
         Effect.provide(BunServices.layer),
       ),
     );
+
+    if (Exit.isFailure(rendered)) {
+      const error = Cause.squash(rendered.cause);
+
+      process.stderr.write(
+        `Observed: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      process.exit(1);
+    }
+
+    const { page, result } = rendered.value;
+
+    if (!pageMatchesRun(result, await readOptional(resultFile))) {
+      process.stderr.write(
+        "Observed: the report page's result differs from this run's result.json.\n",
+      );
+      process.exit(1);
+    }
 
     await writeFile(output, page, { flag: 'wx' });
   } else if (command === 'summary' && args.length === 4) {
@@ -227,7 +262,7 @@ if (import.meta.main) {
     }
   } else {
     process.stderr.write(
-      'Usage: github-action.ts preflight <project> | page <report-directory> <output.html> | summary <result.json> <exit-code> <artifact-name> <page-url>\n',
+      'Usage: github-action.ts preflight <project> | page <report-directory> <result.json> <output.html> | summary <result.json> <exit-code> <artifact-name> <page-url>\n',
     );
     process.exit(64);
   }

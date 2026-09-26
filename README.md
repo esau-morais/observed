@@ -249,7 +249,7 @@ summary link rather than the address the page opens at.
 
 Whenever the capture step ran, including failed comparisons, the action also
 uploads the `observed-bundle` artifact. It holds the raw captures,
-`result.json`, the exported viewer and the report page. To open it with a
+`result.json`, and the exported viewer. To open it with a
 local server, download it and run `bun run view <download>/run/report` from an
 Observed checkout. GitHub keeps both artifacts for 7 days by default.
 
@@ -274,7 +274,7 @@ A journey that signs in reads its secret from an environment variable, as in
 GitHub gives no Actions secrets to pull requests from forks or Dependabot. The
 variable is then empty, both captures fail, and the job reports unavailable. Use
 a disposable account: the report page and bundle hold screenshots of every page
-the journey reaches. Literal fill values, such as a username, appear in the bundle as
+the journey reaches. Literal fill values, such as a username, appear in both as
 written, so never write a password as a literal value.
 
 This repository runs the same action on the Request lab example in

@@ -73,8 +73,8 @@ runs:
         OBSERVED_BUNDLE: ${{ steps.observe.outputs.bundle }}
         OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
       run: |
-        page="$OBSERVED_BUNDLE/$OBSERVED_ARTIFACT.html"
-        if bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" page "$OBSERVED_BUNDLE/run/report" "$page"; then
+        page="$(mktemp -d "$RUNNER_TEMP/observed-page-XXXXXX")/$OBSERVED_ARTIFACT.html"
+        if bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" page "$OBSERVED_BUNDLE/run/report" "$OBSERVED_BUNDLE/result.json" "$page"; then
           echo "path=$page" >> "$GITHUB_OUTPUT"
         else
           echo "::warning title=Observed::No report page was written. The job summary and the evidence bundle still hold the result."
@@ -84,6 +84,7 @@ runs:
     - name: Upload the report page
       id: upload-page
       if: always() && steps.page.outputs.path != ''
+      continue-on-error: true
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         path: ${{ steps.page.outputs.path }}
@@ -92,7 +93,7 @@ runs:
 
     - name: Upload the evidence bundle
       if: always() && steps.observe.outputs.bundle != ''
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ steps.observe.outputs.bundle }}

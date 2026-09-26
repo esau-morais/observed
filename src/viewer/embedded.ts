@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 
 export const embeddedEvidenceId = 'observed-evidence';
 
-const embeddedSchema = Schema.fromJsonString(
+export const embeddedSchema = Schema.fromJsonString(
   Schema.Record(
     Schema.String,
     Schema.Struct({ type: Schema.String, data: Schema.String }),
@@ -20,7 +20,9 @@ export function readEmbeddedEvidence(source: string) {
     );
 
     if (key === '/result.json') {
-      result = JSON.parse(new TextDecoder().decode(bytes));
+      result = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+        new TextDecoder().decode(bytes),
+      );
     } else {
       urls.set(
         key,

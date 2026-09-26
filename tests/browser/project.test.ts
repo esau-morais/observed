@@ -17,6 +17,7 @@ import { comparisonSchema } from '../../src/comparison-model';
 import { json, sha256 } from '../../src/encoding';
 import { projectSchema } from '../../src/project';
 import { redactText } from '../../src/redact';
+import { pageMatchesRun } from '../../scripts/github-action';
 import { renderReportPage } from '../../src/report-page';
 import { serveReport } from '../../src/view';
 
@@ -254,13 +255,15 @@ async function evaluate<A>(
 // GitHub serves an unzipped HTML artifact inline with no Content-Security-Policy
 // header, so this server adds none either.
 async function reportPage(
-  directory: string,
+  exported: typeof exportedSchema.Type,
   conclusion: string,
   highlightedRegions: number,
 ) {
-  const page = await Effect.runPromise(
+  const directory = exported.directory;
+  const { page, result } = await Effect.runPromise(
     renderReportPage(directory).pipe(Effect.provide(BunServices.layer)),
   );
+  expect(pageMatchesRun(result, json(exported))).toBe(true);
   await writeFile(path.join(evidence, `report-page-${sequence}.html`), page);
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -544,7 +547,7 @@ test('compares a React commit with a duplicate-request worktree through the publ
     await pageTree(path.join(result.directory, 'base')),
   );
   await viewer(result.directory, 'comparison', after.source.sha256);
-  await reportPage(result.directory, 'Regression', 0);
+  await reportPage(result, 'Regression', 0);
 
   const previewed = Schema.decodeUnknownSync(
     Schema.fromJsonString(exportedSchema),
@@ -580,7 +583,7 @@ test('compares a React commit with a duplicate-request worktree through the publ
     visual.result.candidate.capture?.manifest.source.sha256 ?? 'no capture',
     1,
   );
-  await reportPage(visual.directory, 'No regression', 1);
+  await reportPage(visual, 'No regression', 1);
 });
 
 test('previews a non-React app without checks and then applies its own POST expectation', async () => {
