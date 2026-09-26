@@ -1,0 +1,97 @@
+name: Observed
+description: Capture a project's saved journey on two revisions, compare them, and upload the evidence bundle.
+
+inputs:
+  project:
+    description: Directory containing observed.json, relative to the workspace.
+    default: .
+  base:
+    description: Revision to compare against, such as origin/main. The checkout must already contain it.
+    required: true
+  candidate:
+    description: Revision to capture as the candidate.
+    default: HEAD
+  timeout:
+    description: Milliseconds allowed for each capture.
+    default: '120000'
+  artifact-name:
+    description: Name of the uploaded workflow artifact.
+    default: observed-bundle
+  retention-days:
+    description: Days GitHub keeps the artifact.
+    default: '7'
+
+outputs:
+  exit-code:
+    description: 0 no failure found, 1 evidence unavailable, 2 a named check failed or regressed.
+    value: ${{ steps.observe.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version-file: ${{ github.action_path }}/package.json
+
+    - name: Install Observed and its browser
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        bun install --frozen-lockfile
+        bun run setup --with-deps
+
+    - name: Refuse projects with fill steps
+      shell: bash
+      env:
+        OBSERVED_PROJECT: ${{ inputs.project }}
+      run: bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" preflight "$OBSERVED_PROJECT"
+
+    - name: Run Observed
+      id: observe
+      shell: bash
+      env:
+        OBSERVED_PROJECT: ${{ inputs.project }}
+        OBSERVED_BASE: ${{ inputs.base }}
+        OBSERVED_CANDIDATE: ${{ inputs.candidate }}
+        OBSERVED_TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        bundle="$(mktemp -d "$RUNNER_TEMP/observed-XXXXXX")"
+        echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+        # Captured application output is untrusted; keep it from issuing workflow commands.
+        token="$(openssl rand -hex 16)"
+        echo "::stop-commands::$token"
+        code=0
+        bun "$GITHUB_ACTION_PATH/src/workflow-cli.ts" run "$OBSERVED_PROJECT" \
+          --base "$OBSERVED_BASE" \
+          --candidate "$OBSERVED_CANDIDATE" \
+          --timeout "$OBSERVED_TIMEOUT" \
+          --output "$bundle/run" \
+          --json > "$bundle/result.json" || code=$?
+        echo "::$token::"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Summarize the result
+      if: always() && steps.observe.outcome != 'skipped'
+      shell: bash
+      env:
+        OBSERVED_BUNDLE: ${{ steps.observe.outputs.bundle }}
+        OBSERVED_EXIT: ${{ steps.observe.outputs.exit-code }}
+        OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
+      run: bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT"
+
+    - name: Upload the evidence bundle
+      if: always() && steps.observe.outputs.bundle != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.observe.outputs.bundle }}
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Fail unless Observed found no failure
+      if: steps.observe.outputs.exit-code != '0'
+      shell: bash
+      env:
+        OBSERVED_EXIT: ${{ steps.observe.outputs.exit-code }}
+      run: |
+        echo "Observed exited with $OBSERVED_EXIT. See the job summary."
+        exit "$OBSERVED_EXIT"

@@ -1,7 +1,7 @@
 import type { Comparison, Side, Visual } from './comparison-model';
 import { describeRegion, describeVisual, diffLegend } from './visual-text';
 
-function escapeText(value: string): string {
+export function escapeText(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
