@@ -65,7 +65,9 @@ The [project schema](src/project.ts) and
 [step and check schema](src/capture/recipe.ts) list every field.
 
 - `source.paths` lists every file or directory the app needs to build and run,
-  including lockfiles, relative to the directory that holds `observed.json`.
+  including lockfiles, relative to the directory that holds `observed.json` and
+  without `..`. An app that needs sibling directories, such as monorepo
+  packages, puts `observed.json` in a common parent.
   Observed copies only these into a temporary directory, from the revision being
   captured or from the working tree. It skips gitignored files, `node_modules`,
   `dist`, `build`, `.git`, `.env*`, and credential and key files, so `setup`
@@ -99,9 +101,10 @@ The [project schema](src/project.ts) and
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,
   such as the table rows, then check the value.
-- Sign in with a disposable account that `setup` or the committed seed data
-  creates. Observed can't complete a second factor such as a TOTP code, SMS or
-  email link, so give that account none.
+- Sign in with a disposable account from committed seed data. `setup` doesn't
+  receive fill variables, so commit the account with its password hash and pass
+  the password through the fill variable. Observed can't complete a second
+  factor such as a TOTP code, SMS or email link, so give that account none.
 - Ubuntu 23.10 and later, including GitHub's `ubuntu-24.04` runners, block
   Chrome's sandbox, and Chrome exits with "No usable sandbox". On those systems,
   set `capture.browserArguments` to `["--no-sandbox"]`.
