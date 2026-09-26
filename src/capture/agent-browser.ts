@@ -7,7 +7,7 @@ import {
 } from './model';
 import { processOutput } from './process';
 import { json } from '../encoding';
-import { redact, redactText } from '../redact';
+import { conceal, redact, redactText } from '../redact';
 import type { Recipe, Step } from './recipe';
 
 export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
@@ -24,6 +24,10 @@ const response = <S extends Schema.Constraint>(data: S) =>
   });
 
 const sessionSchema = response(Schema.Struct({ active: Schema.Boolean }));
+
+const filledSchema = Schema.Tuple([
+  Schema.Struct({ success: Schema.Literal(true) }),
+]);
 
 const requestSchema = Schema.Struct({
   requestId: Schema.NonEmptyString,
@@ -98,6 +102,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   url: string;
   addArtifact: (id: string, filename: string, description: string) => void;
   recipe: Recipe;
+  fillValues: ReadonlyMap<string, string>;
   inputsHash: string;
   dependenciesHash: string | null;
 }) {
@@ -107,6 +112,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   const recipe = options.recipe;
   const origin = new URL(options.url).origin;
   const allowedOrigins = new Set([origin, ...(recipe.allowedOrigins ?? [])]);
+  const concealed = [...options.fillValues.values()];
 
   yield* fs.writeFileString(config, '{}\n', { flag: 'wx' });
 
@@ -126,7 +132,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     AGENT_BROWSER_DEFAULT_TIMEOUT: '20000',
   };
 
-  const command = Effect.fnUntraced(function* (args: readonly string[]) {
+  const command = Effect.fnUntraced(function* (
+    args: readonly string[],
+    stdin?: string,
+  ) {
     return yield* processOutput({
       command: process.execPath,
       args: [
@@ -157,6 +166,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       cwd: options.projectRoot,
       env: environment,
       transcript: path.join(options.directory, 'transcript.jsonl'),
+      concealed,
+      ...(stdin === undefined ? {} : { stdin }),
     });
   });
 
@@ -175,7 +186,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
     yield* fs.writeFileString(
       path.join(options.directory, filename),
-      redactText(output),
+      redactText(output, concealed),
       {
         flag: 'wx',
       },
@@ -184,14 +195,17 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     return output;
   });
 
-  const step = (action: Step) => {
+  const step = Effect.fnUntraced(function* (action: Step) {
     switch (action.kind) {
       case 'navigate':
-        return command(['open', new URL(action.path, options.url).toString()]);
+        return yield* command([
+          'open',
+          new URL(action.path, options.url).toString(),
+        ]);
       case 'click':
-        return command(['click', action.selector]);
+        return yield* command(['click', action.selector]);
       case 'click-role':
-        return command([
+        return yield* command([
           'find',
           'role',
           action.role,
@@ -199,18 +213,46 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
           '--name',
           action.name,
         ]);
-      case 'fill':
-        return command(['fill', action.selector, action.value]);
+      case 'fill': {
+        if (typeof action.value === 'string') {
+          return yield* command(['fill', action.selector, action.value]);
+        }
+
+        const value = options.fillValues.get(action.value.env);
+
+        if (value === undefined) {
+          return yield* Effect.die(
+            `Fill value for ${action.value.env} was not resolved`,
+          );
+        }
+
+        // Batch input arrives on stdin, so the value stays out of process
+        // arguments. Its echoed command output is concealed in the transcript.
+        const output = yield* command(
+          ['batch', '--bail'],
+          JSON.stringify([['fill', action.selector, value]]),
+        );
+
+        return yield* decode(filledSchema, output).pipe(
+          Effect.mapError(
+            () =>
+              new BrowserFailure({
+                message: `agent-browser did not confirm the fill on ${action.selector}`,
+              }),
+          ),
+          Effect.as(output),
+        );
+      }
       case 'press':
-        return command(['press', action.key]);
+        return yield* command(['press', action.key]);
       case 'wait-text':
-        return command(['wait', '--text', action.text]);
+        return yield* command(['wait', '--text', action.text]);
       case 'wait-selector':
-        return command(['wait', action.selector]);
+        return yield* command(['wait', action.selector]);
       case 'network-idle':
-        return command(['wait', '--load', 'networkidle']);
+        return yield* command(['wait', '--load', 'networkidle']);
     }
-  };
+  });
 
   const version = yield* command(['--version']);
 
@@ -319,7 +361,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       );
       value = observed.data.text;
 
-      if (redact(value) !== value) {
+      if (redact(value) !== value || conceal(value, concealed) !== value) {
         return yield* new BrowserFailure({
           message:
             'Text observation contains credentials. Exact-text evaluation and screenshot capture are unavailable.',
@@ -372,7 +414,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   const harFile = path.join(options.directory, 'requests.har');
   const harText = yield* fs.readFileString(harFile);
-  yield* fs.writeFileString(harFile, redactText(harText));
+  yield* fs.writeFileString(harFile, redactText(harText, concealed));
   const har = yield* decode(harSchema, harText);
 
   if (
@@ -440,7 +482,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* fs.writeFileString(
     path.join(options.directory, 'observations.json'),
-    redactText(json(observations)),
+    redactText(json(observations), concealed),
     { flag: 'wx' },
   );
 

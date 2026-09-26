@@ -4,16 +4,19 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rename,
   writeFile,
 } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { beforeAll, expect, test } from 'vitest';
 import { captureSchema } from '../../src/capture/model';
 import { comparisonSchema } from '../../src/comparison-model';
 import { json, sha256 } from '../../src/encoding';
 import { projectSchema } from '../../src/project';
+import { redactText } from '../../src/redact';
 import { serveReport } from '../../src/view';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -48,8 +51,18 @@ async function readJson<S extends Schema.ConstraintDecoder<unknown>>(
   );
 }
 
-async function command(args: string[], cwd = root, expected = 0) {
-  const child = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe' });
+async function command(
+  args: string[],
+  cwd = root,
+  expected = 0,
+  env?: Record<string, string | undefined>,
+) {
+  const child = Bun.spawn(args, {
+    cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    ...(env === undefined ? {} : { env }),
+  });
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -64,9 +77,15 @@ async function command(args: string[], cwd = root, expected = 0) {
   return stdout;
 }
 
-async function copyProject(name: 'request-lab' | 'shop', label: string) {
+const projects = {
+  'request-lab': 'examples/request-lab',
+  shop: 'examples/shop',
+  'access-code': 'tests/fixtures/access-code',
+};
+
+async function copyProject(name: keyof typeof projects, label: string) {
   const directory = path.join(evidence, label);
-  await cp(path.join(root, 'examples', name), directory, {
+  await cp(path.join(root, projects[name]), directory, {
     recursive: true,
     filter: (source) =>
       !['node_modules', 'dist'].includes(path.basename(source)),
@@ -98,6 +117,7 @@ async function observe(
   label: string,
   args: string[] = [],
   expected = 0,
+  env?: Record<string, string | undefined>,
 ) {
   const output = path.join(evidence, label);
   const stdout = await command(
@@ -113,6 +133,7 @@ async function observe(
     ],
     root,
     expected,
+    env,
   );
 
   return Schema.decodeUnknownSync(Schema.fromJsonString(exportedSchema))(
@@ -517,6 +538,165 @@ test('redacted text cannot satisfy a literal text expectation', async () => {
     'Text observation contains credentials',
   );
 });
+
+const transcriptSchema = Schema.Struct({
+  args: Schema.Array(Schema.String),
+  stdout: Schema.String,
+});
+
+async function transcript(directory: string) {
+  const filename = path.join(directory, 'transcript.jsonl');
+
+  if (!(await Bun.file(filename).exists())) {
+    return [];
+  }
+
+  return (await readFile(filename, 'utf8'))
+    .trimEnd()
+    .split('\n')
+    .map((line) =>
+      Schema.decodeUnknownSync(Schema.fromJsonString(transcriptSchema))(line),
+    );
+}
+
+test.each([
+  { label: 'filled', selector: '#code', exit: 0 },
+  { label: 'unmatched', selector: '#missing-code', exit: 1 },
+])(
+  'an environment fill value that is $label reaches no evidence file or command output',
+  async ({ label, selector, exit }) => {
+    const project = await copyProject('access-code', `access-code-${label}`);
+    // Escaped and encoded copies keep the marker verbatim. Generic redaction
+    // must leave it too, so a clean bundle shows the known value was concealed.
+    const marker = randomUUID();
+    const secret = `Heron "${marker}" lantern/?&`;
+    expect(
+      redactText(
+        json({
+          selector,
+          value: secret,
+          path: `/session/${encodeURIComponent(secret)}`,
+        }),
+      ).split(marker),
+    ).toHaveLength(3);
+    const config = await readJson(
+      path.join(project, 'observed.json'),
+      projectSchema,
+    );
+    await writeFile(
+      path.join(project, 'observed.json'),
+      json({
+        ...config,
+        capture: {
+          ...config.capture,
+          steps: config.capture.steps.map((step) =>
+            step.kind === 'fill' ? { ...step, selector } : step,
+          ),
+          check: {
+            kind: 'text',
+            id: 'accepted',
+            name: 'Accepted code',
+            scope: 'After signing in',
+            selector: '[role="status"]',
+            expectedText: `Accepted ${new Bun.CryptoHasher('sha256').update(secret).digest('hex')}`,
+          },
+        },
+      }),
+    );
+    const result = await observe(
+      project,
+      `access-code-${label}-result`,
+      [],
+      exit,
+      { ...process.env, OBSERVED_ACCESS_CODE: secret },
+    );
+    const capture = path.join(
+      evidence,
+      `access-code-${label}-result/captures/candidate`,
+    );
+    const fills = (await transcript(capture)).filter(
+      (record) => record.args.at(-2) === 'batch',
+    );
+    expect(fills).toHaveLength(1);
+
+    if (exit === 0) {
+      expect(result.result.candidate.check.outcome).toBe('passed');
+      expect(
+        await readFile(path.join(capture, 'application.log'), 'utf8'),
+      ).toContain('/session/[REDACTED]');
+    } else {
+      expect(result.result.candidate.execution).toBe('capture-failed');
+      expect(result.result.candidate.check.outcome).not.toBe('passed');
+    }
+
+    const leaks: string[] = [];
+
+    for (const entry of await readdir(evidence, {
+      recursive: true,
+      withFileTypes: true,
+    })) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const filename = path.join(entry.parentPath, entry.name);
+      const bytes = await readFile(filename);
+
+      if (bytes.includes(marker)) {
+        leaks.push(filename);
+      }
+    }
+
+    expect(leaks).toEqual([]);
+  },
+);
+
+test.each([
+  { label: 'unset', value: undefined },
+  { label: 'empty', value: '' },
+])(
+  'an $label fill variable fails the capture instead of filling a blank value',
+  async ({ label, value }) => {
+    const project = await copyProject('access-code', `access-code-${label}`);
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([name]) => name !== 'OBSERVED_ACCESS_CODE',
+      ),
+    );
+    const result = await observe(
+      project,
+      `access-code-${label}-result`,
+      [],
+      1,
+      {
+        ...env,
+        ...(value === undefined ? {} : { OBSERVED_ACCESS_CODE: value }),
+      },
+    );
+    expect(result.result.candidate.execution).toBe('capture-failed');
+    expect(result.result.candidate.check.outcome).not.toBe('passed');
+    expect(result.result.conclusion.kind).toBe('unavailable');
+    const capture = path.join(
+      evidence,
+      `access-code-${label}-result/captures/candidate`,
+    );
+    const manifest = await readJson(
+      path.join(capture, 'capture.json'),
+      captureSchema,
+    );
+    expect(manifest.execution).toMatchObject({
+      kind: 'failed',
+      category: 'configuration',
+      reason:
+        'Fill value unavailable. Missing or empty environment variables: OBSERVED_ACCESS_CODE',
+    });
+    expect(
+      (await transcript(capture)).filter((record) =>
+        record.args.some((arg) => arg === 'fill' || arg === 'batch'),
+      ),
+    ).toEqual([]);
+  },
+);
 
 test('additional origins preserve previews and keep same-path request checks separate', async () => {
   const requests: string[] = [];

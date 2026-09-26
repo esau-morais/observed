@@ -66,6 +66,7 @@ const execution = Schema.Union([
       'cancelled',
       'producer',
       'application',
+      'configuration',
       'cleanup',
     ]),
     reason: text,

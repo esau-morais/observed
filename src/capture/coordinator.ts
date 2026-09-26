@@ -6,14 +6,20 @@ import { captureBrowser, producer } from './agent-browser';
 import { captureSchema, type Capture, type CaptureArtifact } from './model';
 import { processOutput } from './process';
 import { json, sha256 } from '../encoding';
+import { conceal } from '../redact';
 import type { Project } from '../project';
-import type { Recipe } from './recipe';
+import { FillValueFailure, resolveFillValues, type Recipe } from './recipe';
 import { snapshotApplication } from './snapshot';
 
 class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
   'CaptureFailure',
   {
-    category: Schema.Literals(['timeout', 'application', 'producer']),
+    category: Schema.Literals([
+      'timeout',
+      'application',
+      'configuration',
+      'producer',
+    ]),
     message: Schema.String,
     cause: Schema.Defect(),
   },
@@ -122,6 +128,7 @@ export const captureApplication = Effect.fn('captureApplication')(
     };
 
     let manifest: Capture | undefined;
+    let concealed: readonly string[] = [];
 
     const run = Effect.gen(function* () {
       yield* fs.writeFileString(
@@ -134,6 +141,8 @@ export const captureApplication = Effect.fn('captureApplication')(
         json(options.project),
         { flag: 'wx' },
       );
+      const fillValues = yield* resolveFillValues(recipe, process.env);
+      concealed = [...fillValues.values()];
       const workspace = yield* fs.makeTempDirectoryScoped({
         prefix: 'observed-app-',
       });
@@ -168,6 +177,7 @@ export const captureApplication = Effect.fn('captureApplication')(
         workspace,
         evidenceDirectory: directory,
         project: options.project,
+        concealed,
       });
 
       const lockfiles = new Set([
@@ -190,6 +200,7 @@ export const captureApplication = Effect.fn('captureApplication')(
         url,
         addArtifact,
         recipe,
+        fillValues,
         inputsHash: sha256(
           json({
             setup: options.project.setup,
@@ -223,6 +234,14 @@ export const captureApplication = Effect.fn('captureApplication')(
           });
         }
 
+        if (cause instanceof FillValueFailure) {
+          return new CaptureFailure({
+            category: 'configuration',
+            message: cause.message,
+            cause,
+          });
+        }
+
         return new CaptureFailure({
           category: 'producer',
           message: cause.message,
@@ -236,7 +255,7 @@ export const captureApplication = Effect.fn('captureApplication')(
           if (Exit.isFailure(exit)) {
             yield* fs.writeFileString(
               path.join(directory, 'failure.txt'),
-              Cause.pretty(exit.cause),
+              conceal(Cause.pretty(exit.cause), concealed),
               { flag: 'wx' },
             );
 
@@ -287,7 +306,7 @@ export const captureApplication = Effect.fn('captureApplication')(
                 ) {
                   category = failure.error.category;
 
-                  reason = failure.error.message;
+                  reason = conceal(failure.error.message, concealed);
                 }
               }
             }
