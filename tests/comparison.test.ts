@@ -641,7 +641,9 @@ test.each([
       mode: 'preview',
     });
     expect(preview.conclusion.kind).toBe(
-      expected === 'failed' ? 'check-failed' : 'preview',
+      { passed: 'preview', failed: 'check-failed', unknown: 'unavailable' }[
+        expected
+      ],
     );
   },
 );

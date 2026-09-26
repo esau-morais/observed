@@ -170,6 +170,22 @@ function conclusion(
   };
 }
 
+function previewConclusion(check: Side['check']): Comparison['conclusion'] {
+  switch (check.outcome) {
+    case 'not-run':
+      return { kind: 'preview', text: 'Current application capture.' };
+    case 'passed':
+      return { kind: 'preview', text: `${check.name}: passed.` };
+    case 'failed':
+      return { kind: 'check-failed', text: `${check.name}: failed.` };
+    case 'unknown':
+      return {
+        kind: 'unavailable',
+        text: `${check.name}: unknown. ${check.detail}`,
+      };
+  }
+}
+
 function unavailable(reason: string): Side {
   return {
     manifest: null,
@@ -660,13 +676,7 @@ export function compareCaptures({
     return {
       ...common,
       comparison: { kind: 'preview' },
-      conclusion: {
-        kind: candidate.check.outcome === 'failed' ? 'check-failed' : 'preview',
-        text:
-          candidate.check.outcome === 'not-run'
-            ? 'Current application capture.'
-            : `${candidate.check.name}: ${candidate.check.outcome}.`,
-      },
+      conclusion: previewConclusion(candidate.check),
     };
   }
 
