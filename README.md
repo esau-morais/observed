@@ -23,18 +23,101 @@ and starts the viewer. Open the printed localhost URL. Press Ctrl+C to stop.
 Observed creates the evidence files. You don't write a manifest or collect
 screenshots by hand.
 
+## Use it on your app
+
+Observed runs on Linux and macOS. Windows is not supported.
+
+Observed runs from its own checkout. With Bun **1.4.2** installed:
+
+```bash
+git clone https://github.com/esau-morais/observed
+cd observed
+bun install --frozen-lockfile
+bun run setup
+```
+
+`bun run setup` downloads Chrome. On a Linux machine without desktop libraries,
+such as a container, run `bun run setup --with-deps` instead; it installs the
+system packages with `sudo apt`.
+
+Ask your coding agent to write `observed.json` in your app's directory by
+following [Write observed.json](#write-observedjson). Then, from the Observed
+checkout:
+
+```bash
+bun run observe /path/to/app --json              # preview the working tree
+bun run observe /path/to/app --base HEAD --json  # compare it with a commit
+```
+
+Without `--json`, `observe` opens the viewer and runs until you press Ctrl+C.
+Evidence goes to `evidence/` in the Observed checkout. The JSON output's
+`directory` is the report, and `bun run view <directory>` opens it again. Exit
+codes: `0` completed, `1` unavailable, `2` a named check failed. When Observed
+rejects `observed.json`, it prints no JSON and explains why on stderr.
+
+Each capture, from setup through the journey, must finish within `--timeout`
+milliseconds, 120000 by default. Raise it when installing and building the app
+takes longer.
+
+### Write observed.json
+
+The [project schema](src/project.ts) and
+[step and check schema](src/capture/recipe.ts) list every field.
+
+- `source.paths` lists every file or directory the app needs to build and run,
+  including lockfiles, relative to the directory that holds `observed.json` and
+  without `..`. An app that needs sibling directories, such as monorepo
+  packages, puts `observed.json` in a common parent.
+  Observed copies only these into a temporary directory, from the revision being
+  captured or from the working tree. It skips gitignored files, `node_modules`,
+  `dist`, `build`, `.git`, `.env*`, and credential and key files, so `setup`
+  must recreate build output. Symlinks are rejected. `source.entry` names one of
+  the listed files.
+- `setup` commands run in order inside that copy. Each is an argument array with
+  no shell; use `["sh", "-c", "..."]` when you need one. They see only `PATH`,
+  `HOME`, `LANG` and `TZ`.
+- `start` is one command that keeps the app running. It receives `PORT` and
+  `HOST=127.0.0.1`, and Observed replaces `{port}` in its arguments with the
+  port. Its only other variables are `PATH`, `LANG`, `TZ` and `HOME`, which is
+  the copy. Set anything else the app needs, such as `NODE_ENV`, inside an
+  `sh -c` command. The app must listen on `127.0.0.1` at that port.
+- An app with several processes, such as a frontend and a separate API, starts
+  the real ones from one script or `sh -c` command. Don't write a replacement
+  server: Observed would capture the replacement, not your code. A service on a
+  fixed port works because the base and candidate captures run one after the
+  other. Add its origin to `capture.allowedOrigins`.
+- `ready` is a path and status that Observed polls until the app answers. It
+  doesn't follow redirects, so pick a path that answers with that status
+  directly, such as `/login` with 200 rather than `/` with 302.
+- The browser opens `capture.path` and runs `capture.ready` without recording
+  requests. It records requests from `capture.steps`, the journey under test. To
+  record the page load itself, start `steps` with a `navigate` step. A request
+  during `steps` to an origin outside the app and `allowedOrigins`, such as a
+  font CDN or analytics, fails the capture.
+- `capture.check` is optional and holds one `request-count` or `text` check. A
+  `text` check passes when exactly one element matches its selector and its text
+  equals `expectedText`.
+- Put the expected result in the check, not in a step. A step that waits for the
+  expected text times out when the app regresses, and the run reports
+  unavailable instead of a failed check. Wait for something both versions show,
+  such as the table rows, then check the value.
+- Sign in with a disposable account from committed seed data. `setup` doesn't
+  receive fill variables, so commit the account with its password hash and pass
+  the password through the fill variable. Observed can't complete a second
+  factor such as a TOTP code, SMS or email link, so give that account none.
+- Ubuntu 23.10 and later, including GitHub's `ubuntu-24.04` runners, block
+  Chrome's sandbox, and Chrome exits with "No usable sandbox". On those systems,
+  set `capture.browserArguments` to `["--no-sandbox"]`.
+- `--base` captures that commit's copy of `source.paths` but uses the working
+  tree's `observed.json`. A start script that exists only in the working tree
+  makes the base capture fail, so commit it before comparing.
+
 <details>
 <summary>Agent capture and import interfaces</summary>
 
-Create `observed.json` using the [project contract](src/project.ts). It supplies
-the source paths, setup/start commands, readiness, and page actions. Checks are
-optional. The [React example](examples/request-lab/observed.json) and
+The [React example](examples/request-lab/observed.json) and
 [plain browser example](examples/shop/observed.json) use the same entry point.
-
-Use `bun run observe /path/to/app --json` for a preview, or add `--base HEAD` to
-compare the worktree with a commit. The JSON result includes the viewer directory
-and check outcomes. Exit codes: `0` completed, `1` unavailable, `2` a named check
-failed. A completed capture is not a claim that the whole application is correct.
+A completed capture is not a claim that the whole application is correct.
 
 A comparison also reports screenshot pixels. It counts pixels whose YIQ color
 difference exceeds 0.1, on pixelmatch's threshold scale, and lists the changed
@@ -96,8 +179,9 @@ Reports and captures stay local under gitignored `evidence/`.
 Observed's GitHub Action captures your saved journey on the pull request's base
 and candidate, compares the two, and uploads the evidence as a workflow artifact.
 Your repository needs a committed `observed.json` following the
-[project contract](src/project.ts). The job needs an Ubuntu runner with
-passwordless `sudo`, which GitHub-hosted runners provide.
+[project contract](src/project.ts). The job needs an `ubuntu-24.04` or
+`macos-15` runner. On Linux it installs packages with passwordless `sudo`, which
+GitHub-hosted runners provide.
 
 Add `.github/workflows/observed.yml`:
 
@@ -142,8 +226,8 @@ jobs:
   request code must not receive them.
 
 The action installs the Bun version pinned in Observed's `package.json` and runs
-your setup and start commands with it on `PATH`. It installs the browser and its
-system packages with apt.
+your setup and start commands with it on `PATH`. It installs the browser, and
+on Linux its system packages with apt.
 
 | Exit code | Conclusion | Job |
 | --- | --- | --- |
@@ -154,10 +238,11 @@ system packages with apt.
 The job also fails when `observed.json` is rejected before capture, when Observed
 writes no readable result, or when the result disagrees with the exit code.
 
-The job summary states the conclusion, each side's revision, capture state,
-and check outcome, and why a capture failed. Whenever the capture step ran, including failed comparisons,
-the `observed-bundle` artifact is uploaded and kept for 7 days. It holds the raw
-captures, `result.json`, and the exported viewer. To open it, download it and run
+The job summary states the conclusion, each side's revision, capture state, and
+check outcome, and why a capture failed. Whenever the capture step ran,
+including failed comparisons, the `observed-bundle` artifact is uploaded and
+kept for 7 days. It holds the raw captures, `result.json`, and the exported
+viewer. To open it, download it and run
 `bun run view <download>/run/report` from an Observed checkout.
 
 Optional inputs: `candidate` (default `HEAD`), `timeout` per capture in
