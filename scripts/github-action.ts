@@ -8,8 +8,9 @@ import {
   type Comparison,
   type Side,
 } from '../src/comparison-model';
+import type { Capture } from '../src/capture/model';
 import { escapeText } from '../src/comparison-report';
-import { loadProject, type Project } from '../src/project';
+import { loadProject } from '../src/project';
 import { describeRevision } from '../src/provenance-text';
 
 const runOutputSchema = Schema.fromJsonString(
@@ -60,6 +61,17 @@ function describeSide(label: string, side: Side): string {
   return `| ${label} | ${escapeText(revision)} | ${side.execution} | ${side.check.outcome} |`;
 }
 
+export function describeFailure(
+  label: string,
+  execution: Capture['execution'] | undefined,
+): string[] {
+  return execution?.kind === 'failed'
+    ? [
+        `- ${label} capture failed (${execution.category}): ${escapeText(execution.reason)}`,
+      ]
+    : [];
+}
+
 function formatExit(exitCode: number | null): string {
   return exitCode === null ? 'missing' : String(exitCode);
 }
@@ -99,13 +111,16 @@ export function summarize(options: {
   }
 
   const outcome = outcomes[result.conclusion.kind];
-  const sides =
+  const labelled: [string, Side][] =
     result.mode === 'preview'
-      ? [describeSide('Current', result.candidate)]
+      ? [['Current', result.candidate]]
       : [
-          describeSide('Base', result.base),
-          describeSide('Candidate', result.candidate),
+          ['Base', result.base],
+          ['Candidate', result.candidate],
         ];
+  const failures = labelled.flatMap(([label, side]) =>
+    describeFailure(label, side.capture?.manifest.execution),
+  );
 
   const markdown = [
     `## Observed: ${outcome.heading}`,
@@ -114,20 +129,15 @@ export function summarize(options: {
     [
       '| Side | Source revision | Capture | Check |',
       '| --- | --- | --- | --- |',
-      ...sides,
+      ...labelled.map(([label, side]) => describeSide(label, side)),
     ].join('\n'),
+    ...(failures.length === 0 ? [] : [failures.join('\n')]),
     evidence,
     '### Limits',
     result.limitations.map((item) => `- ${escapeText(item)}`).join('\n'),
   ].join('\n\n');
 
   return { markdown, trusted: true };
-}
-
-export function fillSteps(project: Project): number {
-  return [...project.capture.ready, ...project.capture.steps].filter(
-    (step) => step.kind === 'fill',
-  ).length;
 }
 
 async function writeSummary(markdown: string) {
@@ -175,10 +185,6 @@ if (import.meta.main) {
 
       await notRun(
         `observed.json could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    } else if (fillSteps(loaded.value.project) > 0) {
-      await notRun(
-        'This project fills form fields. The action does not run journeys with fill steps yet: literal fill values are exported as written, and the action does not supply the environment variables that fill references read.',
       );
     }
   } else if (command === 'summary' && args.length === 3) {
