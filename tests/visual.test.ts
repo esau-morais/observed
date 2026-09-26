@@ -3,7 +3,7 @@ import path from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 import { decodePng, type RgbaImage } from '../src/png';
-import { comparePixels } from '../src/visual';
+import { comparePixels, darker, lighter } from '../src/visual';
 import { describeVisual } from '../src/visual-text';
 
 type Chunk = [type: string, data: Uint8Array];
@@ -364,4 +364,25 @@ test('a uniform shift under the threshold still reports how many pixels differ a
   expect(describeVisual(visual)).toBe(
     '10,000 pixels (100.00%) differ within 100 × 100 px at x 0, y 0. None exceed the 0.1 color threshold.',
   );
+});
+
+test('colors pixels that got darker apart from pixels that got lighter so replaced content stays readable', () => {
+  const { diff } = comparePixels(
+    image(2, 1, [
+      [0, 0, 0],
+      [255, 255, 255],
+    ]),
+    image(2, 1, [
+      [255, 255, 255],
+      [0, 0, 0],
+    ]),
+  );
+  const decoded = decodePng(diff?.bytes ?? new Uint8Array());
+
+  expect(decoded.kind === 'decoded' ? [...decoded.image.rgba] : []).toEqual([
+    ...lighter,
+    255,
+    ...darker,
+    255,
+  ]);
 });

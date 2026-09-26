@@ -9,6 +9,11 @@ import { encodeRgbPng, type RgbaImage } from './png';
 const visualThreshold = 0.1;
 const maxYiqDelta = 35215;
 const regionTile = 16;
+// Blue and orange stay distinct under common color-vision deficiencies and
+// carry no pass/fail meaning.
+export const darker = [31, 95, 173];
+export const lighter = [217, 115, 13];
+const contextOpacity = 0.2;
 
 type ChangedVisual = Extract<Visual, { kind: 'changed' }>;
 
@@ -21,6 +26,16 @@ export type PixelComparison =
 
 function blend(value: number, alpha: number): number {
   return 255 + ((value - 255) * alpha) / 255;
+}
+
+function luma(image: Uint8Array, at: number): number {
+  const alpha = image[at + 3] ?? 255;
+
+  return (
+    blend(image[at] ?? 0, alpha) * 0.29889531 +
+    blend(image[at + 1] ?? 0, alpha) * 0.58662247 +
+    blend(image[at + 2] ?? 0, alpha) * 0.11448223
+  );
 }
 
 // Squared YIQ distance from Kotsarenko and Ramos, "Measuring perceived color
@@ -181,17 +196,14 @@ export function comparePixels(
       bottom = Math.max(bottom, y);
     }
 
+    const after = luma(candidate.rgba, at);
+
     if (!same && colorDelta(base.rgba, candidate.rgba, at) > maxDelta) {
       changedPixels += 1;
       changed[pixel] = 1;
-      diff.set([255, 0, 0], pixel * 3);
+      diff.set(after < luma(base.rgba, at) ? darker : lighter, pixel * 3);
     } else {
-      const alpha = candidate.rgba[at + 3] ?? 255;
-      const luma =
-        blend(candidate.rgba[at] ?? 0, alpha) * 0.29889531 +
-        blend(candidate.rgba[at + 1] ?? 0, alpha) * 0.58662247 +
-        blend(candidate.rgba[at + 2] ?? 0, alpha) * 0.11448223;
-      const faded = Math.round(255 + (luma - 255) * 0.1);
+      const faded = Math.round(255 + (after - 255) * contextOpacity);
 
       diff.set([faded, faded, faded], pixel * 3);
     }

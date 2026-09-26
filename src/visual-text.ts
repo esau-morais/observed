@@ -47,3 +47,6 @@ export function describeVisual(visual: Visual): string {
     }
   }
 }
+
+export const diffLegend =
+  'In the difference image, blue pixels are darker after the change and orange pixels are lighter. Other pixels are faded.';

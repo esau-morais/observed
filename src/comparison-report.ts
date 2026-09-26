@@ -1,5 +1,5 @@
 import type { Comparison, Side, Visual } from './comparison-model';
-import { describeRegion, describeVisual } from './visual-text';
+import { describeRegion, describeVisual, diffLegend } from './visual-text';
 
 function escapeText(value: string): string {
   return value
@@ -63,7 +63,7 @@ function renderVisual(visual: Visual): string {
   }
 
   return [
-    `${summary} ${link('Open pixel difference image', visual.diff.path)} (SHA-256 ${visual.diff.sha256}).`,
+    `${summary} ${link('Open pixel difference image', visual.diff.path)} (SHA-256 ${visual.diff.sha256}). ${escapeText(diffLegend)}`,
     ...visual.regions.map((box) => `  - ${escapeText(describeRegion(box))}`),
   ].join('\n');
 }

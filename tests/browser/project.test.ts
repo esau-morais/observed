@@ -244,7 +244,7 @@ async function viewer(
             'eval',
             '-b',
             Buffer.from(
-              '({images: document.querySelectorAll("#report img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("main details").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
+              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("main details").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
             ).toString('base64'),
           );
           const viewed = Schema.decodeUnknownSync(
@@ -293,6 +293,19 @@ async function viewer(
             await browser('focus', 'input[type=checkbox]');
             await browser('press', 'Space');
             expect(await regions()).toBe(highlightedRegions * 2);
+            const crops = await browser(
+              'eval',
+              '[...document.querySelectorAll("[aria-labelledby=changed-regions] img")].filter((image) => image.complete && image.naturalWidth > 0).length',
+            );
+            expect(
+              Schema.decodeUnknownSync(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    data: Schema.Struct({ result: Schema.Number }),
+                  }),
+                ),
+              )(crops).data.result,
+            ).toBe(highlightedRegions * 2);
             await browser(
               'screenshot',
               path.join(evidence, 'viewer-highlighted.png'),

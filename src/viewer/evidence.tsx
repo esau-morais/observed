@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
-import type { Side, Visual } from '../comparison-model';
+import type { Side, Visual, VisualRegion } from '../comparison-model';
+import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
 import { colors } from './tokens.stylex';
 
@@ -90,6 +91,35 @@ const styles = stylex.create({
     pointerEvents: 'none',
     position: 'absolute',
   },
+  regionList: { display: 'grid', gap: 24, margin: 0, padding: 0 },
+  cropPair: {
+    display: 'grid',
+    gap: 16,
+    gridTemplateColumns: {
+      default: 'minmax(0, 1fr)',
+      [media.tablet]: 'repeat(2, minmax(0, 1fr))',
+    },
+  },
+  crop: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderControl,
+    borderRadius: 4,
+    borderStyle: 'solid',
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cropBox: (ratio: string, width: string) => ({ aspectRatio: ratio, width }),
+  cropImage: {
+    imageRendering: 'pixelated',
+    maxWidth: 'none',
+    position: 'absolute',
+  },
+  cropOffset: (left: string, top: string, width: string) => ({
+    left,
+    top,
+    width,
+  }),
   regionBox: (left: string, top: string, width: string, height: string) => ({
     height: `calc(${height} + 12px)`,
     left: `calc(${left} - 6px)`,
@@ -327,6 +357,90 @@ export function Artifacts({ side, label }: { side: Side; label: string }) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+const cropPadding = 16;
+const maxZoomedWidth = 560;
+
+function cropAround(
+  region: VisualRegion,
+  image: { width: number; height: number },
+) {
+  const x = Math.max(0, region.x - cropPadding);
+  const y = Math.max(0, region.y - cropPadding);
+  const width =
+    Math.min(image.width, region.x + region.width + cropPadding) - x;
+  const height =
+    Math.min(image.height, region.y + region.height + cropPadding) - y;
+
+  return { x, y, width, height, zoom: width * 2 <= maxZoomedWidth ? 2 : 1 };
+}
+
+export function ChangedRegions({
+  visual,
+  before,
+  after,
+}: {
+  visual: Extract<Visual, { kind: 'changed' }>;
+  before: string;
+  after: string;
+}) {
+  return (
+    <section {...stylex.props(styles.stack)} aria-labelledby="changed-regions">
+      <h2 id="changed-regions" {...stylex.props(styles.heading)}>
+        Changed regions
+      </h2>
+      <ol {...stylex.props(styles.regionList)}>
+        {visual.regions.map((region, index) => {
+          const crop = cropAround(region, visual);
+
+          return (
+            <li key={index} {...stylex.props(styles.stack)}>
+              <p {...stylex.props(styles.text)}>
+                Region {index + 1}: {describeRegion(region)}
+              </p>
+              <div {...stylex.props(styles.cropPair)}>
+                {(
+                  [
+                    ['Before', before],
+                    ['After', after],
+                  ] as const
+                ).map(([label, source]) => (
+                  <figure key={label} {...stylex.props(styles.figure)}>
+                    <figcaption {...stylex.props(styles.caption)}>
+                      {label}
+                    </figcaption>
+                    <div
+                      {...stylex.props(
+                        styles.crop,
+                        styles.cropBox(
+                          `${crop.width} / ${crop.height}`,
+                          `min(100%, ${crop.width * crop.zoom}px)`,
+                        ),
+                      )}
+                    >
+                      <img
+                        src={source}
+                        alt={`${label}, region ${index + 1}`}
+                        {...stylex.props(
+                          styles.cropImage,
+                          styles.cropOffset(
+                            `${(-crop.x / crop.width) * 100}%`,
+                            `${(-crop.y / crop.height) * 100}%`,
+                            `${(visual.width / crop.width) * 100}%`,
+                          ),
+                        )}
+                      />
+                    </div>
+                  </figure>
+                ))}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }

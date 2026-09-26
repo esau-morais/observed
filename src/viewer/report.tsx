@@ -4,12 +4,13 @@ import type { Comparison, Side } from '../comparison-model';
 import { fonts, geometry, media } from './constants.stylex';
 import {
   Artifacts,
+  ChangedRegions,
   EvidenceLink,
   RequestLedger,
   Screenshot,
   type Highlight,
 } from './evidence';
-import { describeRegion, describeVisual } from '../visual-text';
+import { describeRegion, describeVisual, diffLegend } from '../visual-text';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -465,6 +466,9 @@ export function ComparisonReport({ result }: { result: Comparison }) {
                     </span>
                   </div>
                 ) : null}
+                {visual.kind === 'changed' ? (
+                  <p {...stylex.props(styles.small)}>{diffLegend}</p>
+                ) : null}
               </div>
             )}
             <div {...stylex.props(result.mode === 'comparison' && styles.grid)}>
@@ -477,6 +481,15 @@ export function ComparisonReport({ result }: { result: Comparison }) {
                 />
               ))}
             </div>
+            {visual?.kind === 'changed' &&
+            result.base.screenshot !== null &&
+            result.candidate.screenshot !== null ? (
+              <ChangedRegions
+                visual={visual}
+                before={result.base.screenshot}
+                after={result.candidate.screenshot}
+              />
+            ) : null}
           </section>
 
           <details>
