@@ -63,8 +63,9 @@ list every field.
 - `source.paths` lists every file or directory the app needs to build and run,
   including lockfiles. Observed copies only these into a temporary directory,
   from the revision being captured or from the working tree. It skips
-  `node_modules`, `dist`, `build`, `.git`, `.env*`, and credential and key files, so `setup`
-  must recreate build output. `source.entry` names one of the listed files.
+  `node_modules`, `dist`, `build`, `.git`, `.env*`, and credential and key
+  files, so `setup` must recreate build output. `source.entry` names one of the
+  listed files.
 - `setup` commands run in order inside that copy. Each is an argument array with
   no shell; use `["sh", "-c", "..."]` when you need one. They see only `PATH`,
   `HOME`, `LANG` and `TZ`.
