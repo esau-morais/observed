@@ -2,13 +2,12 @@
 
 ## Implementation priority
 
-The next implementation milestone is Phase 1: open a code change and see the
-running result. Support a standalone preview for a new screen, and a comparison
-when an earlier version is useful.
+Phase 1 is complete: one command previews or compares a running change, and two
+separate applications, including a non-React one, use the same capture path
+without core edits.
 
-The first milestone requires two projects using the same capture path without
-core edits. Keep the adoption study separate: working code does not establish
-that people find it useful.
+The next implementation milestone is Phase 2: repeatable use. Keep the adoption
+study separate: working code does not establish that people find it useful.
 
 Read only the document relevant to the task:
 
