@@ -1,3 +1,5 @@
+throw new Error('Seeded start failure for the CI trigger test');
+
 import path from 'node:path';
 
 const root = path.join(import.meta.dirname, 'dist');
