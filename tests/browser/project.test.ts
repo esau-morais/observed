@@ -286,11 +286,11 @@ async function reportPage(
     );
     expect(viewed).toEqual([true, true]);
 
-    await browser('focus', 'main > details > summary');
-    await browser('press', 'Enter');
     expect(
       await evaluate(browser, 'document.body.innerText', Schema.String),
     ).toContain(conclusion);
+    await browser('focus', '#checks > summary');
+    await browser('press', 'Enter');
     const link = '[aria-label="After original artifacts"] li:has(> a) a';
     const links = await evaluate(
       browser,
@@ -383,7 +383,7 @@ async function viewer(
             'eval',
             '-b',
             Buffer.from(
-              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("main details").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
+              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
             ).toString('base64'),
           );
           const viewed = Schema.decodeUnknownSync(
@@ -404,11 +404,11 @@ async function viewer(
             'screenshot',
             path.join(evidence, `viewer-${mode}.png`),
           );
-          await browser('focus', 'main > details > summary');
+          await browser('focus', '#checks > summary');
           await browser('press', 'Enter');
           const opened = await browser(
             'eval',
-            'document.querySelector("main details").open',
+            'document.querySelector("#checks").open',
           );
           expect(
             Schema.decodeUnknownSync(

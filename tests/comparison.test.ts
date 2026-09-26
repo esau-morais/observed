@@ -738,7 +738,7 @@ test.each([
 
     expect(result.conclusion.kind).toBe(conclusion);
 
-    expect(result.conclusion.text).toContain('Revision comparison unavailable');
+    expect(result.conclusion.text).toContain('The revisions were not compared');
   },
 );
 

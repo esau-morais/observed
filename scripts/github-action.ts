@@ -13,7 +13,16 @@ import type { Capture } from '../src/capture/model';
 import { escapeText } from '../src/comparison-report';
 import { loadProject } from '../src/project';
 import { renderReportPage } from '../src/report-page';
-import { describeRevision } from '../src/provenance-text';
+import { describeRevision, shortSource } from '../src/provenance-text';
+import { describeVisual } from '../src/visual-text';
+import {
+  checkLabels,
+  conclusionTones,
+  coverage,
+  executionLabels,
+  headline,
+  type Tone,
+} from '../src/result-text';
 
 const runOutputSchema = Schema.fromJsonString(
   Schema.Struct({ directory: Schema.String, result: comparisonSchema }),
@@ -23,44 +32,49 @@ const exitCodeSchema = Schema.NumberFromString.check(Schema.isInt());
 
 type Kind = Comparison['conclusion']['kind'];
 
-const outcomes = {
-  regression: {
-    heading: 'Regression',
-    meaning: 'The job fails because a named check regressed.',
-  },
-  'check-failed': {
-    heading: 'Check failed',
-    meaning: 'The job fails because a named check failed.',
-  },
-  unavailable: {
-    heading: 'Unavailable',
-    meaning:
-      'The job fails because evidence is unavailable. This is not a pass.',
-  },
-  'no-regression': {
-    heading: 'No regression',
-    meaning:
-      'The job passes. This covers only the check and journey listed here.',
-  },
-  'not-checked': {
-    heading: 'Not checked',
-    meaning:
-      'The job passes, but no named check is configured, so no behavior was verified.',
-  },
-  preview: {
-    heading: 'Preview',
-    meaning:
-      'The job passes. A preview captures one revision and verifies no behavior.',
-  },
-} satisfies Record<Kind, { heading: string; meaning: string }>;
+const alerts = {
+  regression: 'CAUTION',
+  unknown: 'WARNING',
+  checked: 'NOTE',
+  neutral: 'NOTE',
+} satisfies Record<Tone, string>;
 
-function describeSide(label: string, side: Side): string {
-  const revision =
-    side.capture === null
-      ? 'unavailable'
-      : describeRevision(side.capture.manifest.source.revision);
+const consequences = {
+  regression: 'The job fails.',
+  'check-failed': 'The job fails.',
+  unavailable: 'This is not a pass. The job fails.',
+  'no-regression': 'The job passes.',
+  'not-checked': 'The job passes.',
+  preview: 'A preview verifies no behavior. The job passes.',
+} satisfies Record<Kind, string>;
 
-  return `| ${label} | ${escapeText(revision)} | ${side.execution} | ${side.check.outcome} |`;
+// GitHub autolinks bare URLs even when their punctuation is escaped.
+export function inlineText(value: string): string {
+  return value
+    .split(/(https?:\/\/[^\s`]+)/)
+    .map((part, index) =>
+      index % 2 === 1
+        ? `\`${part.replace(/\.$/, '')}\`${part.endsWith('.') ? '.' : ''}`
+        : escapeText(part),
+    )
+    .join('');
+}
+
+function revisionCell(side: Side, repository: string | null): string {
+  if (side.capture === null) {
+    return 'Unavailable';
+  }
+
+  const revision = side.capture.manifest.source.revision;
+  const label = `\`${shortSource(side.capture.manifest.source)}\``;
+
+  return repository !== null && revision.kind === 'commit'
+    ? `[${label}](${repository}/commit/${revision.commit})`
+    : label;
+}
+
+function sideRow(label: string, side: Side, repository: string | null) {
+  return `| ${label} | ${revisionCell(side, repository)} | ${executionLabels[side.execution]} | ${checkLabels[side.check.outcome]} |`;
 }
 
 export function describeFailure(
@@ -69,7 +83,7 @@ export function describeFailure(
 ): string[] {
   return execution?.kind === 'failed'
     ? [
-        `- ${label} capture failed (${execution.category}): ${escapeText(execution.reason)}`,
+        `- ${label} capture failed (${execution.category}): ${inlineText(execution.reason)}`,
       ]
     : [];
 }
@@ -94,32 +108,54 @@ export function pageMatchesRun(page: string, output: string | null): boolean {
   );
 }
 
-const pageUrlSchema = Schema.String.check(
+const httpsUrlSchema = Schema.String.check(
   Schema.isPattern(/^https:\/\/[^\s()<>[\]]+$/),
 );
+
+function alert(kind: string, lines: string[]): string {
+  return [
+    `> [!${kind}]`,
+    ...lines.flatMap((line, index) =>
+      index === 0 ? [`> ${line}`] : ['>', `> ${line}`],
+    ),
+  ].join('\n');
+}
+
+function collapsed(summary: string, items: string[]): string {
+  return [
+    `<details><summary>${summary}</summary>`,
+    '',
+    items.map((item) => `- ${item}`).join('\n'),
+    '',
+    '</details>',
+  ].join('\n');
+}
 
 export function summarize(options: {
   output: string | null;
   exitCode: number | null;
   artifact: string;
   page: string | null;
+  repository?: string | null;
 }): { markdown: string; trusted: boolean } {
   const decoded =
     options.output === null
       ? Option.none()
       : Schema.decodeUnknownOption(runOutputSchema)(options.output);
   const page = Option.getOrNull(
-    Schema.decodeUnknownOption(pageUrlSchema)(options.page),
+    Schema.decodeUnknownOption(httpsUrlSchema)(options.page),
   );
-  const bundle = `Evidence: workflow artifact ${escapeText(options.artifact)}. Download it and run \`bun run view <download>/run/report\` from an Observed checkout.`;
-  const evidence =
-    page === null
-      ? `No report page was uploaded. ${bundle}`
-      : `**[Open the report](${page})** with the screenshots, checks and requests. GitHub shows it to signed-in users who can read this repository until the artifact expires. Raw evidence: workflow artifact ${escapeText(options.artifact)}.`;
+  const repository = Option.getOrNull(
+    Schema.decodeUnknownOption(httpsUrlSchema)(options.repository ?? null),
+  );
+  const bundle = `Raw evidence: workflow artifact \`${options.artifact.replaceAll('`', '')}\`. Download it and run \`bun run view <download>/run/report\` from an Observed checkout.`;
+  const exit = `Observed exited with code ${formatExit(options.exitCode)}.`;
   const untrusted = (reason: string) => ({
     markdown: [
-      '## Observed: no result',
-      `${reason} The job fails. Treat this run as unavailable, not passed. The job log has details.`,
+      alert('WARNING', [
+        '**No result. Treat this run as unavailable, not passed.**',
+        `${reason} The job fails. The job log has details.`,
+      ]),
       bundle,
     ].join('\n\n'),
     trusted: false,
@@ -140,7 +176,7 @@ export function summarize(options: {
     );
   }
 
-  const outcome = outcomes[result.conclusion.kind];
+  const kind = result.conclusion.kind;
   const labelled: [string, Side][] =
     result.mode === 'preview'
       ? [['Current', result.candidate]]
@@ -151,20 +187,59 @@ export function summarize(options: {
   const failures = labelled.flatMap(([label, side]) =>
     describeFailure(label, side.capture?.manifest.execution),
   );
+  const reasons =
+    failures.length > 0 || result.comparison.kind !== 'unavailable'
+      ? failures
+      : result.comparison.reasons.map((reason) => `- ${inlineText(reason)}`);
+  const visual =
+    result.comparison.kind === 'available' &&
+    (result.comparison.visual.kind === 'changed' ||
+      result.comparison.visual.kind === 'size-differs')
+      ? `Screenshots: ${inlineText(describeVisual(result.comparison.visual))} An observation, not a check.`
+      : null;
+  const scope = coverage(result);
+  const links = [
+    page === null ? null : `**[Open the report](${page})**`,
+    scope === null ? null : `Covered: ${inlineText(scope)}`,
+  ].filter((item) => item !== null);
+  const revisions = labelled.flatMap(([label, side]) =>
+    side.capture === null
+      ? []
+      : [
+          `${label}: \`${describeRevision(side.capture.manifest.source.revision)}\``,
+        ],
+  );
 
   const markdown = [
-    `## Observed: ${outcome.heading}`,
-    `Exit code ${String(expected)}. ${outcome.meaning}`,
-    evidence,
-    escapeText(result.conclusion.text),
+    alert(alerts[conclusionTones[kind]], [
+      `**${inlineText(headline(result))}**`,
+      `${inlineText(result.conclusion.text.replace(/\.?$/, '.'))} ${consequences[kind]}`,
+    ]),
     [
-      '| Side | Source revision | Capture | Check |',
+      '| | Revision | Capture | Check |',
       '| --- | --- | --- | --- |',
-      ...labelled.map(([label, side]) => describeSide(label, side)),
+      ...labelled.map(([label, side]) => sideRow(label, side, repository)),
     ].join('\n'),
-    ...(failures.length === 0 ? [] : [failures.join('\n')]),
-    '### Limits',
-    result.limitations.map((item) => `- ${escapeText(item)}`).join('\n'),
+    ...(reasons.length === 0 ? [] : [reasons.join('\n')]),
+    ...(visual === null ? [] : [visual]),
+    ...(links.length === 0 ? [] : [links.join(' · ')]),
+    ...(page === null ? [`No report page was uploaded. ${bundle}`] : []),
+    collapsed('Limits and raw evidence', [
+      ...(result.comparison.kind === 'unavailable'
+        ? result.comparison.reasons.map(inlineText)
+        : []),
+      ...result.limitations
+        .filter((limitation) => limitation !== scope)
+        .map(inlineText),
+      ...revisions,
+      ...(page === null
+        ? []
+        : [
+            'The report opens for signed-in users who can read this repository, until the artifact expires.',
+            bundle,
+          ]),
+      exit,
+    ]),
   ].join('\n\n');
 
   return { markdown, trusted: true };
@@ -253,6 +328,11 @@ if (import.meta.main) {
       ),
       artifact,
       page: page === '' ? null : page,
+      repository:
+        process.env.GITHUB_SERVER_URL !== undefined &&
+        process.env.GITHUB_REPOSITORY !== undefined
+          ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`
+          : null,
     });
 
     await writeSummary(summary.markdown);

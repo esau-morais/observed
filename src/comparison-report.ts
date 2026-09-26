@@ -1,3 +1,4 @@
+import { conclusionLabels } from './result-text';
 import type { Comparison, Side, Visual } from './comparison-model';
 import { describeObserved, describeRevision } from './provenance-text';
 import { describeStatus } from './request-text';
@@ -220,14 +221,6 @@ export function renderComparison(result: Comparison): string {
           { side: result.base, label: 'Before' },
           { side: result.candidate, label: 'After' },
         ];
-  const conclusionLabels = {
-    regression: 'Regression',
-    'no-regression': 'No regression',
-    unavailable: 'Conclusion unavailable',
-    'not-checked': 'Visual comparison',
-    preview: 'Preview',
-    'check-failed': 'Check failed',
-  };
 
   const unresolved = [
     ...(result.mode === 'preview'
@@ -265,7 +258,7 @@ export function renderComparison(result: Comparison): string {
     renderIdentity(result.candidate, candidateLabel),
     '## Comparison availability',
     renderAvailability(result),
-    '## Absolute named checks',
+    '## Named checks',
     "Executed by Observed against each capture's evidence. Each result covers its stated expectation and scope; comparison availability is separate.",
     ...(result.mode === 'preview'
       ? []

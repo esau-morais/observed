@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
   describeFailure,
+  inlineText,
   pageMatchesRun,
   summarize,
 } from '../scripts/github-action';
@@ -45,16 +46,19 @@ test('CI summaries never present unavailable or unreadable results as passing', 
   });
 
   expect(unavailable.trusted).toBe(true);
-  expect(unavailable.markdown).toContain('## Observed: Unavailable');
+  expect(unavailable.markdown).toMatch(/^> \[!WARNING\]\n> \*\*Unavailable: /);
   expect(unavailable.markdown).toContain('This is not a pass');
 
   for (const summary of [mismatched, unreadable]) {
     expect(summary.trusted).toBe(false);
-    expect(summary.markdown).toContain('## Observed: no result');
+    expect(summary.markdown).toContain(
+      'No result. Treat this run as unavailable, not passed.',
+    );
   }
 
   for (const { markdown } of [unavailable, mismatched, unreadable]) {
     expect(markdown).not.toContain('job passes');
+    expect(markdown).not.toContain('[!NOTE]');
   }
 });
 
@@ -110,7 +114,7 @@ test('the summary links only an https report page and cannot be steered by its U
   const page = 'https://github.com/o/r/actions/runs/1/artifacts/2';
 
   expect(summary(page)).toContain(`[Open the report](${page})`);
-  expect(summary(page)).toContain('## Observed: Unavailable');
+  expect(summary(page)).toContain('> [!WARNING]');
 
   expect(
     summarize({
@@ -154,4 +158,15 @@ test('a report page is written only when it shows the same result as the run', a
     ),
   ).toBe(false);
   expect(pageMatchesRun(json(result), null)).toBe(false);
+});
+
+test('a URL in check text renders as code so GitHub cannot autolink the captured origin', () => {
+  expect(
+    inlineText(
+      'Exactly 1 GET http://127.0.0.1:4010/api/books request(s) with status 200.',
+    ),
+  ).toBe(
+    'Exactly 1 GET `http://127.0.0.1:4010/api/books` request\\(s\\) with status 200\\.',
+  );
+  expect(inlineText('See https://x.test/a.')).toBe('See `https://x.test/a`.');
 });

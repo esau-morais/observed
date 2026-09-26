@@ -157,14 +157,14 @@ function conclusion(
   if (candidate.check.outcome === 'not-run') {
     return {
       kind: 'not-checked',
-      text: 'Before and after captured. No named check was configured.',
+      text: 'Before and after captured. No named check is configured, so no behavior was verified.',
     };
   }
 
   if (regression) {
     return {
       kind: 'regression',
-      text: `${candidate.check.name} regressed. Base: ${String(base.check.actual)}; candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
+      text: `${candidate.check.name} passed on base and failed on candidate. Base: ${String(base.check.actual)}; candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
     };
   }
 
@@ -177,7 +177,10 @@ function conclusion(
 
   return {
     kind: 'no-regression',
-    text: `No passing-to-failed transition in ${candidate.check.name}. Base: ${base.check.outcome}; candidate: ${candidate.check.outcome}.`,
+    text:
+      base.check.outcome === 'passed'
+        ? `${candidate.check.name} passed on base and candidate.`
+        : `${candidate.check.name} passed on candidate. Base: ${base.check.outcome}.`,
   };
 }
 
@@ -781,7 +784,7 @@ export function compareCaptures({
       },
       conclusion: {
         kind: 'unavailable',
-        text: `Capture unavailable: ${candidate.check.detail}`,
+        text: 'The capture is unavailable, so the check result is unknown.',
       },
     };
   }
@@ -804,11 +807,11 @@ export function compareCaptures({
         candidate.check.outcome === 'failed'
           ? {
               kind: 'check-failed',
-              text: `${candidate.check.name} failed. Revision comparison unavailable, so a regression cannot be established. Candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
+              text: `${candidate.check.name} failed. The revisions were not compared, so a regression cannot be established. Candidate: ${String(candidate.check.actual)}. ${candidate.check.expectation}`,
             }
           : {
               kind: 'unavailable',
-              text: `Revision comparison unavailable. Candidate check: ${candidate.check.outcome}.`,
+              text: `The revisions were not compared, so the candidate check is ${candidate.check.outcome}.`,
             },
     };
   }

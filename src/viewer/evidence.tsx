@@ -1,7 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 import { createContext, use, useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
-import { describeRevision } from '../provenance-text';
+import { describeRevision, shortSource } from '../provenance-text';
 import { describeStatus } from '../request-text';
 import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
@@ -179,9 +179,17 @@ export function Screenshot({
       <h2 {...stylex.props(styles.heading)}>{label}</h2>
       <p {...stylex.props(styles.caption)}>
         {capture?.label ?? 'No capture'}
-        {capture === null
-          ? ''
-          : ` · ${describeRevision(capture.source.revision)} · ${capture.source.sha256.slice(0, 12)}`}
+        {capture === null ? null : (
+          <>
+            {' · '}
+            <span
+              title={describeRevision(capture.source.revision)}
+              {...stylex.props(styles.mono)}
+            >
+              {shortSource(capture.source)}
+            </span>
+          </>
+        )}
       </p>
       {side.screenshot === null ? (
         <p {...stylex.props(styles.missing)}>
@@ -225,11 +233,6 @@ export function Screenshot({
               </span>
             )}
           </a>
-          <figcaption {...stylex.props(styles.caption)}>
-            <EvidenceLink href={side.screenshot}>
-              Open {label.toLowerCase()} screenshot at full size
-            </EvidenceLink>
-          </figcaption>
         </>
       )}
     </figure>
