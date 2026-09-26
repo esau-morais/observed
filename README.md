@@ -90,8 +90,9 @@ Reports and captures stay local under gitignored `evidence/`.
 
 Observed's GitHub Action captures your saved journey on the pull request's base
 and candidate, compares the two, and uploads the evidence as a workflow artifact.
-Your repository needs a committed `observed.json` (see the agent interfaces above) and a
-Linux runner.
+Your repository needs a committed `observed.json` (see the agent interfaces
+above). The job needs an Ubuntu runner with passwordless `sudo`, which
+GitHub-hosted runners provide.
 
 Add `.github/workflows/observed.yml`:
 
@@ -126,6 +127,9 @@ jobs:
 - `fetch-depth: 0` fetches the base branch so Git can resolve `base`. The
   candidate defaults to `HEAD`, the merge commit GitHub checks out for the pull
   request.
+- Observed reads `observed.json` from the candidate and uses it for both
+  revisions. A pull request that edits it changes the check for both sides,
+  so review those edits like code.
 - Keep the `pull_request` trigger. Do not use `pull_request_target`: the action
   needs no secrets or write access, and pull request code must not receive them.
 
