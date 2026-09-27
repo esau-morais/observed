@@ -357,12 +357,15 @@ function StepsPanel({ side, label }: { side: StepsSide; label: string }) {
   );
 }
 
+// `comparing` is false in a preview, where no base panel belongs.
 export function Steps({
   base,
   candidate,
+  comparing,
 }: {
   base: StepsSide | null;
   candidate: StepsSide;
+  comparing: boolean;
 }) {
   return (
     <div {...stylex.props(styles.stack)}>
@@ -372,9 +375,17 @@ export function Steps({
         listed error or response status is not a check result.
       </p>
       <div {...stylex.props(styles.grid)}>
-        {base === null ? null : <StepsPanel label="Before" side={base} />}
+        {base !== null ? <StepsPanel label="Before" side={base} /> : null}
+        {base === null && comparing ? (
+          <section {...stylex.props(styles.stack)} aria-label="Before steps">
+            <SubHeading xstyle={styles.heading}>Before</SubHeading>
+            <p {...stylex.props(styles.missing)}>
+              Steps unavailable on the base capture.
+            </p>
+          </section>
+        ) : null}
         <StepsPanel
-          label={base === null ? 'Current capture' : 'After'}
+          label={comparing ? 'After' : 'Current capture'}
           side={candidate}
         />
       </div>
@@ -390,5 +401,6 @@ export const TimelineSection: ViewerSection<'timeline'> = ({
   <Steps
     base={base === null ? null : { timeline: base, errors: null, requests: [] }}
     candidate={{ timeline: candidate, errors: null, requests: [] }}
+    comparing={base !== null}
   />
 );

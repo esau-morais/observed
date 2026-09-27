@@ -975,6 +975,7 @@ function StepsBody({
 
   return (
     <Steps
+      comparing={journey.comparison.kind !== 'preview'}
       base={
         base === null
           ? null
@@ -1131,17 +1132,17 @@ function openSection(id: string) {
   }
 }
 
-// Phones show the index collapsed so the lead evidence stays on the first
-// screen.
 function railSummary(outlines: readonly Outline[]): string {
   const sections = outlines.flatMap((outline) => outline.sections);
   const failed = sections.filter((section) => section.status === 'failed');
   const unknown = sections.filter((section) => section.status === 'unknown');
+  const changed = sections.filter((section) => section.status === 'changed');
 
   return [
     `${sections.length} sections`,
     ...(failed.length === 0 ? [] : [`${failed.length} failed`]),
     ...(unknown.length === 0 ? [] : [`${unknown.length} unknown`]),
+    ...(changed.length === 0 ? [] : [`${changed.length} changed`]),
   ].join(' · ');
 }
 
@@ -1367,6 +1368,8 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             <div {...stylex.props(styles.wide)}>
               <Rail outlines={outlines} journeys={result.journeys} />
             </div>
+            {/* Phones show the index collapsed so the lead evidence stays on
+            the first screen. */}
             <details {...stylex.props(styles.narrow)}>
               <summary {...stylex.props(styles.summary)}>
                 Sections

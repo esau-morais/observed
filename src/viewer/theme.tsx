@@ -23,14 +23,14 @@ const styles = stylex.create({
     fontSize: '0.8125rem',
     gap: 8,
   },
-  // Hidden visually on phones so the control fits beside the wordmark.
+  // The options name the setting, so the label is for assistive tech only.
   label: {
-    clipPath: { default: 'inset(50%)', [media.tablet]: 'none' },
-    height: { default: 1, [media.tablet]: 'auto' },
-    overflow: { default: 'hidden', [media.tablet]: 'visible' },
-    position: { default: 'absolute', [media.tablet]: 'static' },
+    clipPath: 'inset(50%)',
+    height: 1,
+    overflow: 'hidden',
+    position: 'absolute',
     whiteSpace: 'nowrap',
-    width: { default: 1, [media.tablet]: 'auto' },
+    width: 1,
   },
   select: {
     backgroundColor: colors.surface,
@@ -126,9 +126,9 @@ export function ThemeControl({
         }}
         {...stylex.props(styles.select)}
       >
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
+        <option value="system">System theme</option>
+        <option value="light">Light theme</option>
+        <option value="dark">Dark theme</option>
       </select>
     </label>
   );

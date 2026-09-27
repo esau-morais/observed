@@ -144,3 +144,25 @@ test('agent text names verified bundle files and the verification rule', async (
   expect(text).not.toContain('/source/');
   expect(withMissingFile).not.toContain(first.path);
 });
+
+test('steps turn unknown when the base recorded no timeline', async () => {
+  const journey = onlyJourney(await errorsResult());
+  const base = journey.base;
+
+  if (base.execution !== 'complete') {
+    throw new Error('The fixture base is complete');
+  }
+
+  const outline = outlineJourney({
+    ...journey,
+    checks: [],
+    base: {
+      ...base,
+      evidence: base.evidence.filter((view) => view.kind !== 'timeline'),
+    },
+  });
+  const steps = outline.sections.find((section) => section.key === 'timeline');
+
+  expect(steps?.status).toBe('unknown');
+  expect(steps?.count).toContain('base steps unavailable');
+});

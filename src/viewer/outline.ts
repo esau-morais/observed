@@ -138,13 +138,19 @@ function missingOnSteps(
   evidence: readonly JourneySection[],
 ): string[] {
   const errors = evidence.find((section) => section.kind === 'browser-errors');
+  const timeline = evidence.find((section) => section.kind === 'timeline');
+  const baseSteps = timeline?.input.base?.evidence;
   const sides = [
     { label: '', side: journey.candidate, view: errors?.input.candidate },
     ...(journey.comparison.kind === 'preview'
       ? []
       : [{ label: 'base ', side: journey.base, view: errors?.input.base }]),
   ];
-  const missing: string[] = [];
+  const missing: string[] =
+    journey.comparison.kind !== 'preview' &&
+    (baseSteps === undefined || baseSteps.status === 'unavailable')
+      ? ['base steps unavailable']
+      : [];
 
   for (const { label, side, view } of sides) {
     const record = view?.evidence;
