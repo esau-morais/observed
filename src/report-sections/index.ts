@@ -1,11 +1,12 @@
 import type { Journey, Side } from '../comparison-model';
 import { isEvidenceKind, type EvidenceKind } from '../evidence-kinds';
 import type { MarkdownSection, SectionInput, SectionSide } from './define';
+import { react } from './react';
 import { text } from './text';
 
 export const markdownSections: {
   readonly [K in EvidenceKind]: MarkdownSection<K>;
-} = { text };
+} = { text, react };
 
 function sectionSide<K extends EvidenceKind>(
   side: Side,

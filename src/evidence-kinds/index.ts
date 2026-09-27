@@ -1,8 +1,9 @@
 import { Schema } from 'effect';
 import { text as nonEmpty } from '../capture/model';
+import { react } from './react';
 import { text } from './text';
 
-export const evidenceKinds = { text } as const;
+export const evidenceKinds = { text, react } as const;
 
 const kinds = Object.values(evidenceKinds);
 
