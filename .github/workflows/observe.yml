@@ -11,11 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Exercises this pull request's action on an example app. Only
-  # self-observe posts to the pull request, so this job keeps a read-only
-  # token and reports in its own summary.
   request-lab:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
