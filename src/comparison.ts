@@ -1053,11 +1053,15 @@ function journeyConclusion(
             return `${item.name} failed. The revisions were not compared, so a regression cannot be established. Candidate: ${describeActual(after)}. ${item.expectation}`;
           }
 
-          const outcome = baseCheck(item.id)?.outcome;
-          const reading =
-            outcome === 'failed' || outcome === 'passed'
-              ? `Base ${outcome === 'failed' ? 'also failed' : 'passed'}, so this is not a regression.`
-              : `Base ${baseOutcome(item.id)}, so a regression cannot be established.`;
+          const readings = {
+            failed: 'Base also failed, so this is not a regression.',
+            passed:
+              "Base passed, but the check's regression rule found no regression.",
+            'not-run':
+              'Base was not run, so a regression cannot be established.',
+            unknown: 'Base was unknown, so a regression cannot be established.',
+          } as const;
+          const reading = readings[baseCheck(item.id)?.outcome ?? 'unknown'];
 
           return `${item.name} failed. ${reading} Base: ${describeActual(baseCheck(item.id))}; candidate: ${describeActual(after)}. ${item.expectation}`;
         })
@@ -1078,7 +1082,7 @@ function journeyConclusion(
       text:
         unknown.length > 0
           ? `The revisions were not compared. Unknown: ${names(unknown)}.`
-          : `The revisions were not compared.${verdicts.length === 0 ? '' : ` ${passed.length} of ${verdicts.length} candidate checks passed.`}`,
+          : `The revisions were not compared.${verdicts.length === 0 ? '' : ` ${passed.length} of ${verdicts.length} candidate checks passed.`}${notRunText}`,
     };
   }
 
@@ -1087,7 +1091,8 @@ function journeyConclusion(
       kind: 'unavailable',
       text: unknown
         .map((item) => `${item.name}: unknown. ${item.detail}`)
-        .join(' '),
+        .join(' ')
+        .concat(notRunText),
     };
   }
 

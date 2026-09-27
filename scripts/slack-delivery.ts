@@ -90,23 +90,28 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
     result === null
       ? icons.unknown
       : icons[conclusionTones[result.conclusion.kind]];
-  const checks: string[] = [];
-
-  // Names and scopes come from observed.json; details and measured values
-  // stay out.
-  for (const journey of result?.journeys ?? []) {
-    for (const check of journey.checks) {
-      const line = slackText(
+  const lines = (result?.journeys ?? []).flatMap((journey) =>
+    journey.checks.map((check) =>
+      slackText(
         clip(
           `• ${verdictLabels[check.verdict]} · ${result !== null && result.journeys.length > 1 ? `${journey.title}: ` : ''}${check.name}. Scope: ${check.scope}`,
           300,
         ),
-      );
+      ),
+    ),
+  );
+  const checks: string[] = [];
 
-      if ([...checks, line].join('\n').length <= 2000) {
-        checks.push(line);
-      }
+  // Names and scopes come from observed.json; details and measured values
+  // stay out. The list stops at the first check that doesn't fit, so none is
+  // skipped silently.
+  for (const line of lines) {
+    if ([...checks, line].join('\n').length > 2000) {
+      checks.push(`• ${lines.length - checks.length} more in the report`);
+      break;
     }
+
+    checks.push(line);
   }
 
   const detail =

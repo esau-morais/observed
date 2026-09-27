@@ -624,8 +624,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
               Effect.forEach(steps, runStep, { discard: true }),
           }),
           {
-            ...collector.conditions?.(config),
             launchArguments: (collector.launchArguments ?? []).join(' '),
+            ...collector.conditions?.(config),
           },
         );
       }).pipe(Effect.scoped);

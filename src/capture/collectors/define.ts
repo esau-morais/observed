@@ -88,7 +88,7 @@ export type Collector<K extends EvidenceKind> =
   // still running, in a fresh agent-browser session of its own. That session
   // launches on the collector's first browser() call, so the collector can
   // pass launch flags such as --init-script there. Observed closes it and
-  // records launchArguments among the conditions.
+  // records launchArguments among the conditions unless `conditions` sets it.
   | (Common<K> & {
       readonly phase: 'separate-session';
       readonly launchArguments?: readonly string[];
