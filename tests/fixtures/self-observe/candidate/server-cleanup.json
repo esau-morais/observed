@@ -1,9 +1,0 @@
-{
-  "pid": 3440,
-  "url": "http://127.0.0.1:37159/",
-  "stopped": true,
-  "exit": {
-    "kind": "terminated",
-    "reason": "Unknown: ChildProcess.exitCode (bun run start)"
-  }
-}

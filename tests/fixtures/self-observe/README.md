@@ -1,17 +1,21 @@
 # Self-observe fixture
 
 Frozen captures of [Request lab](../../../examples/request-lab) that Observed's
-own report viewer is observed against.
+own report viewer is observed against. `captures.tar.gz` holds two capture
+directories:
 
 - `base/` is main at `3f18c7b`, which sends one `GET /api/items` per click.
 - `candidate/` is `305f4cd`, where `App.tsx` imports `./duplicate` and sends
   two. Its `request-count` check regresses from 1 to 2.
 
+They are archived because a capture keeps its evidence under `evidence/`, and
+Observed leaves any path named `evidence` out of the source copy it captures.
+
 Both were captured by Observed 0.2.0-alpha.0 on `ubuntu-24.04` in the Observe
 workflow's `request-lab` job, run 36334289295 on pull request #42.
 
-The root `observed.json` runs `bun dist/observed.js compare` on these captures
-during `setup`, with the build of the revision being observed, and `start`
+The root `observed.json` extracts the archive and runs
+`bun dist/observed.js compare` on the captures during `setup`, with the build of the revision being observed, and `start`
 serves the result with `observed view`. Each self-observation therefore shows
 that revision's viewer and comparison code. The fixture only supplies the data.
 `setup` fails unless `compare` exits `2`, so a fixture that no longer reads as a
@@ -27,8 +31,10 @@ when the evidence the self-observe checks read has changed:
    `bun run observe examples/request-lab --base main --headless --output <dir>`,
    or by opening a draft pull request and downloading the Observe workflow's
    `observed-bundle` artifact.
-3. Replace `base/` and `candidate/` with `captures/journey-1/base` and
-   `captures/journey-1/candidate` from `<dir>`, or from `run/` in the artifact.
-4. Check that
-   `bun run compare tests/fixtures/self-observe/base tests/fixtures/self-observe/candidate --json`
-   exits `2`, then update the commits and run above.
+3. From `<dir>/captures/journey-1`, or `run/captures/journey-1` in the
+   artifact, archive both directories reproducibly:
+   `tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - base candidate | gzip -n -9 > captures.tar.gz`,
+   and replace `captures.tar.gz` here.
+4. Extract it to a temporary directory and check that
+   `bun run compare <tmp>/base <tmp>/candidate --json` exits `2`. Then update
+   the commits and run above.

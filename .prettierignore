@@ -12,4 +12,3 @@ README.md
 tests/fixtures/accessibility/
 tests/fixtures/performance/raw/
 tests/fixtures/playwright/html/
-tests/fixtures/self-observe/

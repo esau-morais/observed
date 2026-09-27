@@ -19,9 +19,16 @@
     ["bun", "install", "--frozen-lockfile"],
     ["bun", "run", "build"],
     [
+      "tar",
+      "-xzf",
+      "tests/fixtures/self-observe/captures.tar.gz",
+      "-C",
+      "tests/fixtures/self-observe"
+    ],
+    [
       "sh",
       "-c",
-      "bun dist/observed.js compare tests/fixtures/self-observe/base tests/fixtures/self-observe/candidate --output self-observe --json > self-observe.json; test $? -eq 2"
+      "bun dist/observed.js compare tests/fixtures/self-observe/base tests/fixtures/self-observe/candidate --output self-observe --json > self-observe.json; code=$?; [ $code -eq 2 ] || { cat self-observe.json; echo \"compare exited $code; the fixture must read as a regression (2)\" >&2; exit 1; }"
     ]
   ],
   "start": [
