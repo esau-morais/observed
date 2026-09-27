@@ -351,3 +351,84 @@ test('a result is posted to a pull request only when its candidate is that head 
     ),
   ).toBe('other');
 });
+
+test("a check row shows its own finding's anchor and no other check's", async () => {
+  const missing = await Effect.runPromise(
+    inspectSide({ directory: null, prefix: 'candidate', evaluatedAt }),
+  );
+  const result = compareCaptures({
+    base: missing,
+    candidate: missing,
+    evaluatedAt,
+    visual: { kind: 'unavailable', reason: 'No captures' },
+  });
+  const [journey] = result.journeys;
+  const identity = { scope: 'Open the shelf', expectation: 'No errors.' };
+  const output = json({
+    directory: '/bundle',
+    result: {
+      ...result,
+      journeys: [
+        {
+          ...journey,
+          checks: [
+            {
+              ...identity,
+              id: 'no-browser-errors',
+              name: 'No browser errors',
+              verdict: 'regression',
+              detail: '1 error.',
+            },
+            {
+              ...identity,
+              id: 'books',
+              name: 'One books request',
+              verdict: 'failed',
+              detail: 'Observed 2 matching requests.',
+            },
+          ],
+          findings: [
+            {
+              id: 'browser-errors:0123456789abcdef',
+              evidence: 'browser-errors',
+              checks: ['no-browser-errors'],
+              subject: 'TypeError thrown',
+              comparison: 'new',
+              location: {
+                kind: 'anchored',
+                anchors: [
+                  {
+                    path: 'src/App.jsx',
+                    line: 10,
+                    side: 'candidate',
+                    basis: 'stack-frame',
+                    evidence: 'Stack frame 1, resolved by its source map.',
+                    artifacts: [],
+                    diff: 'added',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      summary: { passed: 0, total: 2 },
+      conclusion: { kind: 'regression', text: 'No browser errors regressed.' },
+    },
+  });
+  const markdown = summarize({
+    output,
+    exitCode: 2,
+    artifact: 'observed-bundle',
+    page: null,
+    surface: { kind: 'check' },
+  }).markdown;
+  const rows = markdown.split('\n');
+
+  expect(
+    rows.filter((row) => row.includes('thrown at `src/App.jsx:10`')),
+  ).toHaveLength(1);
+  expect(rows.find((row) => row.includes('One books request'))).not.toContain(
+    'App.jsx',
+  );
+});

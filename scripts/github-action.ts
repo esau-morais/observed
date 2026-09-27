@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   comparisonSchema,
   conclusionExitCodes,
+  type Anchor,
   type CheckVerdict,
   type Comparison,
   type Journey,
@@ -198,11 +199,40 @@ function reading(result: Comparison, check: CheckVerdict): string {
     : check.detail;
 }
 
-function rowText(result: Comparison, { journey, check }: Open): string {
+const anchorWords: Record<Anchor['basis'], string> = {
+  'stack-frame': 'thrown at',
+  'component-source': 'component at',
+  'test-location': 'test at',
+  'diff-name-match': 'name matches changed line',
+};
+
+// A location is a fact about where the evidence points, never a cause.
+function rowLocation({ journey, check }: Open): string | null {
+  for (const finding of journey.findings) {
+    if (
+      finding.checks.includes(check.id) &&
+      finding.location.kind === 'anchored'
+    ) {
+      const [anchor] = finding.location.anchors;
+      const words =
+        anchor.basis === 'stack-frame' && finding.subject === 'Console error'
+          ? 'logged at'
+          : anchorWords[anchor.basis];
+
+      return `${words} ${code(`${anchor.path}:${anchor.line}`)}`;
+    }
+  }
+
+  return null;
+}
+
+function rowText(result: Comparison, open: Open): string {
+  const { journey, check } = open;
   const where =
     result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
+  const location = rowLocation(open);
 
-  return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}`;
+  return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}`;
 }
 
 export function checkRows(result: Comparison, lead?: Open): string[] {
