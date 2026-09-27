@@ -1056,7 +1056,7 @@ function journeyConclusion(
           const readings = {
             failed: 'Base also failed, so a regression is not established.',
             passed:
-              "Base passed, but the check's regression rule found no regression.",
+              "Base passed, but the check's regression rule did not establish a regression.",
             'not-run':
               'Base was not run, so a regression cannot be established.',
             unknown: 'Base was unknown, so a regression cannot be established.',
