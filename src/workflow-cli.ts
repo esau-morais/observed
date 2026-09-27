@@ -325,6 +325,14 @@ const setup = Command.make(
     ),
   },
   Effect.fn('setupCommand')(function* ({ withDeps }) {
+    // Chrome for Testing, which agent-browser installs, has no Linux arm64 build.
+    if (process.platform === 'linux' && process.arch === 'arm64') {
+      return yield* new SetupFailure({
+        message:
+          'Observed does not support Linux on arm64: Chrome for Testing publishes no Linux arm64 build. Use Linux on x64 or macOS.',
+      });
+    }
+
     const agentBrowser = yield* Effect.try({
       try: () => agentBrowserPath(toolRoot),
       catch: () =>

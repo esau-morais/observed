@@ -11,8 +11,10 @@ Everything runs locally. No model or account is required to capture or view it.
 
 ## Install
 
-Observed runs on Linux and macOS with [Bun](https://bun.sh/docs/installation)
-1.4.2 or later. Windows is not supported.
+Observed runs on Linux x64 and macOS, Intel or Apple silicon, with
+[Bun](https://bun.sh/docs/installation) 1.4.2 or later. Windows and Linux on
+arm64 are not supported: Chrome for Testing, which Observed captures with,
+publishes no Linux arm64 build.
 
 ```bash
 bun add --global @observed-software/cli
@@ -189,7 +191,7 @@ Test reports stay local under gitignored `evidence/`.
 To release, set the new `version` in `package.json`, add a `CHANGELOG.md`
 entry headed `## <version> (<date>)`, merge, and push the tag `v<version>`.
 [.github/workflows/release.yml](.github/workflows/release.yml) installs the
-packed CLI on Linux and macOS, x64 and arm64, and runs the Request lab example
+packed CLI on Linux x64 and macOS on Intel and Apple silicon, and runs the Request lab example
 through it. It then publishes that tarball to npm with provenance, creates the
 GitHub release, and moves the major tag, such as `v0`, to the release commit.
 The tagged commit must be on `main`.
