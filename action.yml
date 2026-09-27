@@ -59,12 +59,12 @@ runs:
           package="$(ls "$cli"/*.tgz)"
         else
           version="$(bun --print "(await Bun.file(process.env.GITHUB_ACTION_PATH + '/package.json').json()).version")"
-          package="@esau-morais/observed@$version"
+          package="@observed-software/cli@$version"
         fi
         cd "$cli"
         echo '{"private":true}' > package.json
         bun add --exact --ignore-scripts "$package"
-        root="$cli/node_modules/@esau-morais/observed"
+        root="$cli/node_modules/@observed-software/cli"
         echo "cli=$root/dist/observed.js" >> "$GITHUB_OUTPUT"
         echo "script=$root/dist/github-action.js" >> "$GITHUB_OUTPUT"
         bun "$root/dist/observed.js" --version

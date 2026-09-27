@@ -14,6 +14,10 @@ import { serveReport, ViewFailure } from './view';
 import { buildViewer, runProject } from './workflow';
 
 const toolRoot = path.resolve(import.meta.dirname, '..');
+
+class SetupFailure extends Schema.TaggedError<SetupFailure>()('SetupFailure', {
+  message: Schema.String,
+}) {}
 const outputFlag = Flag.String('output').pipe(
   Flag.withDescription('New directory for the evidence; default .observed/'),
   Flag.optional,
@@ -137,7 +141,10 @@ const observe = Command.make(
       timeoutMs: timeout,
       quiet: machine,
     });
-    yield* saveLatest(exported.directory, projectRoot);
+    // An explicit --output leaves the application's directory untouched.
+    if (Option.isNone(output)) {
+      yield* saveLatest(exported.directory, projectRoot);
+    }
 
     if (machine) {
       yield* printJson(exported);
@@ -241,7 +248,10 @@ const compare = Command.make(
         });
       }),
     );
-    yield* saveLatest(exported.directory, process.cwd());
+    if (Option.isNone(output)) {
+      yield* saveLatest(exported.directory, process.cwd());
+    }
+
     if (machine) {
       yield* printJson(exported);
     } else {
@@ -261,7 +271,7 @@ const view = Command.make(
   {
     directory: Argument.String('report-directory').pipe(
       Argument.withDescription(
-        'Report to open; default the latest run in ./.observed',
+        "Report to open, or an app directory to open its latest run; default the current directory's latest run",
       ),
       Argument.optional,
     ),
@@ -275,14 +285,14 @@ const view = Command.make(
   },
   Effect.fn('viewCommand')(function* ({ directory, port }) {
     const fs = yield* FileSystem.FileSystem;
+    const requested = path.resolve(Option.getOrElse(directory, () => '.'));
+    const latestFile = path.join(evidenceRoot(requested), 'latest.json');
     let selected = Option.getOrNull(directory);
 
-    if (selected === null) {
-      const latestFile = path.join(evidenceRoot(process.cwd()), 'latest.json');
-
+    if (selected === null || (yield* fs.exists(latestFile))) {
       if (!(yield* fs.exists(latestFile))) {
         return yield* new ViewFailure({
-          message: `No saved run in ${evidenceRoot(process.cwd())}. Run view from the application's directory, or pass the report directory that observe printed.`,
+          message: `No saved run in ${evidenceRoot(requested)}. Pass the application's directory or the report directory that observe printed.`,
         });
       }
 
@@ -292,6 +302,12 @@ const view = Command.make(
         ),
       )(yield* fs.readFileString(latestFile));
       selected = latest.directory;
+    }
+
+    if (!(yield* fs.exists(path.join(selected, 'selection.json')))) {
+      return yield* new ViewFailure({
+        message: `${path.resolve(selected)} is not a report directory, and it has no .observed/ runs. Pass the directory that observe printed, or the application's directory.`,
+      });
     }
 
     yield* openViewer(path.resolve(selected), port);
@@ -309,12 +325,19 @@ const setup = Command.make(
     ),
   },
   Effect.fn('setupCommand')(function* ({ withDeps }) {
+    const agentBrowser = yield* Effect.try({
+      try: () => agentBrowserPath(toolRoot),
+      catch: () =>
+        new SetupFailure({
+          message: `agent-browser is not installed next to Observed in ${toolRoot}. Reinstall Observed.`,
+        }),
+    });
     const code = yield* Effect.promise(
       () =>
         Bun.spawn(
           [
             process.execPath,
-            agentBrowserPath(toolRoot),
+            agentBrowser,
             'install',
             ...(withDeps ? ['--with-deps'] : []),
           ],

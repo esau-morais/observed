@@ -8,7 +8,7 @@ action's inputs.
 
 First release.
 
-- Install with `bun add --global @esau-morais/observed` and run `observed`
+- Install with `bun add --global @observed-software/cli` and run `observed`
   from any directory. Bun 1.4.2 or later is required. `observed setup`
   downloads Chrome.
 - `observed observe` captures the app described by `observed.json`, compares it

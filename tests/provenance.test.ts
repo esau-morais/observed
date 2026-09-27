@@ -21,7 +21,7 @@ async function observedRoot(parent: string) {
   await mkdir(parent, { recursive: true });
   await writeFile(
     path.join(parent, 'package.json'),
-    JSON.stringify({ name: '@esau-morais/observed', version: '9.9.9-test' }),
+    JSON.stringify({ name: '@observed-software/cli', version: '9.9.9-test' }),
   );
 
   return parent;
@@ -122,7 +122,7 @@ test('flags tracked changes but not untracked files in Observed checkout', async
 
   await writeFile(
     path.join(root, 'package.json'),
-    JSON.stringify({ name: '@esau-morais/observed', version: '9.9.10-test' }),
+    JSON.stringify({ name: '@observed-software/cli', version: '9.9.10-test' }),
   );
   expect(await provenance(root)).toEqual({
     version: '9.9.10-test',
@@ -147,7 +147,7 @@ test('edits to an application inside Observed checkout are not Observed changes'
 
   await writeFile(
     path.join(root, 'package.json'),
-    JSON.stringify({ name: '@esau-morais/observed', version: '9.9.11-test' }),
+    JSON.stringify({ name: '@observed-software/cli', version: '9.9.11-test' }),
   );
   expect((await provenance(root, application)).source).toMatchObject({
     kind: 'git',

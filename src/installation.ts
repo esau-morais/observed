@@ -1,4 +1,4 @@
-export const packageName = '@esau-morais/observed';
+export const packageName = '@observed-software/cli';
 export const minimumBun = '1.4.2';
 
 type Build = {

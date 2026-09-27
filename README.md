@@ -15,7 +15,7 @@ Observed runs on Linux and macOS with [Bun](https://bun.sh/docs/installation)
 1.4.2 or later. Windows is not supported.
 
 ```bash
-bun add --global @esau-morais/observed
+bun add --global @observed-software/cli
 observed setup
 ```
 
@@ -25,8 +25,9 @@ build Observed captures with, about 190 MB. On a Linux machine without desktop
 libraries, such as a container, run `observed setup --with-deps` instead; it
 also installs system packages with `sudo apt`.
 
-To run a pinned version without installing it, replace `observed` with
-`bunx @esau-morais/observed@0.1.0` in any command below.
+To use a pinned version without installing it, start each command with
+`bunx @observed-software/cli@<version>` instead of `observed`, as in
+`bunx @observed-software/cli@0.1.0 setup`.
 
 ## Use it on your app
 
@@ -45,8 +46,9 @@ Without `--json`, `observe` opens the viewer and runs until you press Ctrl+C.
 Evidence goes to `.observed/` in the app's directory, which holds its own
 `.gitignore`, so Git ignores it without changes to your repository. The JSON
 output's `directory` is the report, and `observed view <directory>` opens it
-again. `observed view` with no argument opens the latest run in the current
-directory's `.observed/`. Exit codes: `0` completed, `1` unavailable, `2` a
+again. `observed view path/to/app` opens the app's latest run, and
+`observed view` with no argument opens the current directory's latest run.
+With `--output`, Observed writes only to that directory. Exit codes: `0` completed, `1` unavailable, `2` a
 named check failed or regressed. When Observed rejects `observed.json`, it prints no JSON
 and explains why on stderr.
 
@@ -170,7 +172,8 @@ bun start
 
 This installs dependencies and the browser, captures the example, and starts
 the viewer. Open the printed localhost URL. Press Ctrl+C to stop. In a checkout,
-`bun run observe`, `bun run setup` and `bun run view` run the CLI from source.
+`bun run observe`, `bun run setup` and `bun run view` run the CLI from source,
+as in `bun run observe examples/shop` followed by `bun run view examples/shop`.
 
 Development checks:
 
@@ -189,6 +192,19 @@ entry headed `## <version> (<date>)`, merge, and push the tag `v<version>`.
 packed CLI on Linux and macOS, x64 and arm64, and runs the Request lab example
 through it. It then publishes that tarball to npm with provenance, creates the
 GitHub release, and moves the major tag, such as `v0`, to the release commit.
+The tagged commit must be on `main`.
+
+npm can only trust a workflow for a package that already exists, so the first
+release needs a token once:
+
+1. Create a granular npm access token that can publish to the
+   `@observed-software` organization, with a short expiry. Store it as the
+   `NPM_TOKEN` secret of the `npm` environment in this repository.
+2. Push the tag and let the release workflow publish.
+3. On npmjs.com, open the package's settings, add this repository's
+   `release.yml` workflow and the `npm` environment as a trusted publisher,
+   and select "Require two-factor authentication and disallow tokens".
+4. Delete the npm token and the `NPM_TOKEN` secret.
 
 ## Run on pull requests
 
