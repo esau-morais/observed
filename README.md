@@ -530,7 +530,7 @@ the report viewer, built from the revision being captured, on a frozen
 regression report from [tests/fixtures/self-observe](tests/fixtures/self-observe),
 which also explains how to regenerate it. Three journeys check that the report
 opens on the "Regression" verdict without browser errors, new serious
-accessibility violations or a slow first paint; that the duplicate request is
+accessibility violations or a first contentful paint over 1.8 s; that the duplicate request is
 listed on its step; and that Enter opens a disclosure focused with the keyboard.
 The Observe workflow's `self-observe` job runs them on every pull request with
 the previous release of the action, pinned by commit SHA and never `./`, so the

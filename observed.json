@@ -73,11 +73,11 @@
         },
         {
           "kind": "performance",
-          "id": "report-lcp",
+          "id": "report-fcp",
           "name": "Report paints quickly",
           "scope": "Loading the report page until its title renders.",
-          "metric": "lcp",
-          "max": 2500
+          "metric": "fcp",
+          "max": 1800
         }
       ],
       "browserArguments": ["--no-sandbox"],
