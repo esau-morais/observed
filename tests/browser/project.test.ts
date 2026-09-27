@@ -787,16 +787,25 @@ test('a seeded thrown error fails browser-errors as a regression and matches the
     compared.result.journeys[0].candidate,
     'browser-errors',
   );
+  const base = evidenceOf(compared.result.journeys[0].base, 'browser-errors');
+  expect(base?.status === 'recorded' ? base.value.entries : null).toEqual([]);
+  // The handler that sets "Order received" logs, then throws on a timer, so
+  // both errors are read after the click or after the wait for that text.
   expect(
     candidate?.status === 'recorded'
-      ? candidate.value.entries.map((entry) => entry.text.split('\n')[0])
+      ? candidate.value.entries
+          .map((entry) => ({
+            text: entry.text.split('\n')[0],
+            afterClickOrWait: entry.step === 1 || entry.step === 2,
+          }))
+          .sort((left, right) =>
+            (left.text ?? '').localeCompare(right.text ?? ''),
+          )
       : [],
-  ).toEqual(
-    expect.arrayContaining([
-      'Error: Receipt total is undefined',
-      'Receipt printer offline',
-    ]),
-  );
+  ).toEqual([
+    { text: 'Error: Receipt total is undefined', afterClickOrWait: true },
+    { text: 'Receipt printer offline', afterClickOrWait: true },
+  ]);
   expect(compared.result.conclusion.text).toContain(
     'that the base did not have',
   );

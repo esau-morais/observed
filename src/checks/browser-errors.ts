@@ -6,6 +6,8 @@ import { defineCheck, perSide } from './define';
 type ErrorRecord = EvidenceValue<'browser-errors'>;
 type BrowserError = ErrorRecord['entries'][number];
 
+type StepError = BrowserError & { step: number };
+
 const ignorePattern = text.check(
   Schema.makeFilter(
     (value) => {
@@ -35,20 +37,24 @@ function sourceLabel(error: BrowserError): string {
   return error.source === 'page' ? 'page error' : 'console error';
 }
 
+function message(error: BrowserError): string {
+  return error.text.split('\n')[0] ?? '';
+}
+
 // The application listens on a new port for every capture, so a message that
 // names it would otherwise never match between base and candidate.
-export function signature(error: BrowserError): string {
-  const line = (error.text.split('\n')[0] ?? '')
+function signature(error: BrowserError): string {
+  const line = message(error)
     .replaceAll(/https?:\/\/(?:127\.0\.0\.1|localhost):\d+/g, '<application>')
     .trim();
 
   return `${sourceLabel(error)}: ${line === '' ? '(empty message)' : line}`;
 }
 
-function describe(errors: readonly BrowserError[]): string {
+function describe(errors: readonly StepError[]): string {
   const shown = errors
     .slice(0, 3)
-    .map((error) => `step ${(error.step ?? 0) + 1} ${signature(error)}`)
+    .map((error) => `step ${error.step + 1} ${signature(error)}`)
     .join('; ');
 
   return errors.length > 3 ? `${shown}; and ${errors.length - 3} more` : shown;
@@ -56,9 +62,11 @@ function describe(errors: readonly BrowserError[]): string {
 
 function classify(check: Definition, record: ErrorRecord) {
   const patterns = (check.ignore ?? []).map((pattern) => new RegExp(pattern));
-  const during = record.entries.filter((error) => error.step !== null);
+  const during = record.entries.filter(
+    (error): error is StepError => error.step !== null,
+  );
   const ignored = during.filter((error) =>
-    patterns.some((pattern) => pattern.test(error.text)),
+    patterns.some((pattern) => pattern.test(message(error))),
   );
 
   return {
@@ -71,6 +79,9 @@ function classify(check: Definition, record: ErrorRecord) {
 export const browserErrors = defineCheck({
   definition,
   evidence: ['browser-errors'],
+  // One side's errors are a complete verdict; the base only decides whether a
+  // failure is a regression.
+  needsBase: () => false,
   collectors: () => [{ kind: 'browser-errors' }],
   expectation: (check) => {
     const ignore = check.ignore ?? [];

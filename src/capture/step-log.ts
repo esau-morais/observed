@@ -1,15 +1,14 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { EvidenceValue } from '../evidence-kinds';
+import type { consoleSchema } from './collectors/browser-errors';
 import type { Step } from './recipe';
-
-type ConsoleMessage = { readonly type: string; readonly text: string };
 
 // One read of agent-browser's page error and console buffers.
 export type ErrorReading = {
   readonly startedAt: string;
   readonly finishedAt: string;
   readonly page: readonly string[];
-  readonly console: readonly ConsoleMessage[];
+  readonly console: (typeof consoleSchema.Type)['data']['messages'];
 };
 
 export type StepRecord = {
@@ -20,17 +19,20 @@ export type StepRecord = {
   readonly errors: ErrorReading | null;
 };
 
-// Built by the step loop. `steps` holds one record per step that ran, in order.
+// Built by the step loop. `steps` holds one record per step that ran, in
+// order. `final` is the read saved as errors.json and console.json after the
+// snapshot; it is null until then and on a failed journey.
 export type StepLog = {
   readonly before: ErrorReading | null;
   readonly steps: readonly StepRecord[];
+  readonly final: ErrorReading | null;
 };
 
 type Timeline = EvidenceValue<'timeline'>;
 type BrowserErrors = EvidenceValue<'browser-errors'>;
 type BrowserError = BrowserErrors['entries'][number];
 
-export function stepTarget(step: Step): string | null {
+function stepTarget(step: Step): string | null {
   switch (step.kind) {
     case 'navigate':
       return step.path;
@@ -90,23 +92,15 @@ function appended<T>(
     : null;
 }
 
-// `final` is the read after the last step's read, or null when it failed.
 export function browserErrorsValue(
   steps: readonly Step[],
   log: StepLog,
-  final: ErrorReading | null,
 ): BrowserErrors {
   const entries: BrowserError[] = [];
   let problem: string | null = null;
   let previous: ErrorReading | null = null;
 
-  const add = (step: number | null, reading: ErrorReading | null) => {
-    if (reading === null) {
-      problem ??= `Errors after step ${(step ?? 0) + 1} could not be read`;
-
-      return;
-    }
-
+  const add = (step: number | null, reading: ErrorReading) => {
     const page = appended(previous?.page ?? [], reading.page);
     const messages = appended(previous?.console ?? [], reading.console);
 
@@ -139,12 +133,20 @@ export function browserErrorsValue(
   } else {
     add(null, log.before);
 
-    for (const [index, record] of log.steps.entries()) {
-      add(index, record.errors);
-    }
+    const reads = [
+      ...log.steps.map((record) => record.errors),
+      ...(log.steps.length > 0 ? [log.final] : []),
+    ];
 
-    if (log.steps.length > 0) {
-      add(log.steps.length - 1, final);
+    for (const [index, reading] of reads.entries()) {
+      const step = Math.min(index, log.steps.length - 1);
+
+      if (reading === null) {
+        problem ??= `Errors after step ${step + 1} could not be read`;
+        continue;
+      }
+
+      add(step, reading);
     }
   }
 

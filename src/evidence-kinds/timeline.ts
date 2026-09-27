@@ -19,7 +19,11 @@ export const timeline = defineEvidence({
           outcome: Schema.Literals(['completed', 'failed']),
           startedAt: timestamp,
           finishedAt: timestamp,
-        }),
+        }).check(
+          Schema.makeFilter((ran) => ran.startedAt <= ran.finishedAt, {
+            message: 'A step must finish after it starts',
+          }),
+        ),
         Schema.Struct({ ...step, outcome: Schema.Literal('not-run') }),
       ]),
     ),

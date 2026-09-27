@@ -46,12 +46,11 @@ const styles = stylex.create({
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
   },
+  treeScroll: { maxHeight: '32rem', overflowY: 'auto' },
   tree: {
     fontFamily: fonts.mono,
     fontSize: '0.8125rem',
     margin: 0,
-    maxHeight: '32rem',
-    overflowY: 'auto',
     padding: 16,
     whiteSpace: 'pre',
   },
@@ -144,6 +143,9 @@ function TimelinePanel({
                           step.outcome === 'failed' && styles.failed,
                         )}
                       >
+                        {step.outcome === 'failed' ? (
+                          <span aria-hidden="true">! </span>
+                        ) : null}
                         {stepOutcomeLabels[step.outcome]}
                       </td>
                     </tr>
@@ -164,7 +166,7 @@ function TimelinePanel({
                 snapshot. The screenshot above shows the same state.
               </p>
               <div
-                {...stylex.props(styles.scroll)}
+                {...stylex.props(styles.scroll, styles.treeScroll)}
                 role="region"
                 aria-label={`${label} accessibility tree`}
                 tabIndex={0}

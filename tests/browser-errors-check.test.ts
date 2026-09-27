@@ -1,6 +1,7 @@
-import { Schema } from 'effect';
+import { Effect, Exit, Schema } from 'effect';
 import { expect, test } from 'vitest';
 import type { Observations } from '../src/capture/model';
+import { readErrors } from '../src/capture/collectors/browser-errors';
 import { browserErrors } from '../src/checks/browser-errors';
 import { evidenceKinds, type EvidenceValue } from '../src/evidence-kinds';
 
@@ -139,4 +140,31 @@ test('rejects error entries that name a step the capture did not have', () => {
       entries: [stepError('Out of range', 7)],
     })._tag,
   ).toBe('None');
+});
+
+test('matches ignore patterns against the message, not the stack', () => {
+  const error = stepError(
+    'TypeError: total is undefined\n    at render (http://127.0.0.1:4000/vendor-abc.js:1:1)',
+  );
+
+  expect(
+    browserErrors.evaluate({
+      definition: { ...definition, ignore: ['vendor'] },
+      base: null,
+      candidate: side([error]),
+      comparable: false,
+    }).candidate,
+  ).toMatchObject({ outcome: 'failed', actual: 1 });
+});
+
+test('a failed agent-browser read is not an empty error list', async () => {
+  const exit = await Effect.runPromiseExit(
+    readErrors(() =>
+      Effect.succeed(
+        '{"success":false,"data":{"errors":[],"messages":[]},"error":"Browser not launched"}',
+      ),
+    ),
+  );
+
+  expect(Exit.isFailure(exit)).toBe(true);
 });

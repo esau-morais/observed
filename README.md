@@ -136,16 +136,20 @@ The [project schema](src/project.ts) and
 - A `browser-errors` check fails on any uncaught page error or `console.error`
   message during `steps`. Errors from the page load and `capture.ready` are
   listed but not checked. Its optional `ignore` holds JavaScript regular
-  expressions, and an error whose message matches one of them doesn't count.
-  When comparing, a regression is an error on the candidate whose first line
-  the base didn't have, even if the base had other errors.
+  expressions matched against the first line of each error, so a stack frame
+  can't hide an error. When comparing, a regression is an error on the
+  candidate whose first line the base didn't have, even if the base had other
+  errors. Without a usable base, the check still fails on the candidate's
+  errors, but no regression is claimed.
 - Every capture records its steps with their target, duration and outcome, the
   accessibility tree after the last step, and the page and console errors with
   the step after which each was read. agent-browser reports errors without
-  times, so Observed reads them after every step and shows each error's time
-  as the interval between two reads. When a step fails, the capture keeps these
-  records, so the report shows which step failed and which errors came before
-  it.
+  times, so Observed reads them after every step and once more after the last
+  snapshot, and shows the interval in which each error was reported. Errors
+  after that read, while Observed takes the screenshot, aren't recorded. When
+  a step fails, the capture keeps these records so the report shows which step
+  failed and which errors came before it. A capture that times out or is
+  cancelled keeps none.
 - Put the expected result in the check, not in a step. A step that waits for the
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,

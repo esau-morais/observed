@@ -27,6 +27,7 @@ import {
   producer,
   recipe,
 } from './support/request-recipe';
+import { browserErrors } from '../src/checks/browser-errors';
 import { defineCheck, perSide, type CheckInput } from '../src/checks/define';
 import {
   compareJourney,
@@ -96,6 +97,7 @@ async function syntheticBundle(
     contract?: Recipe;
     text?: EvidenceValue<'text'>;
     performance?: EvidenceValue<'performance'>;
+    browserErrors?: EvidenceValue<'browser-errors'>;
   } = {},
 ) {
   const directory = await mkdtemp(
@@ -167,6 +169,19 @@ async function syntheticBundle(
             }),
           },
         ]),
+    ...(options.browserErrors === undefined
+      ? []
+      : [
+          {
+            id: 'evidence-browser-errors',
+            path: 'evidence/browser-errors.json',
+            text: json({
+              kind: 'browser-errors',
+              schemaVersion: 1,
+              value: options.browserErrors,
+            }),
+          },
+        ]),
     ...files.map((file, index) => ({
       id: `arbitrary-source-id-${index}`,
       path: `source/${file.path}`,
@@ -226,7 +241,7 @@ async function syntheticBundle(
     execution: { kind: 'complete' },
     artifacts,
     evidence: artifacts.flatMap((artifact) =>
-      artifact.id === 'evidence-text' || artifact.id === 'evidence-performance'
+      artifact.id.startsWith('evidence-')
         ? [
             {
               kind: artifact.id.slice('evidence-'.length),
@@ -1950,4 +1965,50 @@ test('an absolute performance budget still fails the candidate when the base is 
 
   expect(relative.outcome).toBe('unknown');
   expect(relative.detail).toContain('Base: capture unavailable');
+});
+
+test('a candidate with browser errors fails without a usable base instead of becoming unknown', async () => {
+  const check = {
+    kind: 'browser-errors',
+    id: 'no-browser-errors',
+    name: 'No browser errors',
+    scope: 'One Load items click through completion and network idle.',
+  } as const;
+  const bundle = await syntheticBundle({
+    contract: {
+      ...recipe,
+      checks: [check],
+      collectors: [{ kind: 'browser-errors' }],
+    },
+    browserErrors: {
+      steps: 3,
+      coverage: { kind: 'complete' },
+      entries: [
+        {
+          source: 'page',
+          text: 'TypeError: total is undefined',
+          step: 0,
+          after: '2026-09-23T11:59:54.000Z',
+          seenAt: '2026-09-23T11:59:54.300Z',
+        },
+      ],
+    },
+  });
+  const candidate = await inspect(bundle.directory);
+
+  if (candidate.execution !== 'complete') {
+    throw new Error('A complete synthetic side is expected');
+  }
+
+  expect(
+    evaluateCheck(browserErrors, check, {
+      base: null,
+      candidate,
+      mode: 'comparison',
+      comparable: false,
+    }),
+  ).toMatchObject({
+    candidate: { outcome: 'failed', actual: 1 },
+    regression: null,
+  });
 });

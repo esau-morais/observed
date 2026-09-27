@@ -1,10 +1,11 @@
+import type { Step } from './capture/recipe';
 import type { EvidenceValue } from './evidence-kinds';
 
 type TimelineStep = EvidenceValue<'timeline'>['steps'][number];
 type BrowserErrors = EvidenceValue<'browser-errors'>;
 type BrowserError = BrowserErrors['entries'][number];
 
-const actions: Record<string, string> = {
+const actions = {
   navigate: 'Navigate',
   click: 'Click',
   'click-role': 'Click by role',
@@ -13,15 +14,17 @@ const actions: Record<string, string> = {
   'wait-text': 'Wait for text',
   'wait-selector': 'Wait for element',
   'network-idle': 'Wait for network idle',
-};
+} satisfies Record<Step['kind'], string>;
+
+const actionLabels = new Map<string, string>(Object.entries(actions));
 
 export function describeAction(action: string): string {
-  return actions[action] ?? action;
+  return actionLabels.get(action) ?? action;
 }
 
 export const stepOutcomeLabels = {
   completed: 'Completed',
-  failed: 'Failed',
+  failed: 'Step failed',
   'not-run': 'Not run',
 } satisfies Record<TimelineStep['outcome'], string>;
 
@@ -46,14 +49,14 @@ const clock = (time: string) => time.slice(11, 23);
 
 export function describeErrorTime(error: BrowserError): string {
   if (error.step === null || error.after === null) {
-    return `Before the first step, read by ${clock(error.seenAt)} UTC`;
+    return `Read before the first step, reported by ${clock(error.seenAt)} UTC`;
   }
 
-  return `Step ${error.step + 1}, between ${clock(error.after)} and ${clock(error.seenAt)} UTC`;
+  return `Read after step ${error.step + 1}, reported between ${clock(error.after)} and ${clock(error.seenAt)} UTC`;
 }
 
 export function describeErrorCoverage(record: BrowserErrors): string {
   return record.coverage.kind === 'complete'
-    ? 'Read after every step and at the end of the recorded window. agent-browser gives no error times, so each time is the interval between two reads.'
+    ? 'Read after every step and once more after the final snapshot. agent-browser gives no error times, so each time is the interval in which agent-browser reported the error.'
     : `Incomplete: ${record.coverage.reason}.`;
 }

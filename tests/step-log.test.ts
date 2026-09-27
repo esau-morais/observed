@@ -37,17 +37,14 @@ test('attributes each error to the step after which it was first read, bounded b
   const warning = { type: 'warning', text: 'Not an error' };
 
   expect(
-    browserErrorsValue(
-      steps,
-      {
-        before: reading(1, [], [loadError, warning]),
-        steps: [
-          completed(3, reading(5, ['Error: boom'], [loadError, warning])),
-          completed(7, reading(9, ['Error: boom'], [loadError, warning])),
-        ],
-      },
-      reading(11, ['Error: boom', 'Error: boom'], [loadError, warning]),
-    ),
+    browserErrorsValue(steps, {
+      before: reading(1, [], [loadError, warning]),
+      steps: [
+        completed(3, reading(5, ['Error: boom'], [loadError, warning])),
+        completed(7, reading(9, ['Error: boom'], [loadError, warning])),
+      ],
+      final: reading(11, ['Error: boom', 'Error: boom'], [loadError, warning]),
+    }),
   ).toEqual({
     steps: 2,
     coverage: { kind: 'complete' },
@@ -93,11 +90,11 @@ test.each([
     reason: 'stopped at step 1',
   },
   {
-    name: 'the journey is interrupted before a step is recorded',
+    name: 'the journey stops before a step is recorded',
     before: reading(1, []),
     records: [completed(3, reading(5, []))],
-    final: null,
-    reason: 'after step 1 could not be read',
+    final: reading(7, []),
+    reason: 'stopped at step 2',
   },
   {
     name: 'the final read fails',
@@ -109,11 +106,11 @@ test.each([
 ])(
   'marks the error record incomplete when $name',
   ({ before, records, final, reason }) => {
-    const { coverage } = browserErrorsValue(
-      steps,
-      { before, steps: records },
+    const { coverage } = browserErrorsValue(steps, {
+      before,
+      steps: records,
       final,
-    );
+    });
 
     expect(coverage.kind).toBe('incomplete');
     expect(coverage.kind === 'incomplete' ? coverage.reason : '').toContain(
@@ -128,6 +125,7 @@ test('lists steps that never ran and no final state after a failed step', () => 
     {
       before: reading(1, []),
       steps: [{ ...completed(3, null), outcome: 'failed' }],
+      final: null,
     },
     null,
   );

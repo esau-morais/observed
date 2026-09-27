@@ -7,7 +7,7 @@ import { json } from '../encoding';
 import { redactText } from '../redact';
 import type { Recipe, Step } from './recipe';
 import { collectorFor } from './collectors';
-import { readErrors } from './collectors/browser-errors';
+import { readErrors, readStepErrors } from './collectors/browser-errors';
 import type { ErrorReading, StepRecord } from './step-log';
 import {
   BrowserFailure,
@@ -97,20 +97,6 @@ export function requestLedger(
 
 const requestsSchema = response(
   Schema.Struct({ requests: Schema.Array(requestSchema) }),
-);
-
-const errorsSchema = response(
-  Schema.Struct({
-    errors: Schema.Array(Schema.Struct({ text: Schema.String })),
-  }),
-);
-
-const consoleSchema = response(
-  Schema.Struct({
-    messages: Schema.Array(
-      Schema.Struct({ type: Schema.String, text: Schema.String }),
-    ),
-  }),
 );
 
 const environmentSchema = response(
@@ -360,10 +346,11 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* closeOnExit(command, options.session, 'browser-cleanup.json');
 
-  const stepLog: { before: ErrorReading | null; steps: StepRecord[] } = {
-    before: null,
-    steps: [],
-  };
+  const stepLog: {
+    before: ErrorReading | null;
+    steps: StepRecord[];
+    final: ErrorReading | null;
+  } = { before: null, steps: [], final: null };
 
   const context: CollectorContext = {
     directory: options.directory,
@@ -481,12 +468,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* command(['network', 'har', 'start', '--content', 'none']);
 
-  const readStepErrors = readErrors(command).pipe(
-    Effect.orElseSucceed(() => null),
-  );
-
   const journey = Effect.gen(function* () {
-    stepLog.before = yield* readStepErrors;
+    stepLog.before = yield* readStepErrors(command);
 
     for (const action of recipe.steps) {
       const stepStarted = DateTime.formatIso(yield* DateTime.now);
@@ -496,46 +479,47 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         outcome: Exit.isSuccess(exit) ? 'completed' : 'failed',
         startedAt: stepStarted,
         finishedAt: DateTime.formatIso(yield* DateTime.now),
-        errors: yield* readStepErrors,
+        errors: yield* readStepErrors(command),
       });
 
       yield* exit;
     }
   });
 
-  yield* journey.pipe(
-    Effect.tapError(() =>
-      Effect.forEach(
-        recipe.collectors,
-        (config) => {
-          const collector = collectorFor(config);
+  const journeyCollectors = (onFailure: boolean) =>
+    Effect.forEach(
+      recipe.collectors,
+      (config) => {
+        const collector = collectorFor(config);
 
-          return collector.phase === 'journey' && collector.onFailure === true
-            ? collectEvidence(
-                config.kind,
-                collector.collect(config, context),
-                collector.conditions?.(config) ?? {},
-              ).pipe(Effect.ignore)
-            : Effect.void;
-        },
-        { discard: true },
-      ),
-    ),
-  );
+        if (
+          collector.phase !== 'journey' ||
+          (onFailure && collector.onFailure !== true)
+        ) {
+          return Effect.void;
+        }
+
+        const collected = collectEvidence(
+          config.kind,
+          collector.collect(config, context),
+          collector.conditions?.(config) ?? {},
+        );
+
+        return onFailure ? Effect.ignore(collected) : collected;
+      },
+      { discard: true },
+    );
+
+  yield* journey.pipe(Effect.tapError(() => journeyCollectors(true)));
 
   yield* saveOutput('snapshot', 'snapshot.json', ['snapshot']);
 
-  for (const config of recipe.collectors) {
-    const collector = collectorFor(config);
+  const finalErrors = yield* readErrors((name) =>
+    saveOutput(name, `${name}.json`, [name]),
+  );
+  stepLog.final = finalErrors;
 
-    if (collector.phase === 'journey') {
-      yield* collectEvidence(
-        config.kind,
-        collector.collect(config, context),
-        collector.conditions?.(config) ?? {},
-      );
-    }
-  }
+  yield* journeyCollectors(false);
 
   options.addArtifact(
     'screenshot',
@@ -550,16 +534,6 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   const requests = yield* decode(
     requestsSchema,
     yield* saveOutput('request-log', 'requests.json', ['network', 'requests']),
-  );
-
-  const errors = yield* decode(
-    errorsSchema,
-    yield* saveOutput('errors', 'errors.json', ['errors']),
-  );
-
-  const messages = yield* decode(
-    consoleSchema,
-    yield* saveOutput('console', 'console.json', ['console']),
   );
 
   options.addArtifact(
@@ -624,8 +598,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       startedAt: DateTime.formatIso(entry.startedDateTime),
     })),
     browserErrors: [
-      ...errors.data.errors.map((error) => error.text),
-      ...messages.data.messages
+      ...finalErrors.page,
+      ...finalErrors.console
         .filter((message) => message.type === 'error')
         .map((message) => message.text),
     ],
