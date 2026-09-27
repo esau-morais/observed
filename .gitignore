@@ -3,3 +3,7 @@
 /dist/
 /examples/*/node_modules/
 /examples/*/dist/
+/self-observe/
+/self-observe.json
+/tests/fixtures/self-observe/base/
+/tests/fixtures/self-observe/candidate/

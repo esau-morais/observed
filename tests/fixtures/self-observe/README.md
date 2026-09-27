@@ -5,7 +5,7 @@ own report viewer is observed against. `captures.tar.gz` holds two capture
 directories:
 
 - `base/` is main at `3f18c7b`, which sends one `GET /api/items` per click.
-- `candidate/` is `305f4cd`, where `App.tsx` imports `./duplicate` and sends
+- `candidate/` is `305f4cd`, the head of pull request #42, where `App.tsx` imports `./duplicate` and sends
   two. Its `request-count` check regresses from 1 to 2.
 
 They are archived because a capture keeps its evidence under `evidence/`, and
@@ -40,3 +40,9 @@ when the evidence the self-observe checks read has changed:
    `bun run compare <tmp>/base <tmp>/candidate --json` exits `2` and concludes
    a regression. Then update
    the commits and run above.
+
+The performance budget is on the `load` event, at most 250 ms. On this page
+the paint metrics were missing from some samples: across the eight sides of the
+first four proof runs, LCP was absent from up to 3 of 5 samples and FCP from up
+to 1, which leaves a paint budget unknown. `load` was recorded in every sample,
+at 44 to 68 ms.

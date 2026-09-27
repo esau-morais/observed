@@ -54,7 +54,7 @@
           "kind": "text",
           "id": "regression-headline",
           "name": "Regression headline",
-          "scope": "The verdict word above the title after the report loads.",
+          "scope": "The verdict word above the title after the report loads, including its \"!\" symbol.",
           "selector": "section[aria-labelledby=\"report-title\"] > p:first-child",
           "expectedText": "!\nRegression"
         },
