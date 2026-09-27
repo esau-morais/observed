@@ -83,8 +83,6 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-// The pull request line from the original product research. "Automatically
-// fixed" joins it once repair exists.
 export function resultCounts(result: Comparison): string {
   const verdicts = result.journeys.flatMap((journey) =>
     journey.checks.map((check) => check.verdict),
@@ -112,7 +110,16 @@ export function describeMeasure(
   return `${measure.label} ${values}${measure.limit === null ? '' : `, ${measure.limit}`}`;
 }
 
-const leadingVerdicts = {
+// A failing check is explained by its values; an unknown one by its detail,
+// which says why it is unknown.
+export function shownMeasure(check: CheckVerdict): Measure | null {
+  return check.measure !== undefined &&
+    (check.verdict === 'regression' || check.verdict === 'failed')
+    ? check.measure
+    : null;
+}
+
+export const leadingVerdicts = {
   regression: 'regression',
   'check-failed': 'failed',
   unavailable: 'unknown',
@@ -134,7 +141,9 @@ export function headlineParts(result: Comparison): {
   let subject = result.title;
 
   if (first !== undefined) {
-    subject = `${first.measure === undefined ? first.name : describeMeasure(first.measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
+    const measure = shownMeasure(first);
+
+    subject = `${measure === null ? first.name : describeMeasure(measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
   }
 
   return { label: conclusionLabels[kind], subject };

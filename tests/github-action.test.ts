@@ -8,6 +8,7 @@ import {
   jobOutcome,
   pageMatchesRun,
   summarize,
+  type Surface,
 } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 import { json } from '../src/encoding';
@@ -33,18 +34,21 @@ test('CI summaries never present unavailable or unreadable results as passing', 
     exitCode: 1,
     artifact: 'observed-bundle',
     page: null,
+    surface: { kind: 'comment' },
   });
   const mismatched = summarize({
     output: json({ directory: '/bundle', result }),
     exitCode: 0,
     artifact: 'observed-bundle',
     page: null,
+    surface: { kind: 'comment' },
   });
   const unreadable = summarize({
     output: '{"result":{"conclusion":{"kind":"no-regression"}}}',
     exitCode: 0,
     artifact: 'observed-bundle',
     page: null,
+    surface: { kind: 'comment' },
   });
 
   expect(unavailable.trusted).toBe(true);
@@ -113,6 +117,7 @@ test('the summary links only an https report page and cannot be steered by its U
       exitCode: 1,
       artifact: 'observed-bundle',
       page,
+      surface: { kind: 'comment' },
     }).markdown;
   const page = 'https://github.com/o/r/actions/runs/1/artifacts/2';
 
@@ -125,6 +130,7 @@ test('the summary links only an https report page and cannot be steered by its U
       exitCode: 0,
       artifact: 'observed-bundle',
       page,
+      surface: { kind: 'comment' },
     }).markdown,
   ).not.toContain('Open the report');
 
@@ -185,6 +191,12 @@ test('captured text stays plain for agents yet cannot add markup, mentions or re
   expect(inlineText('> quoted')).toBe('\\> quoted');
   expect(inlineText('- item')).toBe('\\- item');
   expect(inlineText('1. first')).toBe('1\\. first');
+  expect(inlineText('$10-$20 for me@example.com')).toBe(
+    '\\$10-\\$20 for me@example.com',
+  );
+  expect(inlineText('see \\https://x.test/a')).toBe(
+    'see \\\\`https://x.test/a`',
+  );
 });
 
 async function regressionRun(detail: string) {
@@ -247,6 +259,7 @@ test('the verdict line carries the values once and passing checks become a count
     exitCode: 2,
     artifact: 'observed-bundle',
     page: null,
+    surface: { kind: 'comment' },
   });
   const visible = summary.markdown
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -267,7 +280,7 @@ test('the verdict line carries the values once and passing checks become a count
     exitCode: 2,
     artifact: 'observed-bundle',
     page: null,
-    headline: false,
+    surface: { kind: 'check' },
   }).markdown;
 
   expect(check).toContain(
@@ -275,49 +288,50 @@ test('the verdict line carries the values once and passing checks become a count
   );
 });
 
-test('captured text cannot close the agent prompt fence or the hidden agent block', async () => {
+test('captured text cannot close the agent prompt fence, and the artifact name cannot close the hidden agent block', async () => {
   const detail = 'Error: ```\n</details>\n--> @octocat';
   const { markdown } = summarize({
     output: await regressionRun(detail),
     exitCode: 2,
-    artifact: 'observed-bundle',
+    artifact: 'bundle-->x',
     page: null,
+    surface: { kind: 'comment' },
   });
   const prompt =
     /<summary>Prompt for your agent<\/summary>\n\n(`{4,})text\n([\s\S]*?)\n\1\n\n<\/details>/.exec(
       markdown,
     );
+  const block = /<!-- observed:agent\n([\s\S]*?)\n-->/.exec(markdown);
 
   expect(prompt?.[2]).toContain(`- Evidence: ${detail}`);
   expect(prompt?.[2]).toContain(
     'A changed value is not a regression by itself; verify against the artifacts',
   );
-  expect(markdown.match(/-->/g)).toHaveLength(2);
+  expect(block?.[1]).toContain('artifact: bundle--x');
+  expect(block?.[1]).toContain('conclusion: regression');
 });
 
 test('the job summary says the job passes only when the Observed check carries a failing result', async () => {
   const output = await regressionRun('Regressed.');
-  const job = (checkPosted?: boolean) =>
+  const render = (surface: Surface, exitCode = 2) =>
     summarize({
       output,
-      exitCode: 2,
+      exitCode,
       artifact: 'observed-bundle',
       page: null,
-      ...(checkPosted === undefined ? {} : { checkPosted }),
+      surface,
     }).markdown;
 
-  expect(job(true)).toContain(jobOutcome(true));
-  expect(job(false)).toContain('The job fails');
-  expect(job()).not.toMatch(/The job|this job/);
-  expect(
-    summarize({
-      output: null,
-      exitCode: 0,
-      artifact: 'observed-bundle',
-      page: null,
-      checkPosted: false,
-    }).markdown,
-  ).toContain('The job fails');
+  expect(render({ kind: 'job', checkPosted: true })).toContain(
+    jobOutcome(true),
+  );
+  expect(render({ kind: 'job', checkPosted: false })).toContain(
+    'The job fails',
+  );
+  expect(render({ kind: 'comment' })).not.toMatch(/The job|this job/);
+  expect(render({ kind: 'job', checkPosted: false }, 0)).toContain(
+    'The job fails',
+  );
 });
 
 test('a result is posted to a pull request only when its candidate is that head or its merge commit', () => {

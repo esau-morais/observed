@@ -27,12 +27,12 @@ async function git(...args: string[]) {
 
 const checkout = await git('rev-parse', '--verify', 'HEAD^{commit}');
 // GitHub downloads an action pinned by SHA without its Git history, so
-// action.yml passes that SHA to a source build.
-const downloaded = /^[0-9a-f]{40}$/.test(
-  process.env.OBSERVED_SOURCE_COMMIT ?? '',
-)
-  ? (process.env.OBSERVED_SOURCE_COMMIT ?? null)
-  : null;
+// action.yml passes that SHA to a source build on the runner.
+const pinned = process.env.OBSERVED_SOURCE_COMMIT ?? '';
+const downloaded =
+  process.env.GITHUB_ACTIONS === 'true' && /^[0-9a-f]{40}$/.test(pinned)
+    ? pinned
+    : null;
 const commit = checkout ?? downloaded;
 const status =
   checkout === null

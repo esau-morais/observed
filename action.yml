@@ -80,8 +80,14 @@ runs:
       shell: bash
       env:
         OBSERVED_PROJECT: ${{ inputs.project }}
+        OBSERVED_JOB_OUTCOME: ${{ inputs.job-outcome }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
-      run: bun "$OBSERVED_SCRIPT" preflight "$OBSERVED_PROJECT"
+      run: |
+        case "$OBSERVED_JOB_OUTCOME" in
+          check | result) ;;
+          *) echo "::error title=Observed::job-outcome must be check or result."; exit 1 ;;
+        esac
+        bun "$OBSERVED_SCRIPT" preflight "$OBSERVED_PROJECT"
 
     - name: Run Observed
       id: observe
