@@ -99,7 +99,7 @@ function Element({
             ) : null}
             {elementLabels[element.status]}
           </span>
-        ) : null}
+        ) : null}{' '}
         <code {...stylex.props(styles.mono)}>{describeElement(node)}</code>
       </p>
       <dl {...stylex.props(styles.definition)}>
