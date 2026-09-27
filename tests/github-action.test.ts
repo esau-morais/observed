@@ -5,10 +5,8 @@ import {
   capturedRevision,
   describeFailure,
   inlineText,
-  jobOutcome,
   pageMatchesRun,
   summarize,
-  type Surface,
 } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 import { json } from '../src/encoding';
@@ -311,27 +309,30 @@ test('captured text cannot close the agent prompt fence, and the artifact name c
   expect(block?.[1]).toContain('conclusion: regression');
 });
 
-test('the job summary says the job passes only when the Observed check carries a failing result', async () => {
+test('a delivery failure changes neither the verdict nor whether the result is trusted', async () => {
   const output = await regressionRun('Regressed.');
-  const render = (surface: Surface, exitCode = 2) =>
+  const render = (exitCode: number, delivery: string | null) =>
     summarize({
       output,
       exitCode,
       artifact: 'observed-bundle',
       page: null,
-      surface,
-    }).markdown;
+      surface: { kind: 'job' },
+      delivery,
+    });
+  const failed = render(
+    2,
+    "Not posted: check title and comment. Add checks: write to the workflow's permissions.",
+  );
 
-  expect(render({ kind: 'job', checkPosted: true })).toContain(
-    jobOutcome(true),
+  expect({ trusted: failed.trusted, title: failed.title }).toEqual({
+    trusted: render(2, null).trusted,
+    title: render(2, null).title,
+  });
+  expect(failed.markdown.trimEnd()).toMatch(
+    /Add checks: write to the workflow's permissions\.$/,
   );
-  expect(render({ kind: 'job', checkPosted: false })).toContain(
-    'The job fails',
-  );
-  expect(render({ kind: 'comment' })).not.toMatch(/The job|this job/);
-  expect(render({ kind: 'job', checkPosted: false }, 0)).toContain(
-    'The job fails',
-  );
+  expect(render(0, 'Posted: check title.').trusted).toBe(false);
 });
 
 test('a result is posted to a pull request only when its candidate is that head or its merge commit', () => {

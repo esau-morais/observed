@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: read
+  checks: write
+  pull-requests: write
 
 concurrency:
   group: observe-${{ github.event.pull_request.number }}

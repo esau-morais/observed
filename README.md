@@ -557,11 +557,12 @@ workflow by hand with `published` set to the version, such as `0.1.0` or
 ## Run on pull requests
 
 Observed's GitHub Action captures your saved journey on the pull request's base
-and candidate, compares the two, and links a report page from the job summary.
-Your repository needs a committed `observed.json` following the
-[project contract](src/project.ts). The job needs an `ubuntu-24.04` or
-`macos-15` runner. On Linux it installs packages with passwordless `sudo`, which
-GitHub-hosted runners provide.
+and candidate, compares the two, and puts the result on the pull request. It
+captures both revisions in the same job, so the first pull request already gets
+a comparison, with no baseline run on the default branch. Your repository needs
+a committed `observed.json` following the [project contract](src/project.ts).
+The job needs an `ubuntu-24.04` or `macos-15` runner. On Linux it installs
+packages with passwordless `sudo`, which GitHub-hosted runners provide.
 
 Add `.github/workflows/observed.yml`:
 
@@ -573,9 +574,16 @@ on:
 
 permissions:
   contents: read
+  checks: write         # title this job's check with the result
+  pull-requests: write  # post and update one comment
+
+concurrency:
+  group: observed-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  observe:
+  observed:
+    name: Observed
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -589,13 +597,27 @@ jobs:
           base: ${{ github.event.pull_request.base.sha }}
 ```
 
-- The full commit SHA pins the action to the `v0.2.0-alpha.0` prerelease,
-  which this README describes; the comment names the tag. The action installs
-  `@observed-software/cli` with the same version. To upgrade, use the commit of
-  a newer [release](https://github.com/esau-morais/observed/releases) tag, or
-  let Dependabot's `github-actions` updates propose it. `@v0` follows the latest
-  0.x release, currently 0.1.0, which lacks inputs such as `job-outcome` and
+| Permission | Why |
+| --- | --- |
+| `contents: read` | Check out the base and the candidate |
+| `checks: write` | Put the result in the title of this job's own check |
+| `pull-requests: write` | Post one comment and edit it on later runs |
+
+The action uses the workflow's own token by default, through its `github-token`
+input. It needs no GitHub App, secret or variable. The `concurrency` block
+cancels an older run, so it can't overwrite the comment with a stale result.
+
+- The full commit SHA pins the action to the `v0.2.0-alpha.0` prerelease; the
+  comment names the tag. The action installs `@observed-software/cli` with the
+  same version. That prerelease posts to the pull request only through a
+  [GitHub App](#use-your-own-github-app-optional). Posting with the workflow
+  token and titling the job's check arrive in the next release. To upgrade, use
+  the commit of a newer [release](https://github.com/esau-morais/observed/releases)
+  tag, or let Dependabot's `github-actions` updates propose it. `@v0` follows
+  the latest 0.x release, currently 0.1.0, which lacks inputs such as
   `slack-images`. A tag can move, so prefer the SHA.
+- `uses:` works for any public repository. The GitHub Marketplace listing is
+  only for finding the action.
 - Set `project` to the directory holding `observed.json`, relative to the
   repository root.
 - `base` is the base commit recorded in the pull request event. It stays fixed
@@ -625,6 +647,8 @@ step before Observed's, with the version your project uses:
 
 Pin those actions by full commit SHA, as here.
 
+The job's result is Observed's verdict:
+
 | Exit code | Conclusion | Job |
 | --- | --- | --- |
 | 0 | No regression, not checked, or preview | Passes |
@@ -632,9 +656,8 @@ Pin those actions by full commit SHA, as here.
 | 2 | A named check failed or regressed | Fails |
 
 The job also fails when `observed.json` is rejected before capture, when Observed
-writes no readable result, or when the result disagrees with the exit code.
-With the [GitHub App](#post-results-to-the-pull-request), a failing result fails
-the Observed check instead, and the job passes.
+writes no readable result, or when the result disagrees with the exit code. A
+failure to post never changes the job's result.
 
 The job summary opens with the verdict and the values that decided it, such as
 `Median LCP 52 ms → 452 ms, at most 250 ms`, then one line per failing or
@@ -658,10 +681,11 @@ local server, download it and run `observed view <download>/run/report`.
 GitHub keeps both artifacts for 7 days by default.
 
 Optional inputs: `candidate` (default `HEAD`), `timeout` per capture in
-milliseconds (default `120000`), `artifact-name`, and `retention-days`. The
-report page is named after `artifact-name` with `.html` added. Give each call a
-distinct `artifact-name` when a workflow runs the action more than once, such
-as in a matrix.
+milliseconds (default `120000`), `artifact-name`, `retention-days`, and
+`github-token` (default `${{ github.token }}`). The report page is named after
+`artifact-name` with `.html` added. Give each call a distinct `artifact-name`
+when a workflow runs the action more than once, such as in a matrix.
+`job-outcome` is deprecated: it has no effect and prints a warning.
 
 A journey that signs in reads its secret from an environment variable, as in
 `{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
@@ -676,47 +700,67 @@ A journey that signs in reads its secret from an environment variable, as in
 ```
 
 GitHub gives no Actions secrets to pull requests from forks or Dependabot. The
-variable is then empty, both captures fail, and the job reports unavailable. Use
-a disposable account: the report page and bundle hold screenshots of every page
-the journey reaches. Literal fill values, such as a username, appear in both as
-written, so never write a password as a literal value.
+variable is then empty, both captures fail, and the job reports unavailable.
+Dependabot runs read Dependabot secrets, so store the secret there as well to
+check Dependabot pull requests. Use a disposable account: the report page and
+bundle hold screenshots of every page the journey reaches. Literal fill values,
+such as a username, appear in both as written, so never write a password as a
+literal value.
 
 ### Post results to the pull request
 
-With a GitHub App, the action also posts each result as an **Observed** check run
-and as a pull request comment. The check shows in the merge box with the
-deciding values in its title, and its Details link opens the report page. The
-comment has the same verdict, checks, prompt and report link as the job summary,
-and later runs edit it instead of adding new ones. A workflow
-that calls the action more than once, such as a matrix, gets one check and one
-comment per `artifact-name`. The App needs
-no server or webhook: the job creates a short-lived token after capture finishes.
+Each run titles the job's own check with the verdict line, so the pull request's
+checks list shows it next to the job, as in
+`Observed / Observed: Regression: Median LCP 52 ms → 452 ms, at most 250 ms`. A
+preview or a run with no named checks passes, and its title says so. The action
+also posts one comment with the same verdict, checks, prompt and report link as
+the job summary, and later runs edit it instead of adding new ones. A workflow
+that calls the action more than once, such as a matrix, gets one titled job and
+one comment per `artifact-name`. The action posts only when the captured
+candidate is the pull request's head commit or the merge commit GitHub checks
+out for it. To run Observed again, re-run the job.
+
+Every run ends with one line in the job summary and in the check saying what was
+posted and what was not, such as `Posted: check title and comment.` Each item
+that was not posted also gets an annotation on the run, with the reason:
+
+| Situation | What you see |
+| --- | --- |
+| Pull request from this repository, with the permissions above | The titled check, the comment and the report link |
+| No `checks: write` | The verdict in the job's result and the comment. A warning names `checks: write`, quoting the permission GitHub asked for |
+| No `pull-requests: write` | The titled check. A warning names `pull-requests: write` |
+| Pull request from a fork | The verdict in the job's result. GitHub gives fork pull requests a read-only token, so there is no title and no comment, and a notice says so |
+| Dependabot pull request | The same as a pull request from this repository: `permissions:` raises Dependabot's read-only token. Without it, a notice says the token is read-only |
+
+### Require the Observed check
+
+In the repository's **Settings > Rules > Rulesets**, add a branch ruleset with
+**Require status checks to pass** and the check **Observed**, the job's name.
+The job reports on every pull request, including forks and Dependabot, so the
+required check always arrives. A matrix names each job after its values, such as
+`Observed (ubuntu-24.04)`; require each one.
+
+A job cannot be neutral, so a preview or a project without named checks passes
+the required check. Add a check to `observed.json` before you require it.
+
+### Use your own GitHub App (optional)
+
+A GitHub App changes only who signs the comment: your App instead of
+`github-actions`. The job's check keeps carrying the verdict, because only the
+App that created a check run can update it. The App needs no server or
+webhook: the job creates a short-lived token after capture finishes.
 
 1. Create a GitHub App under your account or organization's Developer settings.
-   Give it **Checks: Read and write** and **Pull requests: Read and write**.
-   Leave the webhook inactive and subscribe to no events.
+   Give it **Pull requests: Read and write**. Leave the webhook inactive and
+   subscribe to no events.
 2. Install it on the repositories that run Observed, and only those.
 3. Generate a private key. Store it as the repository secret
    `OBSERVED_APP_PRIVATE_KEY` and the App's Client ID as the repository variable
    `OBSERVED_APP_CLIENT_ID`, then delete the downloaded key file.
-4. Pass both to the action and grant nothing extra to the workflow token. The
-   `concurrency` block cancels an older run, so it can't overwrite the comment
-   with a stale result:
+4. Pass both to the action. Keep `checks: write` in the workflow's
+   `permissions:` for the check title:
 
 ```yaml
-concurrency:
-  group: observed-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
-jobs:
-  observe:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
         with:
           project: .
@@ -725,32 +769,23 @@ jobs:
           github-app-private-key: ${{ secrets.OBSERVED_APP_PRIVATE_KEY }}
 ```
 
-The action posts only when the captured candidate is the pull request's head
-commit or the merge commit GitHub checks out for it. To run Observed again, re-run the
-workflow. The **Re-run** button on the Observed check itself does nothing,
-because the App has no server to receive it.
+When one of the two inputs is empty, such as a secret that was never stored, the
+run shows an error naming the empty input and posts the comment with the
+workflow token. When the App token can't be created, the run shows GitHub's
+error and does the same. Pull requests from forks and Dependabot get no Actions
+secrets, so their comment is signed by `github-actions`, if the token can post
+at all. Releases up to v0.2.0-alpha.0 posted a separate **Observed** check
+through the App; the job's own check replaces it.
 
-| Result | Check conclusion |
-| --- | --- |
-| Regression, check failed, unavailable, or no readable result | Failure |
-| No regression | Success |
-| Not checked or preview | Neutral |
+### Turn it off
 
-GitHub treats a neutral check as passing when you make it required, so a project
-without a named check can merge on a neutral Observed check. Add a check to
-`observed.json` before you require it.
+1. Remove **Observed** from the branch ruleset first. Otherwise every open pull
+   request waits for a check that no longer runs.
+2. Delete `.github/workflows/observed.yml` and `observed.json`.
+3. If you set up your own App, uninstall and delete it, and delete the
+   `OBSERVED_APP_PRIVATE_KEY` secret and `OBSERVED_APP_CLIENT_ID` variable.
 
-Once the App has posted the check, the job passes and the Observed check carries
-the verdict, so the merge box shows one failing row, not two. Make the
-**Observed** check required in branch protection, never the workflow job. When
-the App is missing or posting the check fails, the job fails on Observed's result
-as the exit code table says. To fail the job as well, set `job-outcome: result`.
-
-Pull requests from forks and Dependabot receive no secrets, so the App posts
-nothing for them. The job summary still shows the result and says why nothing
-was posted, and the job passes or fails on Observed's result as before. A
-required Observed check stays missing on those pull requests until a maintainer
-runs the workflow with credentials.
+Earlier comments and check titles stay on old pull requests.
 
 ### Post failures to Slack
 
@@ -777,9 +812,9 @@ around the change. It is off by default, and a token with `files:write` alone
 does not turn it on. Without the scope, the message goes out without the image
 and the job summary says why.
 
-Editing the earlier message needs the GitHub App above, because its comment
-remembers which Slack message belongs to the pull request. Without the App,
-every failing run posts a new message.
+Editing the earlier message needs the pull request comment, because it
+remembers which Slack message belongs to the pull request. Without
+`pull-requests: write`, every failing run posts a new message.
 
 1. Create a Slack app at https://api.slack.com/apps with **From a manifest** and
    give its bot only the `chat:write` scope:

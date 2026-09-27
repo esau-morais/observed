@@ -3,19 +3,20 @@ import type { Comparison } from '../src/comparison-model';
 
 type Kind = Comparison['conclusion']['kind'];
 
-// Required checks accept success, neutral and skipped alike. Missing or
-// unreadable evidence therefore fails; a run that checked nothing is neutral.
-export const checkConclusions = {
+// The job's conclusion is the verdict, and a job can only pass or fail.
+// Missing or unreadable evidence therefore fails; a run that checked nothing
+// passes, and its check title says so.
+export const jobConclusions = {
   regression: 'failure',
   'check-failed': 'failure',
   unavailable: 'failure',
   'no-regression': 'success',
-  'not-checked': 'neutral',
-  preview: 'neutral',
-} satisfies Record<Kind, 'success' | 'failure' | 'neutral'>;
+  'not-checked': 'success',
+  preview: 'success',
+} satisfies Record<Kind, 'success' | 'failure'>;
 
-export function checkConclusion(kind: Kind | null) {
-  return kind === null ? 'failure' : checkConclusions[kind];
+export function jobConclusion(kind: Kind | null) {
+  return kind === null ? 'failure' : jobConclusions[kind];
 }
 
 export function checkName(artifact: string): string {
@@ -36,16 +37,37 @@ function limit(markdown: string): string {
 
 export class DeliveryError extends Schema.TaggedError<DeliveryError>()(
   'DeliveryError',
-  { message: Schema.String },
+  {
+    message: Schema.String,
+    status: Schema.NullOr(Schema.Number),
+    // GitHub's X-Accepted-GitHub-Permissions header on a refused write.
+    permissions: Schema.NullOr(Schema.String),
+  },
 ) {}
+
+// "issues=write; pull_requests=write" becomes the permissions: lines a
+// workflow would grant, "issues: write or pull-requests: write".
+export function permissionLines(header: string): string | null {
+  const lines = header
+    .split(';')
+    .map((entry) => entry.trim().split('='))
+    .flatMap(([scope, level]) =>
+      scope !== undefined &&
+      level !== undefined &&
+      /^[a-z_]+$/.test(scope) &&
+      /^(read|write)$/.test(level)
+        ? [`${scope.replaceAll('_', '-')}: ${level}`]
+        : [],
+    );
+
+  return lines.length === 0 ? null : lines.join(' or ');
+}
 
 export type Target = {
   api: string;
   repository: string;
   token: string;
-  headSha: string;
   pullRequest: number | null;
-  detailsUrl: string;
   botLogin: string;
 };
 
@@ -85,12 +107,18 @@ async function request<A>(
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    throw new DeliveryError({ message: `${route} did not answer` });
+    throw new DeliveryError({
+      message: `${route} did not answer`,
+      status: null,
+      permissions: null,
+    });
   }
 
   if (!response.ok) {
     throw new DeliveryError({
       message: `${route} answered HTTP ${String(response.status)}`,
+      status: response.status,
+      permissions: response.headers.get('x-accepted-github-permissions'),
     });
   }
 
@@ -99,34 +127,29 @@ async function request<A>(
   );
 
   if (Option.isNone(decoded)) {
-    throw new DeliveryError({ message: `${route} answered unexpectedly` });
+    throw new DeliveryError({
+      message: `${route} answered unexpectedly`,
+      status: response.status,
+      permissions: null,
+    });
   }
 
   return decoded.value;
 }
 
-export async function postCheckRun(
+// Titles the job's own check run, so the verdict stays with the workflow run
+// that produced it. The job's conclusion stays the runner's to set.
+export async function titleJobCheck(
   target: Target,
-  check: {
-    name: string;
-    title: string;
-    markdown: string;
-    conclusion: 'success' | 'failure' | 'neutral';
-    startedAt: string | null;
-  },
+  checkRunId: string,
+  check: { title: string; markdown: string },
 ): Promise<string | null> {
   const run = await request(
     target,
     created,
-    'POST',
-    `/repos/${target.repository}/check-runs`,
+    'PATCH',
+    `/repos/${target.repository}/check-runs/${encodeURIComponent(checkRunId)}`,
     {
-      name: check.name,
-      head_sha: target.headSha,
-      status: 'completed',
-      ...(check.startedAt === null ? {} : { started_at: check.startedAt }),
-      conclusion: check.conclusion,
-      details_url: target.detailsUrl,
       output: {
         title: check.title.slice(0, 255),
         summary: limit(check.markdown),
