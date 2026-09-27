@@ -195,22 +195,16 @@ Test reports stay local under gitignored `evidence/`.
 To release, set the new `version` in `package.json`, add a `CHANGELOG.md`
 entry headed `## <version> (<date>)`, merge, and push the tag `v<version>`.
 [.github/workflows/release.yml](.github/workflows/release.yml) installs the
-packed CLI on Linux x64 and macOS on Intel and Apple silicon, and runs the Request lab example
-through it. It then publishes that tarball to npm with provenance, creates the
-GitHub release, and moves the major tag, such as `v0`, to the release commit.
+packed CLI on Linux x64 and on macOS with Intel and Apple silicon, and runs the
+Request lab example through it. It then publishes that tarball to npm with
+provenance, creates the GitHub release, and moves the major tag, such as `v0`,
+to the release commit.
 The tagged commit must be on `main`.
 
-npm can only trust a workflow for a package that already exists, so the first
-release needs a token once:
-
-1. Create a granular npm access token that can publish to the
-   `@observed-software` organization, with a short expiry. Store it as the
-   `NPM_TOKEN` secret of the `npm` environment in this repository.
-2. Push the tag and let the release workflow publish.
-3. On npmjs.com, open the package's settings, add this repository's
-   `release.yml` workflow and the `npm` environment as a trusted publisher,
-   and select "Require two-factor authentication and disallow tokens".
-4. Delete the npm token and the `NPM_TOKEN` secret.
+npm accepts the package only from that workflow in the `npm` environment,
+through [trusted publishing](https://docs.npmjs.com/trusted-publishers/), and
+refuses tokens. To check a published version on the same runners, run the
+workflow by hand with `published` set to the version, such as `0.1.0`.
 
 ## Run on pull requests
 

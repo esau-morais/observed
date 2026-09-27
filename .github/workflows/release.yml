@@ -14,6 +14,10 @@ on:
       - vite.config.ts
       - .github/workflows/release.yml
   workflow_dispatch:
+    inputs:
+      published:
+        description: Version on npm to install and check instead of packing this commit, such as 0.1.0
+        default: ''
 
 permissions:
   contents: read
@@ -71,16 +75,28 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bun run build
+        if: inputs.published == ''
       - name: Pack
+        if: inputs.published == ''
         run: |
           mkdir -p "$RUNNER_TEMP/package"
           bun pm pack --destination "$RUNNER_TEMP/package" --quiet
-      - name: Install the tarball outside the checkout and run the example
+      - name: Install the package outside the checkout and run the example
+        env:
+          PUBLISHED: ${{ inputs.published }}
         run: |
-          set -- "$RUNNER_TEMP"/package/*.tgz
-          test -f "$1"
+          if [ -n "$PUBLISHED" ]; then
+            [[ "$PUBLISHED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::published must be a version such as 0.1.0"; exit 1; }
+            git fetch --quiet --depth=1 origin tag "v$PUBLISHED"
+            set -- "$(jq -r .name package.json)@$PUBLISHED"
+            commit="$(git rev-parse "v$PUBLISHED^{commit}")"
+          else
+            set -- "$RUNNER_TEMP"/package/*.tgz
+            test -f "$1"
+            commit="$(git rev-parse HEAD)"
+          fi
           bun scripts/verify-package.ts "$1" "$RUNNER_TEMP/verify" \
-            --commit "$(git rev-parse HEAD)" \
+            --commit "$commit" \
             ${{ runner.os == 'Linux' && '--with-deps' || '' }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -120,11 +136,9 @@ jobs:
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       # Trusted publishing (OIDC) needs npm 11.5.1 or later and attaches
-      # provenance. NPM_TOKEN exists only to create the package the first time.
+      # provenance. The package refuses tokens.
       # Skips a version npm already has, so a failed later step can be re-run.
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -- "$RUNNER_TEMP"/verified/package/*.tgz
           test -f "$1"
