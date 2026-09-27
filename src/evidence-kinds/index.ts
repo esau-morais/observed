@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { text as nonEmpty } from '../capture/model';
 import { accessibility } from './accessibility';
+import { api } from './api';
 import { performance } from './performance';
 import { react } from './react';
 import { browserErrors } from './browser-errors';
@@ -14,6 +15,7 @@ export const evidenceKinds = {
   performance,
   timeline,
   'browser-errors': browserErrors,
+  api,
 } as const;
 
 const kinds = Object.values(evidenceKinds);

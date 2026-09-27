@@ -2,6 +2,7 @@ import type { Journey, Side } from '../comparison-model';
 import { isEvidenceKind, type EvidenceKind } from '../evidence-kinds';
 import type { MarkdownSection, SectionInput, SectionSide } from './define';
 import { accessibility } from './accessibility';
+import { api } from './api';
 import { performance } from './performance';
 import { react } from './react';
 import { browserErrors } from './browser-errors';
@@ -17,6 +18,7 @@ export const markdownSections: {
   performance,
   timeline,
   'browser-errors': browserErrors,
+  api,
 };
 
 function sectionSide<K extends EvidenceKind>(

@@ -39,6 +39,12 @@ export type CheckKind<D extends CheckIdentity, K extends EvidenceKind> = {
     definitions: readonly D[],
   ) => readonly CollectorConfig[];
   readonly expectation: (definition: D) => string;
+  // Configuration problems found against the journey's collectors, reported
+  // when the project loads.
+  readonly validate?: (
+    definition: D,
+    collectors: readonly CollectorConfig[],
+  ) => readonly string[];
   // Set when the rule compares the candidate with the base. In a comparison
   // whose base is unusable, missing declared evidence, or not comparable, the
   // candidate is then unknown and `evaluate` is not called for it; a preview

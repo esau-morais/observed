@@ -238,6 +238,97 @@ DevTools trace run and one profiler run per side after the samples. Recording
 slows the page, so these files never count as samples. A trace is several
 megabytes.
 
+### Call the app's API
+
+An `api` collector sends HTTP requests to the app without a browser. Observed
+sends them with Bun's `fetch` after the journey's browser steps and screenshot,
+to the copy of the app it started for that capture, so each capture starts
+from the app's own seed data. The journey still opens `path` in the browser;
+for an API-only journey, point it at a cheap page such as a health check and
+leave `steps` empty.
+
+```json
+{
+  "name": "Record a reading over the API",
+  "path": "/healthz",
+  "ready": [],
+  "steps": [],
+  "collectors": [
+    {
+      "kind": "api",
+      "operations": [
+        { "id": "list-stations", "method": "GET", "path": "/api/stations" },
+        {
+          "id": "add-reading",
+          "method": "POST",
+          "path": "/api/stations/north/readings",
+          "headers": [
+            { "name": "Authorization", "env": "STATIONS_TOKEN", "prefix": "Bearer " }
+          ],
+          "body": { "json": { "value": 13.4 } }
+        },
+        { "id": "read-station", "method": "GET", "path": "/api/stations/north" }
+      ]
+    }
+  ]
+}
+```
+
+Operations run once each, in order, up to 20. `path` is relative to the app's
+origin and may carry a query string. A header is `{ "name", "value" }` or
+`{ "name", "env", "prefix" }`. An `env` header reads that environment variable
+when the capture runs and sends `prefix` before it; a missing or empty
+variable fails the capture. Its value never reaches `observed.json`, the
+recipe or the evidence, and Observed removes it from recorded responses that
+echo it, as it does for fill values. A literal credential header, such as
+`Authorization` with a `value`, makes Observed reject `observed.json`. `body`
+is `{ "json": ... }`, sent as `application/json`, or `{ "text": "..." }`, sent
+as plain text unless a `Content-Type` header says otherwise.
+
+Observed records each response's status, headers and body. It parses the body
+when `Content-Type` names JSON and keeps other bodies as text. It stops reading
+after 1 MiB and records only the size. It doesn't follow redirects, so a 302 is
+recorded as a 302. A request that gets no response within 10 seconds is
+recorded with the reason. Credential-named fields in bodies and `Set-Cookie`
+values read `[REDACTED]` in the evidence.
+
+Three checks read these records. Each names an operation by `id`, and
+Observed rejects a check that names one the collector doesn't list.
+
+- `api-status` passes when the operation answered `status`.
+- `api-schema` passes when the JSON body matches `schema`, a JSON Schema
+  subset: `type` (including `integer` and lists of types), `properties`,
+  `required`, `additionalProperties` as a boolean, `items`, `enum`, `const`
+  and `anyOf`, plus `title`, `description` and `$schema`, which are ignored.
+  Any other keyword makes Observed reject `observed.json` rather than skip it.
+  For a project that already describes the response with Effect Schema, paste
+  the `schema` field of `Schema.toJsonSchemaDocument(schema)`; a schema that
+  needs `$ref` doesn't fit the subset. A body that isn't JSON fails.
+- `api-readback` confirms a side effect. It passes when `operation` answered
+  2xx and the later `readback` operation's JSON body holds `expected` at
+  `pointer`, a JSON Pointer such as `/readings/4`. A refused write fails even
+  when the value was already there.
+
+```json
+{
+  "kind": "api-readback",
+  "id": "reading-stored",
+  "name": "The new reading is stored",
+  "scope": "GET /api/stations/north after the POST.",
+  "operation": "add-reading",
+  "readback": "read-station",
+  "pointer": "/readings/4",
+  "expected": 13.4
+}
+```
+
+A request that got no response, or a body too large to record, leaves its
+checks unknown. When comparing, the report lists each operation's status on
+both sides and the JSON fields added, removed or retyped, such as
+`Removed stations[].average (number)`. Those are observations. Only a check
+that passed on base and failed on the candidate is a regression. Fields inside
+an array that is empty on either side aren't compared.
+
 <details>
 <summary>Agent capture and import interfaces</summary>
 

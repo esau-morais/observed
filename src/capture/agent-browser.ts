@@ -22,7 +22,9 @@ export { BrowserFailure };
 
 export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
 
-export type PendingEvidence =
+type EvidenceProducer = { readonly name: string; readonly version: string };
+
+export type PendingEvidence = (
   | {
       kind: string;
       schemaVersion: number;
@@ -35,7 +37,8 @@ export type PendingEvidence =
       schemaVersion: number;
       status: 'unavailable';
       reason: string;
-    };
+    }
+) & { producer?: EvidenceProducer };
 
 const response = <S extends Schema.Constraint>(data: S) =>
   Schema.Struct({
@@ -367,8 +370,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     kind: EvidenceKind,
     collected: Effect.Effect<unknown, CollectorError, CollectorServices>,
     conditions: EvidenceConditions,
+    producer?: EvidenceProducer,
   ) {
     const definition = evidenceKinds[kind];
+    const source = producer === undefined ? {} : { producer };
     const filename = `evidence/${definition.kind}.json`;
     const value = yield* collected.pipe(
       Effect.map((result) => ({ kind: 'recorded', result }) as const),
@@ -383,6 +388,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         schemaVersion: definition.schemaVersion,
         status: 'unavailable',
         reason: redactText(value.reason, concealed),
+        ...source,
       });
 
       return;
@@ -400,6 +406,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         schemaVersion: definition.schemaVersion,
         status: 'unavailable',
         reason: `The collector's value does not match ${definition.kind} schema version ${definition.schemaVersion}`,
+        ...source,
       });
 
       return;
@@ -424,6 +431,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       status: 'recorded',
       path: filename,
       conditions,
+      ...source,
     });
   });
 
@@ -621,6 +629,22 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   for (const [index, config] of recipe.collectors.entries()) {
     const collector = collectorFor(config);
 
+    if (collector.phase === 'no-browser') {
+      yield* collectEvidence(
+        config.kind,
+        collector.collect(config, {
+          directory: options.directory,
+          url: options.url,
+          recipe,
+          concealed,
+          addArtifact: options.addArtifact,
+          environment: options.fillValues,
+        }),
+        collector.conditions?.(config) ?? {},
+        collector.producer,
+      );
+    }
+
     if (collector.phase === 'separate-session') {
       const session = `${options.session}-${index}`;
       const run = sessionCommand(session, collector.launchArguments ?? []);
@@ -649,6 +673,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
             launchArguments: (collector.launchArguments ?? []).join(' '),
             ...collector.conditions?.(config),
           },
+          collector.producer,
         );
       }).pipe(Effect.scoped);
     }

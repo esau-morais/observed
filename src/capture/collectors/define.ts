@@ -56,6 +56,16 @@ export type CollectorContext = {
   readonly steps: StepLog;
 };
 
+// Without a browser: the collector talks to the application directly.
+export type DirectContext = Pick<
+  CollectorContext,
+  'directory' | 'url' | 'recipe' | 'concealed' | 'addArtifact'
+> & {
+  // Resolved environment references, by variable name. Every value is also
+  // in `concealed`.
+  readonly environment: ReadonlyMap<string, string>;
+};
+
 export type SeparateSessionContext = CollectorContext & {
   readonly runSteps: (
     steps: readonly Step[],
@@ -76,6 +86,8 @@ export type EvidenceConditions = Readonly<
 
 type Common<K extends EvidenceKind> = {
   readonly conditions?: (config: CollectorConfig<K>) => EvidenceConditions;
+  // Recorded as the evidence producer instead of agent-browser.
+  readonly producer?: { readonly name: string; readonly version: string };
 };
 
 export type Collector<K extends EvidenceKind> =
@@ -97,4 +109,10 @@ export type Collector<K extends EvidenceKind> =
       readonly phase: 'separate-session';
       readonly launchArguments?: readonly string[];
       readonly collect: Collect<K, SeparateSessionContext>;
+    })
+  // Runs at the same point as a separate session, in list order with those
+  // collectors, but opens no browser.
+  | (Common<K> & {
+      readonly phase: 'no-browser';
+      readonly collect: Collect<K, DirectContext>;
     });

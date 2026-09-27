@@ -314,8 +314,10 @@ export const captureApplication = Effect.fn('captureApplication')(
 
           const evidence = pendingEvidence.flatMap(
             (entry): Capture['evidence'] => {
+              const recordedBy = entry.producer ?? producer;
+
               if (entry.status === 'unavailable') {
-                return [{ ...entry, producer }];
+                return [{ ...entry, producer: recordedBy }];
               }
 
               const record = records.find((item) => item.path === entry.path);
@@ -327,10 +329,10 @@ export const captureApplication = Effect.fn('captureApplication')(
                       schemaVersion: entry.schemaVersion,
                       status: 'unavailable',
                       reason: `Evidence file ${entry.path} was not written`,
-                      producer,
+                      producer: recordedBy,
                     },
                   ]
-                : [{ ...entry, sha256: record.sha256, producer }];
+                : [{ ...entry, sha256: record.sha256, producer: recordedBy }];
             },
           );
 

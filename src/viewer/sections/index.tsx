@@ -2,6 +2,7 @@ import type { EvidenceKind } from '../../evidence-kinds';
 import type { JourneySection } from '../../report-sections';
 import type { ViewerSection } from './define';
 import { AccessibilitySection } from './accessibility';
+import { ApiSection } from './api';
 import { PerformanceSection } from './performance';
 import { ReactSection } from './react';
 import { BrowserErrorsSection } from './browser-errors';
@@ -17,6 +18,7 @@ export const viewerSections: {
   performance: PerformanceSection,
   timeline: TimelineSection,
   'browser-errors': BrowserErrorsSection,
+  api: ApiSection,
 };
 
 export function EvidenceSection<K extends EvidenceKind>({
