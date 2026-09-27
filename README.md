@@ -709,10 +709,10 @@ literal value.
 
 ### Post results to the pull request
 
-Each run titles the job's own check with the verdict line, so the pull request's
-checks list shows it next to the job, as in
-`Observed / Observed: Regression: Median LCP 52 ms → 452 ms, at most 250 ms`. A
-preview or a run with no named checks passes, and its title says so. The action
+Each run titles the job's own check with the verdict line, and the merge box
+shows it next to the job, as in
+`Observed / Observed (pull_request) Failing after 45s — Regression: Median LCP 52 ms → 452 ms, at most 250 ms`.
+A preview or a run with no named checks passes, and its title says so. The action
 also posts one comment with the same verdict, checks, prompt and report link as
 the job summary, and later runs edit it instead of adding new ones. A workflow
 that calls the action more than once, such as a matrix, gets one titled job and
