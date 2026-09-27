@@ -152,13 +152,14 @@ jobs:
           fi
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" \
             || { echo "::error::npm $(npm --version) is older than 11.5.1"; exit 1; }
-          prerelease="${version#*-}"
-          if [ "$prerelease" = "$version" ]; then
-            tag=latest
-          else
-            tag="${prerelease%%.*}"
+          # A stable version gets no --tag, so npm still refuses to move
+          # `latest` below a higher release.
+          tag=()
+          if [[ "$version" == *-* ]]; then
+            prerelease="${version#*-}"
+            tag=(--tag "${prerelease%%.*}")
           fi
-          npm publish "$1" --access public --provenance --tag "$tag"
+          npm publish "$1" --access public --provenance "${tag[@]}"
       # A prerelease leaves the major tag on the last release.
       - name: Create the GitHub release and move the major tag
         env:
