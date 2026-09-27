@@ -279,6 +279,9 @@ export const recordSourceMaps = Effect.fn('recordSourceMaps')(
       yield* fs.makeDirectory(path.join(options.directory, 'source-maps'), {
         recursive: true,
       });
+      // A map holds source text, like the source snapshot, so only concealed
+      // values are removed. redactText's traffic rules took 114 seconds on a
+      // 1 MB map and changed nothing.
       yield* fs.writeFileString(
         path.join(options.directory, filename),
         conceal(found.text, options.concealed),
