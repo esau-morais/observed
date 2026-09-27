@@ -13,7 +13,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { beforeAll, expect, test } from 'vitest';
 import { captureSchema } from '../../src/capture/model';
-import { comparisonSchema } from '../../src/comparison-model';
+import { comparisonSchema, type Side } from '../../src/comparison-model';
+import type { EvidenceKind, EvidenceView } from '../../src/evidence-kinds';
 import { json, sha256 } from '../../src/encoding';
 import { projectSchema } from '../../src/project';
 import { redactText } from '../../src/redact';
@@ -657,6 +658,147 @@ test('previews a non-React app without checks and then applies its own POST expe
   );
   expect(missing.result.journeys[0].base.unresolved.join(' ')).toContain(
     'Needed a single revision',
+  );
+});
+
+function evidenceOf<K extends EvidenceKind>(
+  side: Side,
+  kind: K,
+): EvidenceView<K> | undefined {
+  return 'evidence' in side
+    ? side.evidence.find((item): item is EvidenceView<K> => item.kind === kind)
+    : undefined;
+}
+
+test('a seeded thrown error fails browser-errors as a regression and matches the producer output', async () => {
+  const project = await copyProject('shop', 'shop-errors');
+  const config = await readJson(
+    path.join(project, 'observed.json'),
+    projectSchema,
+  );
+  const app = await readFile(path.join(project, 'app.ts'), 'utf8');
+  const seeded = app.replace(
+    '      status.textContent = `Order received for ${input.value}`;\n',
+    `      status.textContent = \`Order received for \${input.value}\`;
+      console.error('Receipt printer offline');
+      setTimeout(() => {
+        throw new Error('Receipt total is undefined');
+      });
+`,
+  );
+  expect(seeded).not.toBe(app);
+  await writeFile(path.join(project, 'app.ts'), seeded);
+  await writeFile(
+    path.join(project, 'observed.json'),
+    json({
+      ...config,
+      capture: {
+        ...config.capture,
+        check: {
+          kind: 'browser-errors',
+          id: 'no-browser-errors',
+          name: 'No browser errors',
+          scope: 'Placing one order',
+        },
+      },
+    }),
+  );
+
+  const compared = await observe(
+    project,
+    'shop-errors-compared',
+    ['--base', 'HEAD'],
+    2,
+  );
+
+  expect(compared.result.conclusion.kind).toBe('regression');
+  expect(compared.result.journeys[0].base.checks[0]).toMatchObject({
+    outcome: 'passed',
+    actual: 0,
+  });
+  expect(compared.result.journeys[0].candidate.checks[0]).toMatchObject({
+    outcome: 'failed',
+    actual: 2,
+  });
+
+  const rawSchema = Schema.Struct({
+    data: Schema.Struct({
+      errors: Schema.optionalKey(
+        Schema.Array(Schema.Struct({ text: Schema.String })),
+      ),
+      messages: Schema.optionalKey(
+        Schema.Array(
+          Schema.Struct({ type: Schema.String, text: Schema.String }),
+        ),
+      ),
+    }),
+  });
+
+  for (const side of ['base', 'candidate'] as const) {
+    const directory = path.join(compared.directory, 'journey-1', side);
+    const page = await readJson(path.join(directory, 'errors.json'), rawSchema);
+    const messages = await readJson(
+      path.join(directory, 'console.json'),
+      rawSchema,
+    );
+    const record = evidenceOf(
+      compared.result.journeys[0][side],
+      'browser-errors',
+    );
+    const timeline = evidenceOf(compared.result.journeys[0][side], 'timeline');
+
+    expect(record?.status).toBe('recorded');
+    expect(timeline?.status).toBe('recorded');
+
+    if (record?.status !== 'recorded' || timeline?.status !== 'recorded') {
+      return;
+    }
+
+    expect(
+      record.value.entries
+        .filter((entry) => entry.source === 'page')
+        .map((entry) => entry.text),
+    ).toEqual((page.data.errors ?? []).map((error) => error.text));
+    expect(
+      record.value.entries
+        .filter((entry) => entry.source === 'console')
+        .map((entry) => entry.text),
+    ).toEqual(
+      (messages.data.messages ?? [])
+        .filter((message) => message.type === 'error')
+        .map((message) => message.text),
+    );
+    expect(
+      timeline.value.steps.map((step) => [
+        step.action,
+        step.target,
+        step.outcome,
+      ]),
+    ).toEqual([
+      ['fill', '#name', 'completed'],
+      ['click-role', 'button "Place order"', 'completed'],
+      ['wait-text', '"Order received"', 'completed'],
+      ['network-idle', null, 'completed'],
+    ]);
+    expect(timeline.value.finalState).toMatchObject({ kind: 'recorded' });
+  }
+
+  const candidate = evidenceOf(
+    compared.result.journeys[0].candidate,
+    'browser-errors',
+  );
+  expect(
+    candidate?.status === 'recorded'
+      ? candidate.value.entries.map((entry) => entry.text.split('\n')[0])
+      : [],
+  ).toEqual(
+    expect.arrayContaining([
+      'Error: Receipt total is undefined',
+      'Receipt printer offline',
+    ]),
+  );
+  expect(compared.result.conclusion.text).toContain(
+    'that the base did not have',
   );
 });
 

@@ -4,6 +4,7 @@ import type { CheckKind } from './define';
 import { accessibility } from './accessibility';
 import { performance } from './performance';
 import { reactRenders } from './react-renders';
+import { browserErrors } from './browser-errors';
 import { requestCount } from './request-count';
 import { text } from './text';
 
@@ -13,6 +14,7 @@ export const checkSchema = Schema.Union([
   reactRenders.definition,
   accessibility.definition,
   performance.definition,
+  browserErrors.definition,
 ]);
 
 export type CheckDefinition = typeof checkSchema.Type;
@@ -30,4 +32,5 @@ export const checkKinds: CheckKinds = {
   'react-renders': reactRenders,
   accessibility,
   performance,
+  'browser-errors': browserErrors,
 };

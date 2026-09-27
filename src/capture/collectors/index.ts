@@ -3,13 +3,17 @@ import type { Collector } from './define';
 import { accessibility } from './accessibility';
 import { performance } from './performance';
 import { react } from './react';
+import { browserErrors } from './browser-errors';
 import { text } from './text';
+import { timeline } from './timeline';
 
 export const collectors: { readonly [K in EvidenceKind]: Collector<K> } = {
   text,
   react,
   accessibility,
   performance,
+  timeline,
+  'browser-errors': browserErrors,
 };
 
 export function collectorFor<K extends EvidenceKind>(

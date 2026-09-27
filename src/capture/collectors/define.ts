@@ -6,6 +6,7 @@ import type {
 } from '../../evidence-kinds';
 import type { processOutput } from '../process';
 import type { Recipe, Step } from '../recipe';
+import type { StepLog } from '../step-log';
 
 type Command = ReturnType<typeof processOutput>;
 
@@ -52,6 +53,7 @@ export type CollectorContext = {
     filename: string,
     description: string,
   ) => void;
+  readonly steps: StepLog;
 };
 
 export type SeparateSessionContext = CollectorContext & {
@@ -82,6 +84,8 @@ export type Collector<K extends EvidenceKind> =
   // navigate or send requests: anything it causes counts in the journey.
   | (Common<K> & {
       readonly phase: 'journey';
+      // Also runs, best effort, when a step fails, with the steps that ran.
+      readonly onFailure?: boolean;
       readonly collect: Collect<K, CollectorContext>;
     })
   // Runs after the journey's screenshot and request recording, with the app

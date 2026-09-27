@@ -4,7 +4,9 @@ import type { ViewerSection } from './define';
 import { AccessibilitySection } from './accessibility';
 import { PerformanceSection } from './performance';
 import { ReactSection } from './react';
+import { BrowserErrorsSection } from './browser-errors';
 import { TextSection } from './text';
+import { TimelineSection } from './timeline';
 
 export const viewerSections: {
   readonly [K in EvidenceKind]: ViewerSection<K>;
@@ -13,6 +15,8 @@ export const viewerSections: {
   react: ReactSection,
   accessibility: AccessibilitySection,
   performance: PerformanceSection,
+  timeline: TimelineSection,
+  'browser-errors': BrowserErrorsSection,
 };
 
 export function EvidenceSection<K extends EvidenceKind>({

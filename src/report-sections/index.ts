@@ -4,11 +4,20 @@ import type { MarkdownSection, SectionInput, SectionSide } from './define';
 import { accessibility } from './accessibility';
 import { performance } from './performance';
 import { react } from './react';
+import { browserErrors } from './browser-errors';
 import { text } from './text';
+import { timeline } from './timeline';
 
 export const markdownSections: {
   readonly [K in EvidenceKind]: MarkdownSection<K>;
-} = { text, react, accessibility, performance };
+} = {
+  text,
+  react,
+  accessibility,
+  performance,
+  timeline,
+  'browser-errors': browserErrors,
+};
 
 function sectionSide<K extends EvidenceKind>(
   side: Side,

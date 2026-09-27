@@ -3,13 +3,17 @@ import { text as nonEmpty } from '../capture/model';
 import { accessibility } from './accessibility';
 import { performance } from './performance';
 import { react } from './react';
+import { browserErrors } from './browser-errors';
 import { text } from './text';
+import { timeline } from './timeline';
 
 export const evidenceKinds = {
   text,
   react,
   accessibility,
   performance,
+  timeline,
+  'browser-errors': browserErrors,
 } as const;
 
 const kinds = Object.values(evidenceKinds);
@@ -31,6 +35,8 @@ export type CollectorConfig<K extends EvidenceKind = EvidenceKind> = Extract<
 // Collected on every journey whether or not a check reads them.
 export const defaultCollectors: readonly CollectorConfig[] = [
   { kind: 'accessibility' },
+  { kind: 'timeline' },
+  { kind: 'browser-errors' },
 ];
 
 export const unavailableEvidenceSchema = Schema.Struct({

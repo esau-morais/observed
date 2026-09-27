@@ -9,6 +9,7 @@ import shop from '../examples/shop/observed.json';
 import { loadProject } from '../src/project';
 import { checkSchema } from '../src/checks';
 import { json } from '../src/encoding';
+import { defaultCollectors } from '../src/evidence-kinds';
 
 test.each(['/orders?category=books', '/orders#submitted'])(
   'rejects unsupported request matching syntax %s',
@@ -175,13 +176,13 @@ test('keeps a single check working and adds the collectors checks need', async (
     {
       id: 'Browse',
       checks: [requestLab.capture.check.id],
-      collectors: [{ kind: 'accessibility' }],
+      collectors: defaultCollectors,
     },
     {
       id: 'Order',
       checks: [requestLab.capture.check.id, 'status', 'total'],
       collectors: [
-        { kind: 'accessibility' },
+        ...defaultCollectors,
         { kind: 'text', selectors: ['#status', '#total'] },
       ],
     },
