@@ -31,6 +31,11 @@ To use a pinned version without installing it, start each command with
 `bunx @observed-software/cli@<version>` instead of `observed`, as in
 `bunx @observed-software/cli@0.1.0 setup`.
 
+Prereleases are published under an npm dist-tag named after their identifier.
+Install the current alpha with
+`bun add --global @observed-software/cli@alpha`. A plain install stays on the
+latest release.
+
 ## Use it on your app
 
 Ask your coding agent to write `observed.json` in your app's directory by
@@ -526,13 +531,16 @@ entry headed `## <version> (<date>)`, merge, and push the tag `v<version>`.
 packed CLI on Linux x64 and on macOS with Intel and Apple silicon, and runs the
 Request lab example through it. It then publishes that tarball to npm with
 provenance, creates the GitHub release, and moves the major tag, such as `v0`,
-to the release commit.
+to the release commit. A prerelease version such as `0.2.0-alpha.0` is published
+under the dist-tag `alpha` and marked as a prerelease on GitHub, and the major
+tag stays on the last release.
 The tagged commit must be on `main`.
 
 npm accepts the package only from that workflow in the `npm` environment,
 through [trusted publishing](https://docs.npmjs.com/trusted-publishers/), and
 refuses tokens. To check a published version on the same runners, run the
-workflow by hand with `published` set to the version, such as `0.1.0`.
+workflow by hand with `published` set to the version, such as `0.1.0` or
+`0.2.0-alpha.0`.
 
 ## Run on pull requests
 

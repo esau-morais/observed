@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*']
   pull_request:
     paths:
       - package.json
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       published:
-        description: Version on npm to install and check instead of packing this commit, such as 0.1.0
+        description: Version on npm to install and check instead of packing this commit, such as 0.1.0 or 0.2.0-alpha.0
         default: ''
 
 permissions:
@@ -45,6 +45,7 @@ jobs:
         run: |
           version="$(jq -r .version package.json)"
           test "$TAG" = "v$version" || { echo "::error::Tag $TAG does not match package.json version $version"; exit 1; }
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] || { echo "::error::$version is not X.Y.Z or X.Y.Z-<identifier>.N"; exit 1; }
           awk -v heading="## $version (" 'index($0, heading) == 1 {found=1} END {exit !found}' CHANGELOG.md || { echo "::error::CHANGELOG.md has no entry for $version"; exit 1; }
       - name: Check the tagged commit is on main
         env:
@@ -86,7 +87,7 @@ jobs:
           PUBLISHED: ${{ inputs.published }}
         run: |
           if [ -n "$PUBLISHED" ]; then
-            [[ "$PUBLISHED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::published must be a version such as 0.1.0"; exit 1; }
+            [[ "$PUBLISHED" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]] || { echo "::error::published must be a version such as 0.1.0 or 0.2.0-alpha.0"; exit 1; }
             git fetch --quiet --depth=1 origin tag "v$PUBLISHED"
             set -- "$(jq -r .name package.json)@$PUBLISHED"
             commit="$(git rev-parse "v$PUBLISHED^{commit}")"
@@ -138,6 +139,8 @@ jobs:
       # Trusted publishing (OIDC) needs npm 11.5.1 or later and attaches
       # provenance. The package refuses tokens.
       # Skips a version npm already has, so a failed later step can be re-run.
+      # A prerelease such as 0.2.0-alpha.0 goes to the dist-tag named by its
+      # identifier, so `latest` keeps the last release.
       - name: Publish to npm
         run: |
           set -- "$RUNNER_TEMP"/verified/package/*.tgz
@@ -149,7 +152,14 @@ jobs:
           fi
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" \
             || { echo "::error::npm $(npm --version) is older than 11.5.1"; exit 1; }
-          npm publish "$1" --access public --provenance
+          prerelease="${version#*-}"
+          if [ "$prerelease" = "$version" ]; then
+            tag=latest
+          else
+            tag="${prerelease%%.*}"
+          fi
+          npm publish "$1" --access public --provenance --tag "$tag"
+      # A prerelease leaves the major tag on the last release.
       - name: Create the GitHub release and move the major tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,9 +168,15 @@ jobs:
           version="${TAG#v}"
           awk -v heading="## $version (" 'index($0, heading) == 1 {on=1; next} /^## / && on {exit} on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           test -s "$RUNNER_TEMP/notes.md"
+          prerelease=()
+          [[ "$version" == *-* ]] && prerelease=(--prerelease)
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" "$RUNNER_TEMP"/verified/package/*.tgz \
-              --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+              --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}"
+          fi
+          if [ "${#prerelease[@]}" -gt 0 ]; then
+            echo "Released prerelease $TAG; the major tag stays"
+            exit 0
           fi
           major="${TAG%%.*}"
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$major" >/dev/null 2>&1; then
