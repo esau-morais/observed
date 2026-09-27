@@ -93,7 +93,23 @@ The [project schema](src/project.ts) and
   record the page load itself, start `steps` with a `navigate` step. A request
   during `steps` to an origin outside the app and `allowedOrigins`, such as a
   font CDN or analytics, fails the capture.
-- `capture.check` is optional and holds one `request-count` or `text` check. A
+- `capture.checks` is an optional list of named checks, each with a unique
+  `id`, a `name` and a `scope` that says what it covers. `capture.check` still
+  accepts a single check; set one or the other. The run concludes regression if
+  any check regressed, check failed if any check failed, and unavailable if a
+  check is unknown, naming it. Otherwise it concludes no regression. Reports
+  and GitHub and Slack messages say how many checks passed, as in "3 of 4
+  checks passed", and list each check with its scope.
+- To capture more than one journey, replace `capture` with `journeys`, a list
+  of one to three objects shaped like `capture`, each with a unique `name`.
+  Each journey is its own capture of each revision, with its own setup and app
+  start, so three journeys take about three times as long. `--timeout` still
+  applies to each capture; raise the job's time limit to match. `observed
+  capture` takes the first journey, or the one named by `--journey`.
+- A journey's optional `collectors` list records more evidence after `steps`,
+  with or without a check reading it. Checks add the collectors they need. The
+  [evidence kinds](src/evidence-kinds/index.ts) list what can be collected.
+- A check is `request-count` or `text`. A
   `request-count` check counts the requests during `steps` whose method, path
   and status match. It counts requests to the app's origin, or to the check's
   `origin` when set. It compares the path without the query string or
