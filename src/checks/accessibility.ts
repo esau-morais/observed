@@ -28,4 +28,8 @@ export const accessibility = defineCheck({
       base: base?.evidence.accessibility ?? null,
       candidate: candidate.evidence.accessibility,
     }),
+  regression: ({ candidate }) =>
+    candidate.evaluation.outcome === 'failed'
+      ? { detail: candidate.evaluation.detail }
+      : null,
 });

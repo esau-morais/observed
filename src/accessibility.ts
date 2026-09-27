@@ -367,9 +367,9 @@ export function evaluateAccessibility({
 
   return {
     base: {
-      outcome: 'not-run',
-      actual: null,
-      detail: `Base sets which violations count as new. ${recorded(base)}`,
+      outcome: 'passed',
+      actual: 0,
+      detail: `Base is the baseline, so it has no new violations by definition. ${recorded(base)}`,
     },
     candidate: candidateEvaluation(base, candidate, threshold),
   };
