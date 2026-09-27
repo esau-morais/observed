@@ -11,7 +11,7 @@ function sectionSide<K extends EvidenceKind>(
   side: Side,
   kind: K,
 ): SectionSide<K> | null {
-  if (side.execution !== 'complete') {
+  if (side.execution === 'unavailable') {
     return null;
   }
 
@@ -29,13 +29,14 @@ export type JourneySection<K extends EvidenceKind = EvidenceKind> = {
   readonly input: SectionInput<K>;
 };
 
-// One section per supported evidence kind the candidate recorded.
+// One section per supported evidence kind the candidate recorded, including
+// a failed capture's evidence.
 export function journeySections(
   journey: Journey,
 ): JourneySection<EvidenceKind>[] {
   const candidate = journey.candidate;
 
-  if (candidate.execution !== 'complete') {
+  if (candidate.execution === 'unavailable') {
     return [];
   }
 

@@ -15,6 +15,7 @@ import { checkKinds, type CheckDefinition, type CheckKinds } from './checks';
 import type { CheckInput, Evaluation } from './checks/define';
 import {
   evidenceKinds,
+  evidenceViewSchema,
   isEvidenceKind,
   type EvidenceKind,
   type EvidenceView,
@@ -116,7 +117,9 @@ type CompleteSide = Extract<Side, { execution: 'complete' }>;
 function checkInput(
   side: CompleteSide,
   kinds: readonly EvidenceKind[],
-): { kind: 'ready'; input: CheckInput<EvidenceKind> } | { kind: 'missing'; detail: string } {
+):
+  | { kind: 'ready'; input: CheckInput<EvidenceKind> }
+  | { kind: 'missing'; detail: string } {
   const evidence: Partial<Record<EvidenceKind, unknown>> = {};
 
   for (const kind of kinds) {
@@ -255,31 +258,87 @@ function unavailable(reason: string): Side {
   };
 }
 
+const isEvidenceView = Schema.is(evidenceViewSchema);
+
 const parseEvidenceFile = Effect.fnUntraced(function* (
   kind: EvidenceKind,
   input: string,
 ) {
   const definition = evidenceKinds[kind];
-
-  return yield* Schema.decodeUnknownEffect(
+  const malformed: EvidenceView = {
+    kind,
+    status: 'unavailable',
+    reason: `Evidence file is malformed or not schema version ${definition.schemaVersion}`,
+  };
+  const file = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(definition.file),
     { onExcessProperty: 'error' },
   )(input).pipe(
-    Effect.map(
-      (file): EvidenceView => ({
-        kind,
-        status: 'recorded',
-        value: file.value,
-      }),
-    ),
-    Effect.catchTag('SchemaError', () =>
-      Effect.succeed<EvidenceView>({
-        kind,
-        status: 'unavailable',
-        reason: `Evidence file is malformed or not schema version ${definition.schemaVersion}`,
-      }),
-    ),
+    Effect.map((decoded) => decoded.value),
+    Effect.catchTag('SchemaError', () => Effect.succeed(undefined)),
   );
+  const view = { kind, status: 'recorded', value: file };
+
+  return file !== undefined && isEvidenceView(view) ? view : malformed;
+});
+
+const evidenceViews = Effect.fnUntraced(function* (
+  capture: Capture,
+  recipe: Recipe,
+  byPath: ReadonlyMap<string, ArtifactResult>,
+) {
+  const views: EvidenceView[] = [];
+
+  for (const entry of capture.evidence) {
+    if (!isEvidenceKind(entry.kind)) {
+      views.push({
+        kind: entry.kind,
+        status: 'unavailable',
+        reason: 'This Observed does not support this evidence kind',
+      });
+    } else if (entry.status === 'unavailable') {
+      views.push({
+        kind: entry.kind,
+        status: 'unavailable',
+        reason: entry.reason,
+      });
+    } else if (
+      entry.schemaVersion !== evidenceKinds[entry.kind].schemaVersion
+    ) {
+      views.push({
+        kind: entry.kind,
+        status: 'unavailable',
+        reason: `Evidence schema version ${entry.schemaVersion} is unsupported`,
+      });
+    } else {
+      const artifact = byPath.get(entry.path);
+      const read =
+        artifact?.kind === 'available' && artifact.hash === entry.sha256
+          ? yield* readVerifiedText(artifact)
+          : ({
+              kind: 'unavailable',
+              reason: 'Evidence artifact is missing or changed',
+            } as const);
+
+      views.push(
+        read.kind === 'available'
+          ? yield* parseEvidenceFile(entry.kind, read.text)
+          : { kind: entry.kind, status: 'unavailable', reason: read.reason },
+      );
+    }
+  }
+
+  for (const collector of recipe.collectors) {
+    if (!views.some((view) => view.kind === collector.kind)) {
+      views.push({
+        kind: collector.kind,
+        status: 'unavailable',
+        reason: 'The capture recorded no evidence of this kind',
+      });
+    }
+  }
+
+  return views;
 });
 
 const isRelativePath = Schema.is(relativePathSchema);
@@ -630,6 +689,8 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
         execution: 'capture-failed',
         capture: captured,
         recipe,
+        evidence:
+          recipe === null ? [] : yield* evidenceViews(capture, recipe, byPath),
         screenshot,
         checks,
         ...evidence,
@@ -642,56 +703,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       recipe !== null &&
       screenshot !== null
     ) {
-      const views: EvidenceView[] = [];
-
-      for (const entry of capture.evidence) {
-        if (!isEvidenceKind(entry.kind)) {
-          views.push({
-            kind: entry.kind,
-            status: 'unavailable',
-            reason: 'This Observed does not support this evidence kind',
-          });
-        } else if (entry.status === 'unavailable') {
-          views.push({
-            kind: entry.kind,
-            status: 'unavailable',
-            reason: entry.reason,
-          });
-        } else if (
-          entry.schemaVersion !== evidenceKinds[entry.kind].schemaVersion
-        ) {
-          views.push({
-            kind: entry.kind,
-            status: 'unavailable',
-            reason: `Evidence schema version ${entry.schemaVersion} is unsupported`,
-          });
-        } else {
-          const artifact = byPath.get(entry.path);
-          const read =
-            artifact?.kind === 'available' && artifact.hash === entry.sha256
-              ? yield* readVerifiedText(artifact)
-              : ({
-                  kind: 'unavailable',
-                  reason: 'Evidence artifact is missing or changed',
-                } as const);
-
-          views.push(
-            read.kind === 'available'
-              ? yield* parseEvidenceFile(entry.kind, read.text)
-              : { kind: entry.kind, status: 'unavailable', reason: read.reason },
-          );
-        }
-      }
-
-      for (const collector of recipe.collectors) {
-        if (!views.some((view) => view.kind === collector.kind)) {
-          views.push({
-            kind: collector.kind,
-            status: 'unavailable',
-            reason: 'The capture recorded no evidence of this kind',
-          });
-        }
-      }
+      const views = yield* evidenceViews(capture, recipe, byPath);
 
       const side = {
         execution: 'complete',
@@ -1091,7 +1103,8 @@ export function compareJourney({
 }): Journey {
   const base = sideAt(inspectedBase, evaluatedAt);
   const candidate = sideAt(inspectedCandidate, evaluatedAt);
-  const reasons = mode === 'comparison' ? comparisonProblems(base, candidate) : [];
+  const reasons =
+    mode === 'comparison' ? comparisonProblems(base, candidate) : [];
   const [firstReason, ...otherReasons] = reasons;
 
   let comparison: Journey['comparison'];
@@ -1110,7 +1123,10 @@ export function compareJourney({
   ) {
     comparison = {
       kind: 'unavailable',
-      reasons: [firstReason ?? 'Comparable captures unavailable', ...otherReasons],
+      reasons: [
+        firstReason ?? 'Comparable captures unavailable',
+        ...otherReasons,
+      ],
     };
   } else {
     comparison = {
@@ -1368,7 +1384,13 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
     pixels.visual.kind === 'changed'
       ? { ...pixels.visual, diff: { ...pixels.visual.diff, path: diffPath } }
       : pixels.visual;
-  const journey = compareJourney({ base, candidate, evaluatedAt, visual, mode });
+  const journey = compareJourney({
+    base,
+    candidate,
+    evaluatedAt,
+    visual,
+    mode,
+  });
 
   return {
     journey,

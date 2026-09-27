@@ -1,4 +1,4 @@
-import { DateTime, Effect, FileSystem, Schema } from 'effect';
+import { DateTime, Effect, FileSystem, Option, Schema } from 'effect';
 import path from 'node:path';
 import { agentBrowserPath } from '../installation';
 import {
@@ -404,7 +404,18 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       kind: definition.kind,
       schemaVersion: definition.schemaVersion,
       value: value.result,
-    });
+    }).pipe(Effect.option);
+
+    if (Option.isNone(file)) {
+      options.addEvidence({
+        kind: definition.kind,
+        schemaVersion: definition.schemaVersion,
+        status: 'unavailable',
+        reason: `The collector's value does not match ${definition.kind} schema version ${definition.schemaVersion}`,
+      });
+
+      return;
+    }
 
     yield* fs.makeDirectory(path.join(options.directory, 'evidence'), {
       recursive: true,
@@ -416,7 +427,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     );
     yield* fs.writeFileString(
       path.join(options.directory, filename),
-      redactText(json(file), concealed),
+      redactText(json(file.value), concealed),
       { flag: 'wx' },
     );
     options.addEvidence({

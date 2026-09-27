@@ -85,6 +85,7 @@ export const sideSchema = Schema.Union([
     execution: Schema.Literal('capture-failed'),
     capture: capturedManifest,
     recipe: Schema.NullOr(recipeSchema),
+    evidence: Schema.Array(evidenceViewSchema),
     screenshot: Schema.NullOr(text),
     checks: Schema.Array(unknownCheck).check(uniqueCheckIds),
     ...sideEvidence,
