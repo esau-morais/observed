@@ -7,7 +7,12 @@ import type {
 } from '../src/comparison-model';
 import { decodePng, encodeRgbPng } from '../src/png';
 import { shortSource } from '../src/provenance-text';
-import { conclusionTones, headline, type Tone } from '../src/result-text';
+import {
+  conclusionTones,
+  executionLabels,
+  headline,
+  type Tone,
+} from '../src/result-text';
 
 export class SlackError extends Schema.TaggedError<SlackError>()('SlackError', {
   message: Schema.String,
@@ -55,14 +60,19 @@ export type SlackLinks = {
   pullRequest: string | null;
   pullRequestLabel: string;
   report: string | null;
-  check: string | null;
   run: string | null;
 };
 
 function revision(side: Side | undefined): string {
-  return side?.capture === null || side?.capture === undefined
-    ? 'unavailable'
-    : `\`${slackText(shortSource(side.capture.manifest.source))}\``;
+  if (side?.capture === null || side?.capture === undefined) {
+    return 'unavailable';
+  }
+
+  const commit = `\`${slackText(shortSource(side.capture.manifest.source))}\``;
+
+  return side.execution === 'complete'
+    ? commit
+    : `${commit} (${executionLabels[side.execution].toLowerCase()})`;
 }
 
 // "N of M" names the checks that decided the verdict.
@@ -79,8 +89,11 @@ function checkCount(result: Comparison): string {
 
   switch (result.conclusion.kind) {
     case 'regression':
-    case 'check-failed':
-      return `${count(['regression', 'failed'])} of ${total} ${noun} failed`;
+    case 'check-failed': {
+      const unknown = count(['unknown', 'not-run']);
+
+      return `${count(['regression', 'failed'])} of ${total} ${noun} failed${unknown === 0 ? '' : `, ${unknown} unknown`}`;
+    }
     case 'unavailable':
       return `${count(['unknown', 'not-run'])} of ${total} ${noun} unknown`;
     case 'no-regression':
@@ -198,19 +211,25 @@ export function writeSlackState(state: SlackState): string {
   return `<!-- observed-slack:${state.channel}/${state.ts}/${state.failing ? 'failing' : 'passing'} -->`;
 }
 
-// Edits notify nobody, so only a newly failing result posts a new message.
+// Edits notify nobody, so only a newly failing result posts a new message,
+// and a failing message that turns into no regression also gets a reply in
+// its thread.
 export function slackAction(
   previous: SlackState | null,
   channel: string,
-  failing: boolean,
-): 'post' | 'update' | 'none' {
+  result: { failing: boolean; passed: boolean },
+): 'post' | 'update' | 'recover' | 'none' {
   const known = previous?.channel === channel ? previous : null;
 
-  if (failing && (known === null || !known.failing)) {
+  if (result.failing && (known === null || !known.failing)) {
     return 'post';
   }
 
-  return known === null ? 'none' : 'update';
+  if (known === null) {
+    return 'none';
+  }
+
+  return known.failing && result.passed ? 'recover' : 'update';
 }
 
 const answerSchema = Schema.Struct({
@@ -280,9 +299,12 @@ async function slackApi<A>(
     : Option.none();
 
   if (Option.isNone(decoded)) {
-    const error = /^[a-z_]+$/.test(answer.value.error ?? '')
-      ? (answer.value.error ?? '')
-      : 'unknown_error';
+    const reported = answer.value.error ?? '';
+    let error = 'unexpected_answer';
+
+    if (!answer.value.ok) {
+      error = /^[a-z_]+$/.test(reported) ? reported : 'unknown_error';
+    }
 
     throw new SlackError({
       message: `${method} answered ${error}`,
@@ -302,30 +324,23 @@ export function callSlack(
   return slackApi(method, token, { kind: 'json', value: body }, messageSchema);
 }
 
-// The crop covers every recorded changed region with a margin, from the diff
-// image whose hash the result recorded.
+// One region only: a box around distant regions could show most of the page.
 export function diffCrop(
   bytes: Uint8Array,
-  regions: readonly VisualRegion[],
+  region: VisualRegion,
 ): Uint8Array | null {
   const decoded = decodePng(bytes);
   const margin = 16;
 
-  if (decoded.kind !== 'decoded' || regions.length === 0) {
+  if (decoded.kind !== 'decoded') {
     return null;
   }
 
   const { width, height, rgba } = decoded.image;
-  const left = Math.max(0, Math.min(...regions.map((area) => area.x)) - margin);
-  const top = Math.max(0, Math.min(...regions.map((area) => area.y)) - margin);
-  const right = Math.min(
-    width,
-    Math.max(...regions.map((area) => area.x + area.width)) + margin,
-  );
-  const bottom = Math.min(
-    height,
-    Math.max(...regions.map((area) => area.y + area.height)) + margin,
-  );
+  const left = Math.max(0, region.x - margin);
+  const top = Math.max(0, region.y - margin);
+  const right = Math.min(width, region.x + region.width + margin);
+  const bottom = Math.min(height, region.y + region.height + margin);
   const cropWidth = right - left;
   const cropHeight = bottom - top;
   const rgb = new Uint8Array(cropWidth * cropHeight * 3);

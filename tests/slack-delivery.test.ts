@@ -13,12 +13,15 @@ import { slackSkipReason } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 
 const evaluatedAt = '2026-09-26T12:00:00.000Z';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 const links = {
   name: 'Observed',
   pullRequest: 'https://github.com/o/r/pull/7',
   pullRequestLabel: 'o/r#7',
   report: 'https://github.com/o/r/actions/runs/1/artifacts/2',
-  check: null,
   run: 'https://github.com/o/r/actions/runs/1',
 };
 
@@ -35,16 +38,21 @@ async function unavailable() {
   });
 }
 
-test('Slack notifies when a pull request starts failing and edits quietly otherwise', () => {
+test('Slack notifies when a pull request starts failing or recovers, and edits quietly otherwise', () => {
   const failing = { channel: 'C1', ts: '1.1', failing: true };
   const passing = { ...failing, failing: false };
+  const fails = { failing: true, passed: false };
+  const passes = { failing: false, passed: true };
+  const neutral = { failing: false, passed: false };
 
-  expect(slackAction(null, 'C1', true)).toBe('post');
-  expect(slackAction(null, 'C1', false)).toBe('none');
-  expect(slackAction(failing, 'C1', true)).toBe('update');
-  expect(slackAction(failing, 'C1', false)).toBe('update');
-  expect(slackAction(passing, 'C1', true)).toBe('post');
-  expect(slackAction(failing, 'C2', true)).toBe('post');
+  expect(slackAction(null, 'C1', fails)).toBe('post');
+  expect(slackAction(null, 'C1', passes)).toBe('none');
+  expect(slackAction(failing, 'C1', fails)).toBe('update');
+  expect(slackAction(failing, 'C1', passes)).toBe('recover');
+  expect(slackAction(failing, 'C1', neutral)).toBe('update');
+  expect(slackAction(passing, 'C1', passes)).toBe('update');
+  expect(slackAction(passing, 'C1', fails)).toBe('post');
+  expect(slackAction(failing, 'C2', fails)).toBe('post');
 });
 
 test('an unavailable or unreadable result never gets a passing icon in Slack', async () => {
@@ -188,27 +196,26 @@ test('a failing Slack message leads with the measured values and links out, with
   expect(text).not.toContain('Captured');
 });
 
-test('the Slack image is cut from the recorded changed regions with a margin, clamped to the screenshot', () => {
+test('the Slack image is one changed region with a margin, clamped to the screenshot', () => {
   const width = 100;
   const rgb = new Uint8Array(width * width * 3).map((_, index) => index % 251);
-  const crop = diffCrop(encodeRgbPng(width, width, rgb), [
-    { x: 40, y: 50, width: 10, height: 10, changedPixels: 100 },
-    { x: 90, y: 90, width: 10, height: 10, changedPixels: 100 },
-  ]);
+  const crop = diffCrop(encodeRgbPng(width, width, rgb), {
+    x: 90,
+    y: 5,
+    width: 10,
+    height: 10,
+    changedPixels: 100,
+  });
   const decoded = crop === null ? null : decodePng(crop);
 
   if (decoded?.kind !== 'decoded') {
     throw new Error('The crop is not a readable PNG');
   }
 
-  expect([decoded.image.width, decoded.image.height]).toEqual([76, 66]);
+  expect([decoded.image.width, decoded.image.height]).toEqual([26, 31]);
   expect(Array.from(decoded.image.rgba.subarray(0, 3))).toEqual(
-    Array.from(rgb.subarray((34 * width + 24) * 3, (34 * width + 24) * 3 + 3)),
+    Array.from(rgb.subarray(74 * 3, 74 * 3 + 3)),
   );
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 // Slack answers a token without the scope with ok: false and missing_scope,

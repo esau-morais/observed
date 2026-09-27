@@ -32,11 +32,14 @@ inputs:
     description: Private key of that GitHub App. Pass it from a repository secret.
     default: ''
   slack-bot-token:
-    description: Bot token of a Slack app with the chat:write scope. With slack-channel, failing results are posted to Slack. With the optional files:write scope, changed screenshots add the changed region as an image in the message's thread. Pass it from a repository secret.
+    description: Bot token of a Slack app with the chat:write scope. With slack-channel, failing results are posted to Slack. Pass it from a repository secret.
     default: ''
   slack-channel:
     description: ID of the Slack channel to post to, such as C0123456789. Invite the bot to it first.
     default: ''
+  slack-images:
+    description: 'true posts the largest changed screenshot region in the thread of a failing Slack message. The image shows page content, including text. Needs the files:write scope; without it the message is posted without the image.'
+    default: 'false'
   job-outcome:
     description: 'check: when the GitHub App posted the Observed check, the job passes and that check carries the result, so require the check rather than the job. result: the job also fails whenever the result fails or is unavailable.'
     default: check
@@ -178,6 +181,7 @@ runs:
         OBSERVED_PULL_REQUEST: ${{ github.event.pull_request.number }}
         OBSERVED_SLACK_BOT_TOKEN: ${{ inputs.slack-bot-token }}
         OBSERVED_SLACK_CHANNEL: ${{ inputs.slack-channel }}
+        OBSERVED_SLACK_IMAGES: ${{ inputs.slack-images }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: bun "$OBSERVED_SCRIPT" deliver "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 

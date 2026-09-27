@@ -765,12 +765,24 @@ function captureStart(result: Comparison): string | null {
   return first ?? null;
 }
 
-// The changed region of the first journey whose screenshots changed, cut from
-// the diff image only when its bytes still match the hash in the result.
+const imageNotes = {
+  uploaded: 'Slack: added the changed pixels to the thread',
+  'missing-scope': 'Slack: no image, because the Slack app lacks files:write',
+  mismatch:
+    'Slack: no image, because the diff image does not match its recorded hash',
+  none: null,
+} satisfies Record<string, string | null>;
+
+// The largest changed region of the first journey whose screenshots changed,
+// cut from the diff image only when its bytes still match the result's hash.
 async function changedPixels(run: {
   directory: string;
   result: Comparison;
-}): Promise<{ bytes: Uint8Array; altText: string } | null> {
+}): Promise<
+  | { kind: 'crop'; bytes: Uint8Array; altText: string }
+  | { kind: 'mismatch' }
+  | { kind: 'none' }
+> {
   for (const journey of run.result.journeys) {
     const visual =
       journey.comparison.kind === 'available'
@@ -779,21 +791,27 @@ async function changedPixels(run: {
 
     if (visual?.kind === 'changed') {
       const bytes = await readFile(path.join(run.directory, visual.diff.path));
-      const crop =
-        sha256(bytes) === visual.diff.sha256
-          ? diffCrop(bytes, visual.regions)
-          : null;
+      const [largest] = visual.regions;
 
-      return crop === null
-        ? null
-        : {
-            bytes: crop,
-            altText: `Changed pixels in ${visual.regionCount} ${visual.regionCount === 1 ? 'region' : 'regions'}, ${visual.changedPixels} pixels`,
-          };
+      if (sha256(bytes) !== visual.diff.sha256) {
+        return { kind: 'mismatch' };
+      }
+
+      const crop = diffCrop(bytes, largest);
+
+      if (crop === null) {
+        return { kind: 'none' };
+      }
+
+      return {
+        kind: 'crop',
+        bytes: crop,
+        altText: `Changed pixels: the largest of ${visual.regionCount} ${visual.regionCount === 1 ? 'region' : 'regions'}, ${largest.width} by ${largest.height} pixels`,
+      };
     }
   }
 
-  return null;
+  return { kind: 'none' };
 }
 
 function link(label: string, url: string | null): string | null {
@@ -972,6 +990,7 @@ if (import.meta.main) {
     const github = target.token !== '';
     const slackToken = environment('OBSERVED_SLACK_BOT_TOKEN');
     const slackChannel = environment('OBSERVED_SLACK_CHANNEL');
+    const slackImages = environment('OBSERVED_SLACK_IMAGES') === 'true';
     const notes: string[] = [];
     const attempt = async <A>(
       label: string,
@@ -1039,48 +1058,47 @@ if (import.meta.main) {
       notes.push(slackSkip);
     } else if (slackToken !== '') {
       const failing = checkConclusion(summary.kind) === 'failure';
-      const action = slackAction(slackState, slackChannel, failing);
-      const message = slackMessage(
-        summary.trusted && Option.isSome(decoded) ? decoded.value.result : null,
-        {
-          name,
-          pullRequest:
-            target.pullRequest === null || repository === null
-              ? null
-              : `${repository}/pull/${String(target.pullRequest)}`,
-          pullRequestLabel:
-            target.pullRequest === null
-              ? target.repository
-              : `${target.repository}#${String(target.pullRequest)}`,
-          report: Schema.is(httpsUrlSchema)(page) ? page : null,
-          check: checkUrl,
-          run: runUrl,
-        },
-      );
+      const trusted =
+        summary.trusted && Option.isSome(decoded) ? decoded.value : null;
+      const action = slackAction(slackState, slackChannel, {
+        failing,
+        passed: trusted?.result.conclusion.kind === 'no-regression',
+      });
+      const message = slackMessage(trusted?.result ?? null, {
+        name,
+        pullRequest:
+          target.pullRequest === null || repository === null
+            ? null
+            : `${repository}/pull/${String(target.pullRequest)}`,
+        pullRequestLabel:
+          target.pullRequest === null
+            ? target.repository
+            : `${target.repository}#${String(target.pullRequest)}`,
+        report: Schema.is(httpsUrlSchema)(page) ? page : null,
+        run: runUrl,
+      });
+      const post = () =>
+        callSlack('chat.postMessage', slackToken, {
+          channel: slackChannel,
+          ...message,
+          unfurl_links: false,
+          unfurl_media: false,
+        });
 
       if (action === 'none') {
         notes.push('Slack: nothing sent for a result that is not failing');
       } else {
+        const earlier = slackState;
         const sent = await attempt('Slack message', () =>
-          action === 'post' || slackState === null
-            ? callSlack('chat.postMessage', slackToken, {
-                channel: slackChannel,
-                ...message,
-                unfurl_links: false,
-                unfurl_media: false,
-              })
+          action === 'post' || earlier === null
+            ? post()
             : callSlack('chat.update', slackToken, {
-                channel: slackState.channel,
-                ts: slackState.ts,
+                channel: earlier.channel,
+                ts: earlier.ts,
                 ...message,
               }).catch((error: unknown) => {
                 if (error instanceof SlackError && error.gone && failing) {
-                  return callSlack('chat.postMessage', slackToken, {
-                    channel: slackChannel,
-                    ...message,
-                    unfurl_links: false,
-                    unfurl_media: false,
-                  });
+                  return post();
                 }
 
                 throw error;
@@ -1088,30 +1106,21 @@ if (import.meta.main) {
         );
 
         if (sent !== null) {
-          const previous = slackState;
+          const posted = earlier === null || sent.ts !== earlier.ts;
 
           slackState = { channel: sent.channel, ts: sent.ts, failing };
           notes.push(
-            action === 'post'
+            posted
               ? 'Slack: posted a message'
               : 'Slack: updated the earlier message',
           );
 
-          if (
-            action === 'update' &&
-            previous?.failing === true &&
-            !failing &&
-            previous.ts === sent.ts
-          ) {
+          if (action === 'recover' && !posted) {
             const replied = await attempt('Slack recovery reply', () =>
               callSlack('chat.postMessage', slackToken, {
                 channel: sent.channel,
                 thread_ts: sent.ts,
-                ...slackRecovery(
-                  summary.trusted && Option.isSome(decoded)
-                    ? decoded.value.result
-                    : null,
-                ),
+                ...slackRecovery(trusted?.result ?? null),
               }),
             );
 
@@ -1120,29 +1129,24 @@ if (import.meta.main) {
             }
           }
 
-          if (action === 'post' && Option.isSome(decoded)) {
-            const run = decoded.value;
+          if (posted && trusted !== null && slackImages) {
             const uploaded = await attempt('Slack image', async () => {
-              const image = await changedPixels(run);
+              const image = await changedPixels(trusted);
 
-              return image === null
-                ? 'none'
-                : uploadSlackImage(slackToken, {
+              return image.kind === 'crop'
+                ? uploadSlackImage(slackToken, {
                     channel: sent.channel,
                     threadTs: sent.ts,
                     filename: 'observed-changed-pixels.png',
                     title: 'Changed pixels',
                     altText: image.altText,
                     bytes: image.bytes,
-                  });
+                  })
+                : image.kind;
             });
 
-            if (uploaded === 'uploaded') {
-              notes.push('Slack: added the changed pixels to the thread');
-            } else if (uploaded === 'missing-scope') {
-              notes.push(
-                'Slack: no image, because the Slack app lacks files:write',
-              );
+            if (uploaded !== null) {
+              notes.push(...extra(imageNotes[uploaded]));
             }
           }
         }

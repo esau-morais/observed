@@ -749,11 +749,12 @@ messages or page text, because a channel can include people who can't read the
 repository. A workflow that runs the action more than once gets one message per
 `artifact-name`.
 
-If you also give the bot the optional `files:write` scope, a failing message
-whose screenshots changed gets the changed region of the pixel diff as an image
-in its thread. That image shows the rendered page around the change, including
-any text there, so leave the scope out when the channel should not see page
-content. Without the scope, the message goes out without the image.
+Set `slack-images: true` and give the bot the `files:write` scope to post the
+largest changed screenshot region in the thread of a failing message. It is the
+only Slack content that can show the page itself: the image includes any text
+around the change. It is off by default, and a token with `files:write` alone
+does not turn it on. Without the scope, the message goes out without the image
+and the job summary says why.
 
 Editing the earlier message needs the GitHub App above, because its comment
 remembers which Slack message belongs to the pull request. Without the App,
