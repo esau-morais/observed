@@ -1,11 +1,13 @@
 import type { CollectorConfig, EvidenceKind } from '../../evidence-kinds';
 import type { Collector } from './define';
+import { accessibility } from './accessibility';
 import { react } from './react';
 import { text } from './text';
 
 export const collectors: { readonly [K in EvidenceKind]: Collector<K> } = {
   text,
   react,
+  accessibility,
 };
 
 export function collectorFor<K extends EvidenceKind>(

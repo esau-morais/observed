@@ -172,11 +172,18 @@ test('keeps a single check working and adds the collectors checks need', async (
         collectors: recipe.collectors,
       })),
   ).toEqual([
-    { id: 'Browse', checks: [requestLab.capture.check.id], collectors: [] },
+    {
+      id: 'Browse',
+      checks: [requestLab.capture.check.id],
+      collectors: [{ kind: 'accessibility' }],
+    },
     {
       id: 'Order',
       checks: [requestLab.capture.check.id, 'status', 'total'],
-      collectors: [{ kind: 'text', selectors: ['#status', '#total'] }],
+      collectors: [
+        { kind: 'accessibility' },
+        { kind: 'text', selectors: ['#status', '#total'] },
+      ],
     },
   ]);
 });

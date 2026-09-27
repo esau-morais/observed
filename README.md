@@ -137,6 +137,23 @@ The [project schema](src/project.ts) and
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,
   such as the table rows, then check the value.
+- Every capture records automated accessibility findings for the page after
+  `steps`. agent-browser runs axe-core, and Observed reads each failing
+  element's role, name and states from the accessibility tree. An
+  `accessibility` check, such as `{ "kind": "accessibility", "id":
+  "no-new-a11y-violations", "name": "No new accessibility violations",
+  "scope": "Shelf page after one click", "impact": "serious" }`, fails when
+  the candidate has violations at or above `impact` that base doesn't have.
+  `impact` is `minor`, `moderate`, `serious` or `critical`, and defaults to
+  `serious`. agent-browser reports impact per rule, so every element of a rule at
+  that impact counts. Violations already on base don't fail the check, and a
+  preview has no base, so the check doesn't run there. Only the same selector
+  with the same markup confirms that an element was already failing on base.
+  When an element matches only by selector or only by markup, the check is
+  unknown rather than passed. It's also unknown when findings are missing on
+  either side, or when a rule has more than the 10 elements agent-browser
+  lists per rule and its count didn't grow. Automated rules catch only some
+  accessibility problems. A passing check doesn't mean the page is accessible.
 - Sign in with a disposable account from committed seed data. `setup` doesn't
   receive fill variables, so commit the account with its password hash and pass
   the password through the fill variable. Observed can't complete a second

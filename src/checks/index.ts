@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import type { EvidenceKind } from '../evidence-kinds';
 import type { CheckKind } from './define';
+import { accessibility } from './accessibility';
 import { reactRenders } from './react-renders';
 import { requestCount } from './request-count';
 import { text } from './text';
@@ -9,6 +10,7 @@ export const checkSchema = Schema.Union([
   requestCount.definition,
   text.definition,
   reactRenders.definition,
+  accessibility.definition,
 ]);
 
 export type CheckDefinition = typeof checkSchema.Type;
@@ -24,4 +26,5 @@ export const checkKinds: CheckKinds = {
   'request-count': requestCount,
   text,
   'react-renders': reactRenders,
+  accessibility,
 };

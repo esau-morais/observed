@@ -1,12 +1,17 @@
 import type { EvidenceKind } from '../../evidence-kinds';
 import type { JourneySection } from '../../report-sections';
 import type { ViewerSection } from './define';
+import { AccessibilitySection } from './accessibility';
 import { ReactSection } from './react';
 import { TextSection } from './text';
 
 export const viewerSections: {
   readonly [K in EvidenceKind]: ViewerSection<K>;
-} = { text: TextSection, react: ReactSection };
+} = {
+  text: TextSection,
+  react: ReactSection,
+  accessibility: AccessibilitySection,
+};
 
 export function EvidenceSection<K extends EvidenceKind>({
   section,

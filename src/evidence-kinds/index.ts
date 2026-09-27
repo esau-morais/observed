@@ -1,9 +1,10 @@
 import { Schema } from 'effect';
 import { text as nonEmpty } from '../capture/model';
+import { accessibility } from './accessibility';
 import { react } from './react';
 import { text } from './text';
 
-export const evidenceKinds = { text, react } as const;
+export const evidenceKinds = { text, react, accessibility } as const;
 
 const kinds = Object.values(evidenceKinds);
 
@@ -22,7 +23,9 @@ export type CollectorConfig<K extends EvidenceKind = EvidenceKind> = Extract<
 >;
 
 // Collected on every journey whether or not a check reads them.
-export const defaultCollectors: readonly CollectorConfig[] = [];
+export const defaultCollectors: readonly CollectorConfig[] = [
+  { kind: 'accessibility' },
+];
 
 export const unavailableEvidenceSchema = Schema.Struct({
   kind: nonEmpty,
