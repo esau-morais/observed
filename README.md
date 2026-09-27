@@ -94,8 +94,12 @@ The [project schema](src/project.ts) and
   during `steps` to an origin outside the app and `allowedOrigins`, such as a
   font CDN or analytics, fails the capture.
 - `capture.check` is optional and holds one `request-count` or `text` check. A
-  `text` check passes when exactly one element matches its selector and its text
-  equals `expectedText`.
+  `request-count` check counts requests during `steps` to the app's origin, or
+  to the check's `origin` when set, whose method, path and status match. It
+  compares the path without the query string or fragment, so
+  `/api/items` counts both `/api/items` and `/api/items?page=2`, and the check's
+  `path` can't contain `?` or `#`. A `text` check passes when exactly one element
+  matches its selector and its text equals `expectedText`.
 - Put the expected result in the check, not in a step. A step that waits for the
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,
@@ -262,7 +266,18 @@ jobs:
 
 The action installs the Bun version pinned in Observed's `package.json` and runs
 your setup and start commands with it on `PATH`. It installs the browser, and
-on Linux its system packages with apt.
+on Linux its system packages with apt. It installs nothing else. When `setup` or
+`start` needs another toolchain, such as Go, Python or Node.js, install it in a
+step before Observed's, with the version your project uses:
+
+```yaml
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: esau-morais/observed@OBSERVED_COMMIT_SHA
+```
+
+Pin those actions by full commit SHA, as here.
 
 | Exit code | Conclusion | Job |
 | --- | --- | --- |
