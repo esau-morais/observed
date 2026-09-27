@@ -151,8 +151,9 @@ The [project schema](src/project.ts) and
   with the same markup confirms that an element was already failing on base.
   When an element matches only by selector or only by markup, the check is
   unknown rather than passed. It's also unknown when findings are missing on
-  either side, or when a rule has more than the 10 elements agent-browser
-  lists per rule and its count didn't grow. Automated rules catch only some
+  either side, when agent-browser's list of at most 10 elements per rule
+  leaves an element unmatched, or when axe-core can't decide a rule at that
+  impact on elements base didn't have. Automated rules catch only some
   accessibility problems. A passing check doesn't mean the page is accessible.
 - Sign in with a disposable account from committed seed data. `setup` doesn't
   receive fill variables, so commit the account with its password hash and pass

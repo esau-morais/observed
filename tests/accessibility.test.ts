@@ -15,6 +15,7 @@ import {
   recordAccessibility,
 } from '../src/capture/collectors/accessibility';
 import { escapeText } from '../src/markdown';
+import { accessibility as accessibilityCheck } from '../src/checks/accessibility';
 import { accessibility as renderAccessibility } from '../src/report-sections/accessibility';
 
 const fixture = path.join(import.meta.dirname, 'fixtures/accessibility');
@@ -180,9 +181,14 @@ test('page selectors never reach agent-browser as options, and generic elements 
         return { ...node, target: ['-x'] as const };
       }
 
-      return node.target[0] === 'p:nth-child(3)'
-        ? { ...node, html: '<span class="low">Low contrast text one</span>' }
-        : node;
+      const html: Record<string, string> = {
+        'p:nth-child(3)': '<span class="low">Low contrast text one</span>',
+        'p:nth-child(4)': '<p title="a role=none">Low contrast text two</p>',
+        img: '<img role="presentation" src="x.gif">',
+      };
+      const replaced = html[String(node.target[0])];
+
+      return replaced === undefined ? node : { ...node, html: replaced };
     }),
   }));
   const looked: string[] = [];
@@ -194,13 +200,21 @@ test('page selectors never reach agent-browser as options, and generic elements 
       (selector) => {
         looked.push(selector);
 
-        return snapshot(selector);
+        return Effect.succeed(
+          JSON.stringify({
+            success: true,
+            data: { snapshot: '- StaticText "Low contrast text two"' },
+          }),
+        );
       },
     ),
   );
 
-  expect(looked).toEqual(['p:nth-child(4)', 'img']);
-  expect(result.violations[0]?.nodes[0]?.tree.kind).toBe('unavailable');
+  expect(looked).toEqual(['p:nth-child(4)']);
+  expect(result.violations[0]?.nodes.map((node) => node.tree.kind)).toEqual([
+    'unavailable',
+    'unavailable',
+  ]);
   expect(result.violations[2]?.nodes[0]?.tree.kind).toBe('unavailable');
 });
 
@@ -256,7 +270,7 @@ test('findings whose counts disagree with their rules are rejected', async () =>
   ).toBe(false);
 });
 
-test('without a usable base, findings are listed but not called new', async () => {
+test('without a usable, comparable base, findings are listed but not called new', async () => {
   const record = await recorded();
   const side = (value: Accessibility) => ({
     evidence: { kind: 'accessibility', status: 'recorded', value } as const,
@@ -265,6 +279,12 @@ test('without a usable base, findings are listed but not called new', async () =
   const compared = renderAccessibility({
     base: side(without(record, 'label')),
     candidate: side(record),
+    comparable: true,
+  });
+  const incomparable = renderAccessibility({
+    base: side(without(record, 'label')),
+    candidate: side(record),
+    comparable: false,
   });
   const uncompared = renderAccessibility({
     base: {
@@ -276,10 +296,117 @@ test('without a usable base, findings are listed but not called new', async () =
       artifacts: [],
     },
     candidate: side(record),
+    comparable: true,
   });
 
   expect(compared).toContain('- New: `#nolabel`');
   expect(uncompared).not.toContain('New:');
+  expect(incomparable).not.toContain('New:');
   expect(uncompared).toContain(escapeText('Base: agent-browser a11y failed'));
   expect(uncompared).toContain("don't establish that the page is accessible");
+});
+
+test('an unmatched element that resembles one on the other side is only possibly new', async () => {
+  const record = await recorded();
+  const contrast = record.violations[0];
+  const node = contrast?.nodes[0];
+
+  if (contrast === undefined || node === undefined) {
+    throw new Error('Fixture has no violations');
+  }
+
+  const side = (elements: [string, string][]): Accessibility => ({
+    ...record,
+    counts: { ...record.counts, violations: 1 },
+    violations: [
+      {
+        ...contrast,
+        nodeCount: elements.length,
+        nodes: elements.map(([target, html]) => ({
+          ...node,
+          target: [target] as const,
+          html,
+        })),
+      },
+    ],
+  });
+  const base = side([
+    ['#a', '<button class="x">'],
+    ['#b', '<button class="x">'],
+  ]);
+  const candidate = side([
+    ['#c', '<button class="x">'],
+    ['#a', '<button class="y">'],
+  ]);
+
+  expect(
+    compareAccessibility(base, candidate)[0]?.elements.map(
+      (element) => element.status,
+    ),
+  ).toEqual(['uncertain', 'maybe-new', 'maybe-fixed']);
+  expect(candidateOutcome(base, candidate).outcome).toBe('unknown');
+});
+
+test('a rule axe-core could not decide on new elements leaves the check unknown', async () => {
+  const record = await recorded();
+  const undecided: Accessibility = {
+    ...record,
+    counts: { ...record.counts, incomplete: 1 },
+    incomplete: [
+      {
+        rule: 'color-contrast',
+        impact: 'serious',
+        help: 'Elements must meet minimum color contrast ratio thresholds',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.12/color-contrast',
+        nodeCount: 1,
+        nodes: [{ target: ['.hero'] }],
+      },
+    ],
+  };
+
+  expect(candidateOutcome(record, undecided).outcome).toBe('unknown');
+  expect(candidateOutcome(undecided, undecided).outcome).toBe('passed');
+  expect(candidateOutcome(record, undecided, 'critical').outcome).toBe(
+    'passed',
+  );
+});
+
+test('base is the baseline, so a new violation is reported as a regression', async () => {
+  const candidate = await recorded();
+  const side = (value: Accessibility) => ({
+    observations: {
+      schemaVersion: 3 as const,
+      requests: [],
+      browserErrors: [],
+      window: {
+        startedAt: '2026-09-27T00:00:00.000Z',
+        finishedAt: '2026-09-27T00:00:01.000Z',
+      },
+    },
+    evidence: { accessibility: value },
+  });
+  const definition = {
+    kind: 'accessibility' as const,
+    id: 'no-new-a11y-violations',
+    name: 'No new accessibility violations',
+    scope: 'Final page state',
+  };
+  const base = side(without(candidate, 'label'));
+  const after = side(candidate);
+  const evaluated = accessibilityCheck.evaluate({
+    definition,
+    base,
+    candidate: after,
+    comparable: true,
+  });
+
+  expect(evaluated.base?.outcome).toBe('passed');
+  expect(evaluated.candidate.outcome).toBe('failed');
+  expect(
+    accessibilityCheck.regression?.({
+      definition,
+      base: { ...base, evaluation: evaluated.base ?? evaluated.candidate },
+      candidate: { ...after, evaluation: evaluated.candidate },
+    }),
+  ).toEqual({ detail: evaluated.candidate.detail });
 });

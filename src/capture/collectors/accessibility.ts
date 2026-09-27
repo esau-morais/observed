@@ -60,7 +60,28 @@ const scopedSnapshotSchema = Schema.Struct({
 
 export const maxTreeLookups = 50;
 
-const genericElement = /^<(?:div|span)\b(?![^>]*\srole=)/iu;
+const omittedRoles = new Set(['none', 'presentation', 'generic']);
+
+// The tree has no node for a div or span without a role, or for an element
+// whose role removes it.
+function omitted(html: string): boolean {
+  const opening = /^<([a-z][\w-]*)([^>]*)>?/iu.exec(html);
+  const tag = opening?.[1]?.toLowerCase();
+  const role = [
+    ...(opening?.[2] ?? '').matchAll(
+      /([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/gu,
+    ),
+  ]
+    .find((attribute) => attribute[1]?.toLowerCase() === 'role')
+    ?.slice(2)
+    .find((value) => value !== undefined)
+    ?.trim()
+    .toLowerCase();
+
+  return role === undefined
+    ? tag === 'div' || tag === 'span'
+    : omittedRoles.has(role);
+}
 
 export const recordAccessibility = Effect.fnUntraced(function* <E, R>(
   audit: Effect.Effect<string, E, R>,
@@ -88,8 +109,8 @@ export const recordAccessibility = Effect.fnUntraced(function* <E, R>(
   let lookups = 0;
 
   // A scoped snapshot starts with the element's own node, or with its first
-  // descendant when the tree omits the element. The tree omits a div or span
-  // without a role, so a descendant's node is never reported as theirs.
+  // descendant when the tree omits the element, so omitted elements are not
+  // looked up.
   const lookup = Effect.fnUntraced(function* ({
     target,
     html,
@@ -99,11 +120,11 @@ export const recordAccessibility = Effect.fnUntraced(function* <E, R>(
   }) {
     const [selector, ...frames] = target;
 
-    if (genericElement.test(html)) {
+    if (omitted(html)) {
       return {
         kind: 'unavailable',
         reason:
-          'The accessibility tree has no node of its own for a div or span without a role',
+          'The accessibility tree has no node of its own for a div or span without a role, or for an element whose role removes it',
       } satisfies TreeNode;
     }
 

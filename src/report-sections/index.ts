@@ -57,6 +57,7 @@ export function journeySections(
             input: {
               base: sectionSide(journey.base, view.kind),
               candidate: after,
+              comparable: journey.comparison.kind === 'available',
             },
           },
         ];

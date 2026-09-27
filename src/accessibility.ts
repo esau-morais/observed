@@ -68,6 +68,8 @@ const incompleteSchema = Schema.Struct({
   nodes: Schema.Array(Schema.Struct({ target: targetSchema })),
 }).check(listedWithinCount);
 
+type Incomplete = typeof incompleteSchema.Type;
+
 export const accessibilitySchema = Schema.Struct({
   engine: Schema.Struct({ name: Schema.Literal('axe-core'), version: text }),
   counts: Schema.Struct({
@@ -196,12 +198,20 @@ function matchElements(
     }
   }
 
+  // Greedy loose matching can pair the wrong elements, so an unmatched
+  // element that shares a selector or markup with the other side is only
+  // possibly new or fixed.
+  const resembles = (node: FindingNode, others: readonly FindingNode[]) =>
+    others.some((other) =>
+      keys.slice(1).some((key) => key(other) === key(node)),
+    );
+
   return [
     ...candidate.map((node): ElementComparison => {
       const match = matched.get(node);
 
       if (match === undefined) {
-        return complete(previous)
+        return complete(previous) && !resembles(node, base)
           ? { status: 'new', candidate: node }
           : { status: 'maybe-new', candidate: node };
       }
@@ -213,7 +223,7 @@ function matchElements(
       };
     }),
     ...leftovers.map((node): ElementComparison =>
-      complete(current)
+      complete(current) && !resembles(node, candidate)
         ? { status: 'fixed', base: node }
         : { status: 'maybe-fixed', base: node },
     ),
@@ -265,10 +275,22 @@ function atThreshold(record: Accessibility, threshold: Impact): number {
     .reduce((total, item) => total + item.nodeCount, 0);
 }
 
-function undecidedRules(record: Accessibility, threshold: Impact): number {
-  return record.incomplete.filter(
-    (item) => item.impact === null || atOrAbove(item.impact, threshold),
-  ).length;
+const undecidedAt = (threshold: Impact) => (item: Incomplete) =>
+  item.impact === null || atOrAbove(item.impact, threshold);
+
+// Rules axe-core could not decide at the threshold that base did not have, or
+// that gained elements, could hide a new violation.
+function newUndecided(
+  base: Accessibility,
+  candidate: Accessibility,
+  threshold: Impact,
+): string[] {
+  const before = new Map(base.incomplete.map((item) => [item.rule, item]));
+
+  return candidate.incomplete
+    .filter(undecidedAt(threshold))
+    .filter((item) => item.nodeCount > (before.get(item.rule)?.nodeCount ?? 0))
+    .map((item) => item.rule);
 }
 
 function candidateEvaluation(
@@ -315,16 +337,29 @@ function candidateEvaluation(
     };
   }
 
-  if (undecided.length > 0) {
+  const incomplete = newUndecided(base, candidate, threshold);
+
+  if (undecided.length > 0 || incomplete.length > 0) {
     return {
       outcome: 'unknown',
       actual: null,
-      detail: `Could not confirm that these rules have no new elements: ${undecided.join(', ')}. Only the same selector with the same markup confirms an element, and agent-browser lists at most 10 elements per rule.`,
+      detail: [
+        ...(undecided.length === 0
+          ? []
+          : [
+              `Could not confirm that these rules have no new elements: ${undecided.join(', ')}. Only the same selector with the same markup confirms an element, and agent-browser lists at most 10 elements per rule.`,
+            ]),
+        ...(incomplete.length === 0
+          ? []
+          : [
+              `axe-core could not decide these rules on elements base did not have: ${incomplete.join(', ')}. Review them by hand.`,
+            ]),
+      ].join(' '),
     };
   }
 
   const remaining = atThreshold(candidate, threshold);
-  const incomplete = undecidedRules(candidate, threshold);
+  const review = candidate.incomplete.filter(undecidedAt(threshold)).length;
 
   return {
     outcome: 'passed',
@@ -333,10 +368,10 @@ function candidateEvaluation(
       remaining === 0
         ? `No ${threshold} or higher violations on the candidate.`
         : `No new ${threshold} or higher violations. The ${remaining} element(s) at that impact on the candidate also fail on base.`,
-      ...(incomplete === 0
+      ...(review === 0
         ? []
         : [
-            `axe-core could not decide ${incomplete} rule(s) at that impact; review them by hand.`,
+            `axe-core could not decide ${review} rule(s) at that impact, the same as on base; review them by hand.`,
           ]),
     ].join(' '),
   };

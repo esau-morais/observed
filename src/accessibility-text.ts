@@ -134,6 +134,7 @@ export type AccessibilitySummary =
 export function summarizeAccessibility({
   base,
   candidate,
+  comparable,
 }: AccessibilityInput): AccessibilitySummary {
   const before = base?.evidence ?? null;
   const after = candidate.evidence;
@@ -147,13 +148,22 @@ export function summarizeAccessibility({
   }
 
   const baseline = before?.status === 'recorded' ? before.value : null;
+  const compared = baseline !== null && comparable;
 
   return {
     kind: 'recorded',
-    notice: [accessibilityNotice(after.value), ...reasons].join(' '),
-    compared: baseline !== null,
+    notice: [
+      accessibilityNotice(after.value),
+      ...reasons,
+      ...(baseline !== null && !comparable
+        ? [
+            "The captures aren't comparable, so elements are not labelled new or fixed.",
+          ]
+        : []),
+    ].join(' '),
+    compared,
     base: baseline,
     candidate: after.value,
-    rules: compareAccessibility(baseline, after.value),
+    rules: compareAccessibility(compared ? baseline : null, after.value),
   };
 }
