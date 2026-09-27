@@ -262,3 +262,52 @@ test('without files:write the image is skipped and nothing else is sent', async 
   ).resolves.toBe('missing-scope');
   expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+// The three steps in https://docs.slack.dev/messaging/working-with-files.md:
+// get an upload URL, POST the bytes as application/octet-stream, then share
+// the file in the channel and thread.
+test('the image upload follows the documented steps and sends its bytes as octet-stream', async () => {
+  const answers: Record<string, () => Response> = {
+    'https://slack.com/api/files.getUploadURLExternal': () =>
+      Response.json({
+        ok: true,
+        upload_url: 'https://files.slack.com/upload/v1/abc',
+        file_id: 'F012AB3CDE4',
+      }),
+    'https://files.slack.com/upload/v1/abc': () => new Response('OK - 3'),
+    'https://slack.com/api/files.completeUploadExternal': () =>
+      Response.json({ ok: true }),
+  };
+  const calls: { url: string; headers: Headers; body: string }[] = [];
+
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+    calls.push({
+      url,
+      headers: new Headers(init.headers),
+      body: typeof init.body === 'string' ? init.body : '',
+    });
+
+    return Promise.resolve(
+      (answers[url] ?? (() => new Response(null, { status: 404 })))(),
+    );
+  });
+
+  await expect(
+    uploadSlackImage('xoxb-test', {
+      channel: 'C1',
+      threadTs: '1.1',
+      filename: 'observed-changed-pixels.png',
+      title: 'Changed pixels',
+      altText: 'Changed pixels',
+      bytes: new Uint8Array([1, 2, 3]),
+    }),
+  ).resolves.toBe('uploaded');
+
+  const [start, upload, complete] = calls;
+
+  expect(start?.body).toContain('length=3');
+  expect(upload?.url).toBe('https://files.slack.com/upload/v1/abc');
+  expect(upload?.headers.get('content-type')).toBe('application/octet-stream');
+  expect(complete?.body).toContain('channel_id=C1');
+  expect(complete?.body).toContain('thread_ts=1.1');
+});

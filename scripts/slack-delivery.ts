@@ -412,6 +412,7 @@ export async function uploadSlackImage(
   try {
     stored = await fetch(upload.upload_url, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
       body: new Blob([Buffer.from(image.bytes)]),
       signal: AbortSignal.timeout(30_000),
     });
