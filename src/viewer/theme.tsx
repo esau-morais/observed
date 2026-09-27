@@ -115,8 +115,7 @@ export function ThemeControl({
   choose,
 }: ReturnType<typeof useTheme>) {
   return (
-    <label {...stylex.props(styles.control)}>
-      <span {...stylex.props(styles.label)}>Theme</span>
+    <>
       <select
         value={preference}
         onChange={(event) => {
@@ -130,6 +129,6 @@ export function ThemeControl({
         <option value="light">Light theme</option>
         <option value="dark">Dark theme</option>
       </select>
-    </label>
+    </>
   );
 }
