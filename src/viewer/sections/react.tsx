@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 import { renderChanges, type ReactEvidence } from '../../evidence-kinds/react';
 import { fonts, geometry, media } from '../constants.stylex';
+import { SubHeading } from '../heading';
 import { colors } from '../tokens.stylex';
 import type { SectionSide, ViewerSection } from './define';
 
@@ -248,7 +249,7 @@ function Side({
       {...stylex.props(styles.stack)}
       aria-label={`${label} React renders`}
     >
-      <h3 {...stylex.props(styles.heading)}>{label}</h3>
+      <SubHeading xstyle={styles.heading}>{label}</SubHeading>
       {view.status === 'recorded' ? (
         <Recording value={view.value} label={label} />
       ) : (
