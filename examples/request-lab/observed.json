@@ -6,6 +6,7 @@
     "paths": [
       "App.tsx",
       "base.ts",
+      "duplicate.ts",
       "main.tsx",
       "items.ts",
       "index.html",
