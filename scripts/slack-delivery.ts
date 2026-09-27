@@ -8,9 +8,11 @@ import type {
 import { decodePng, encodeRgbPng } from '../src/png';
 import { shortSource } from '../src/provenance-text';
 import {
+  anchorLocation,
   conclusionTones,
   executionLabels,
   headline,
+  leadingChecks,
   type Tone,
 } from '../src/result-text';
 
@@ -119,6 +121,17 @@ function button(text: string, url: string | null, id: string) {
 // Channels can reach people who can't read the repository, so a message shows
 // verdicts, check and metric names, measured numbers and revisions, never
 // captured page text or error messages.
+// The deciding check's source location, as the GitHub row states it.
+function location(result: Comparison): string {
+  const [lead] = leadingChecks(result);
+  const found =
+    lead === undefined ? null : anchorLocation(lead.journey, lead.check);
+
+  return found === null
+    ? ''
+    : ` · ${found.words} \`${slackText(found.place)}\``;
+}
+
 export function slackMessage(result: Comparison | null, links: SlackLinks) {
   const title = clip(
     result === null
@@ -160,7 +173,7 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${icon} *${slackText(title)}* · ${where}`,
+          text: `${icon} *${slackText(title)}*${result === null ? '' : location(result)} · ${where}`,
         },
       },
       {

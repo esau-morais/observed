@@ -6,7 +6,6 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   comparisonSchema,
   conclusionExitCodes,
-  type Anchor,
   type CheckVerdict,
   type Comparison,
   type Journey,
@@ -44,6 +43,7 @@ import {
   conclusionTones,
   describeMeasure,
   headline,
+  anchorLocation,
   headlineParts,
   leadingVerdicts,
   shownMeasure,
@@ -203,31 +203,10 @@ function reading(result: Comparison, check: CheckVerdict): string {
     : check.detail;
 }
 
-const anchorWords: Record<Anchor['basis'], string> = {
-  'stack-frame': 'thrown at',
-  'component-source': 'component at',
-  'test-location': 'test at',
-  'diff-name-match': 'name matches changed line',
-};
+function rowLocation(open: Open): string | null {
+  const location = anchorLocation(open.journey, open.check);
 
-// A location is a fact about where the evidence points, never a cause.
-function rowLocation({ journey, check }: Open): string | null {
-  for (const finding of journey.findings) {
-    if (
-      finding.checks.includes(check.id) &&
-      finding.location.kind === 'anchored'
-    ) {
-      const [anchor] = finding.location.anchors;
-      const words =
-        anchor.basis === 'stack-frame' && finding.subject === 'Console error'
-          ? 'logged at'
-          : anchorWords[anchor.basis];
-
-      return `${words} ${code(`${anchor.path}:${anchor.line}`)}`;
-    }
-  }
-
-  return null;
+  return location === null ? null : `${location.words} ${code(location.place)}`;
 }
 
 function rowText(result: Comparison, open: Open): string {

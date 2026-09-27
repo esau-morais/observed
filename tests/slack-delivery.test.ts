@@ -136,12 +136,12 @@ test('Slack is skipped with a reason instead of posting duplicates or to a guess
   expect(reason({ lookupFailed: true })).toContain('could not be looked up');
 });
 
-test('a failing Slack message leads with the measured values and links out, without captured text', async () => {
+test('a failing Slack message leads with the values and the source location, without captured text', async () => {
   const result = await unavailable();
   const [journey] = result.journeys;
   const check = {
-    scope: 'Open the page',
-    expectation: 'Median LCP at most 250 ms.',
+    scope: 'One Reading click',
+    expectation: 'No uncaught page errors.',
   };
   const message = slackMessage(
     {
@@ -152,15 +152,15 @@ test('a failing Slack message leads with the measured values and links out, with
           checks: [
             {
               ...check,
-              id: 'lcp',
-              name: 'Largest contentful paint stays fast',
+              id: 'errors',
+              name: 'No browser errors',
               verdict: 'regression',
-              detail: 'Captured page text',
+              detail: 'TypeError: Captured page text',
               measure: {
-                label: 'Median LCP',
-                base: '52 ms',
-                candidate: '452 ms',
-                limit: 'at most 250 ms',
+                label: 'Browser errors',
+                base: '0',
+                candidate: '1',
+                limit: 'none allowed',
               },
             },
             {
@@ -169,6 +169,29 @@ test('a failing Slack message leads with the measured values and links out, with
               name: 'One books request',
               verdict: 'passed',
               detail: 'Captured item text',
+            },
+          ],
+          findings: [
+            {
+              id: 'error-1',
+              evidence: 'browser-errors',
+              checks: ['errors'],
+              subject: 'TypeError',
+              comparison: 'new',
+              location: {
+                kind: 'anchored',
+                anchors: [
+                  {
+                    path: 'src/App.jsx',
+                    line: 10,
+                    side: 'candidate',
+                    basis: 'stack-frame',
+                    evidence: 'Captured frame text',
+                    artifacts: [],
+                    diff: 'added',
+                  },
+                ],
+              },
             },
           ],
         },
@@ -182,7 +205,7 @@ test('a failing Slack message leads with the measured values and links out, with
 
   expect(message.blocks[0]).toMatchObject({
     text: {
-      text: ':red_circle: *Regression: Median LCP 52 ms → 452 ms, at most 250 ms* · <https://github.com/o/r/pull/7|o/r#7>',
+      text: ':red_circle: *Regression: Browser errors 0 → 1, none allowed* · thrown at `src/App.jsx:10` · <https://github.com/o/r/pull/7|o/r#7>',
     },
   });
   expect(text).toContain('1 of 2 checks failed');

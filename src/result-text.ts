@@ -1,7 +1,9 @@
 import type {
+  Anchor,
   Check,
   CheckVerdict,
   Comparison,
+  Journey,
   Measure,
   Side,
 } from './comparison-model';
@@ -130,23 +132,66 @@ export const leadingVerdicts = {
 
 // The verdict and the one reading that explains it, short enough for a check
 // run title or a notification.
+const anchorWords = {
+  'stack-frame': 'thrown at',
+  'component-source': 'component at',
+  'test-location': 'test at',
+  'diff-name-match': 'name matches changed line',
+} satisfies Record<Anchor['basis'], string>;
+
+// A location is a fact about where the evidence points, never a cause.
+export function anchorLocation(
+  journey: Journey,
+  check: CheckVerdict,
+): { words: string; place: string } | null {
+  for (const finding of journey.findings) {
+    if (
+      finding.checks.includes(check.id) &&
+      finding.location.kind === 'anchored'
+    ) {
+      const [anchor] = finding.location.anchors;
+
+      return {
+        words:
+          anchor.basis === 'stack-frame' && finding.subject === 'Console error'
+            ? 'logged at'
+            : anchorWords[anchor.basis],
+        place: `${anchor.path}:${anchor.line}`,
+      };
+    }
+  }
+
+  return null;
+}
+
 export function headlineParts(result: Comparison): {
   label: string;
   subject: string;
 } {
   const kind = result.conclusion.kind;
-  const [first, ...rest] = result.journeys.flatMap((journey) =>
-    journey.checks.filter((check) => check.verdict === leadingVerdicts[kind]),
-  );
+  const [first, ...rest] = leadingChecks(result);
   let subject = result.title;
 
   if (first !== undefined) {
-    const measure = shownMeasure(first);
+    const measure = shownMeasure(first.check);
 
-    subject = `${measure === null ? first.name : describeMeasure(measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
+    subject = `${measure === null ? first.check.name : describeMeasure(measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
   }
 
   return { label: conclusionLabels[kind], subject };
+}
+
+// The checks whose verdict decided the result, in journey order.
+export function leadingChecks(
+  result: Comparison,
+): { journey: Journey; check: CheckVerdict }[] {
+  const verdict = leadingVerdicts[result.conclusion.kind];
+
+  return result.journeys.flatMap((journey) =>
+    journey.checks
+      .filter((check) => check.verdict === verdict)
+      .map((check) => ({ journey, check })),
+  );
 }
 
 export function headline(result: Comparison): string {
