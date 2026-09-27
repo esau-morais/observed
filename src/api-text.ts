@@ -50,11 +50,15 @@ function recorded(view: EvidenceView<'api'> | null): readonly Recorded[] {
 }
 
 // One row per operation id in configuration order, candidate first.
-export function apiRows(
-  base: EvidenceView<'api'> | null,
-  candidate: EvidenceView<'api'>,
-  comparable: boolean,
-): ApiRow[] {
+export function apiRows({
+  base,
+  candidate,
+  comparable,
+}: {
+  base: EvidenceView<'api'> | null;
+  candidate: EvidenceView<'api'>;
+  comparable: boolean;
+}): ApiRow[] {
   const before = recorded(base);
   const after = recorded(candidate);
   const ids = [

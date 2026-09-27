@@ -5,10 +5,10 @@ import { defineEvidence } from './define';
 const envName = nonEmpty.check(Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/));
 const headerName = nonEmpty.check(Schema.isPattern(/^[!#$%&'*+.^`|~\w-]+$/));
 
-// An environment reference keeps the value out of observed.json, recipes and
-// evidence. `prefix`, such as "Bearer ", is sent before it and recorded.
 const headerText = Schema.String.check(Schema.isPattern(/^[^\p{Cc}]*$/u));
 
+// An environment reference keeps the value out of observed.json, recipes and
+// evidence. `prefix`, such as "Bearer ", is sent before it and recorded.
 export const headerSchema = Schema.Union([
   Schema.Struct({ name: headerName, value: headerText }),
   Schema.Struct({

@@ -38,11 +38,11 @@ export const api: MarkdownSection<'api'> = ({
       ? [`- ${escapeText(`${label}: operations unavailable. ${view.reason}`)}`]
       : [],
   );
-  const operations = apiRows(
-    base?.evidence ?? null,
-    candidate.evidence,
+  const operations = apiRows({
+    base: base?.evidence ?? null,
+    candidate: candidate.evidence,
     comparable,
-  ).map((row) => {
+  }).map((row) => {
     const status = describeStatusChange(row);
     const lines = [
       ...(base === null

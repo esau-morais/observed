@@ -143,7 +143,11 @@ export const ApiSection: ViewerSection<'api'> = ({
 }) => {
   const comparison = base !== null;
   const current = comparison ? 'After' : 'Current capture';
-  const rows = apiRows(base?.evidence ?? null, candidate.evidence, comparable);
+  const rows = apiRows({
+    base: base?.evidence ?? null,
+    candidate: candidate.evidence,
+    comparable,
+  });
   const columns = comparison
     ? ['Operation', 'Before', 'After', 'Fields']
     : ['Operation', 'Response'];

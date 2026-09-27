@@ -11,11 +11,9 @@ import { resolveCollectorEnvironment } from '../src/capture/collectors';
 import { apiReadback, apiSchema, apiStatus } from '../src/checks/api';
 import type { Observations } from '../src/capture/model';
 import { json } from '../src/encoding';
-import type { EvidenceValue } from '../src/evidence-kinds';
+import type { OperationRecord as Recorded } from '../src/evidence-kinds/api';
 import { jsonSchema, validateJson } from '../src/json-schema';
 import { loadProject } from '../src/project';
-
-type Recorded = EvidenceValue<'api'>['operations'][number];
 
 const observations: Observations = {
   schemaVersion: 3,
@@ -165,26 +163,29 @@ test('a wrong status fails, and a request without a response is unknown', () => 
   ).toBe('unknown');
 });
 
-test('a readback of a redacted value is unknown, not a match', () => {
-  expect(
-    apiReadback.evaluate({
-      definition: {
-        kind: 'api-readback',
-        ...identity,
-        operation: 'create',
-        readback: 'read',
-        pointer: '/token',
-        expected: '[REDACTED]',
-      },
-      base: null,
-      candidate: side([
-        recorded('create', answered(201, {}), 'POST'),
-        recorded('read', answered(200, { token: '[REDACTED]' })),
-      ]),
-      comparable: false,
-    }).candidate.outcome,
-  ).toBe('unknown');
-});
+test.each(['[REDACTED]', 'https://%5BREDACTED%5D@api.example/'])(
+  'a readback of the redacted value %s is unknown, not a match',
+  (redacted) => {
+    expect(
+      apiReadback.evaluate({
+        definition: {
+          kind: 'api-readback',
+          ...identity,
+          operation: 'create',
+          readback: 'read',
+          pointer: '/token',
+          expected: redacted,
+        },
+        base: null,
+        candidate: side([
+          recorded('create', answered(201, {}), 'POST'),
+          recorded('read', answered(200, { token: redacted })),
+        ]),
+        comparable: false,
+      }).candidate.outcome,
+    ).toBe('unknown');
+  },
+);
 
 test('a schema check is unknown when the body was too large to record', () => {
   expect(
@@ -260,6 +261,16 @@ const echoCollector = {
   ],
 } as const;
 
+function collect(url: string, environment = new Map<string, string>()) {
+  return Effect.runPromise(
+    collector.phase === 'no-browser'
+      ? collector
+          .collect(echoCollector, { url, environment })
+          .pipe(Effect.provide(BunServices.layer))
+      : Effect.die('The api collector must not use a browser'),
+  );
+}
+
 test('sends the header value from the environment it resolves', async () => {
   const token = 'fixture-token-6f1c';
   const server = Bun.serve({
@@ -279,13 +290,7 @@ test('sends the header value from the environment it resolves', async () => {
     const environment = await Effect.runPromise(
       resolveCollectorEnvironment([echoCollector], { API_TOKEN: token }),
     );
-    const value = await Effect.runPromise(
-      collector.phase === 'no-browser'
-        ? collector
-            .collect(echoCollector, { url: server.url.href, environment })
-            .pipe(Effect.provide(BunServices.layer))
-        : Effect.die('The api collector must not use a browser'),
-    );
+    const value = await collect(server.url.href, environment);
 
     expect(value.operations[0]?.result).toMatchObject({
       kind: 'response',
@@ -300,19 +305,9 @@ test('sends the header value from the environment it resolves', async () => {
   }
 });
 
-function collect(url: string, environment = new Map<string, string>()) {
-  return Effect.runPromise(
-    collector.phase === 'no-browser'
-      ? collector
-          .collect(echoCollector, { url, environment })
-          .pipe(Effect.provide(BunServices.layer))
-      : Effect.die('The api collector must not use a browser'),
-  );
-}
-
 // Each of these would otherwise fail the whole capture or hold the body in
 // memory; recorded, they leave the operation's checks unknown.
-test('records an oversized body by size, and a request that got no answer', async () => {
+test('records an oversized body by size, an unsendable header and a refused connection', async () => {
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,

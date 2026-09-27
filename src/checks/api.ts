@@ -112,11 +112,12 @@ export const apiStatus = defineCheck({
   }),
 });
 
-// Credential-named fields and echoed environment values are redacted before
-// evidence is written, so the recorded value is not what the app sent.
+// Credential-named fields, credentials in URLs and echoed environment values
+// are redacted before evidence is written, so the recorded value is not what
+// the app sent. URL redaction leaves the marker percent-encoded.
 function holdsRedaction(value: Schema.Json): boolean {
   if (typeof value === 'string') {
-    return value.includes('[REDACTED]');
+    return /\[REDACTED\]|%5BREDACTED%5D/i.test(value);
   }
 
   if (Array.isArray(value)) {
@@ -196,12 +197,12 @@ export const apiSchema = defineCheck({
     return issues.length === 0
       ? {
           outcome: 'passed',
-          actual: 0,
+          actual: '0 violations',
           detail: `${request} answered ${answer.status} with a body that matches the schema.`,
         }
       : {
           outcome: 'failed',
-          actual: issues.length,
+          actual: `${issues.length} violation(s)`,
           detail: `${request} answered ${answer.status}; ${issues.length} schema violation(s): ${describeIssues(issues)}.`,
         };
   }),
