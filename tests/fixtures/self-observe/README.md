@@ -18,8 +18,9 @@ The root `observed.json` extracts the archive and runs
 `bun dist/observed.js compare` on the captures during `setup`, with the build of the revision being observed, and `start`
 serves the result with `observed view`. Each self-observation therefore shows
 that revision's viewer and comparison code. The fixture only supplies the data.
-`setup` fails unless `compare` exits `2`, so a fixture that no longer reads as a
-regression stops the run instead of producing a misleading report.
+`setup` fails unless `compare` exits `2`, a regression or a failed check, so a
+fixture that no longer reads that way stops the run instead of producing a
+misleading report. The "Regression" headline check tells the two apart.
 
 Regenerate it when a capture or evidence schema change makes it unreadable, or
 when the evidence the self-observe checks read has changed:
@@ -36,5 +37,6 @@ when the evidence the self-observe checks read has changed:
    `tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - base candidate | gzip -n -9 > captures.tar.gz`,
    and replace `captures.tar.gz` here.
 4. Extract it to a temporary directory and check that
-   `bun run compare <tmp>/base <tmp>/candidate --json` exits `2`. Then update
+   `bun run compare <tmp>/base <tmp>/candidate --json` exits `2` and concludes
+   a regression. Then update
    the commits and run above.
