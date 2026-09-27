@@ -137,7 +137,6 @@ function child(pointer: string, key: string | number): string {
   return `${pointer}/${String(key).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 }
 
-// Returns every violation, each with the JSON Pointer of the value.
 export function validateJson(
   schema: JsonSchema,
   value: Schema.Json,
@@ -205,7 +204,6 @@ export function validateJson(
   return issues;
 }
 
-// Resolves a JSON Pointer; undefined when any segment is missing.
 export function resolvePointer(
   value: Schema.Json,
   pointer: string,

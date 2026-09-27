@@ -150,55 +150,34 @@ export class FillValueFailure extends Schema.TaggedError<FillValueFailure>()(
   { message: Schema.String },
 ) {}
 
-// Resolves the environment references of fill steps and API operation
-// headers. An empty value is rejected too: CI systems commonly expand an
-// unavailable secret to an empty string, and sending it would capture a
-// different journey.
+// An empty value is rejected too: CI systems commonly expand an unavailable
+// secret to an empty string, and filling it would capture a different journey.
 export const resolveFillValues = (
   recipe: Recipe,
   environment: Readonly<Record<string, string | undefined>>,
 ) => {
   const values = new Map<string, string>();
-  const missing = { fill: new Set<string>(), header: new Set<string>() };
-
-  const resolve = (name: string, use: keyof typeof missing) => {
-    const value = environment[name];
-
-    if (value === undefined || value === '') {
-      missing[use].add(name);
-    } else {
-      values.set(name, value);
-    }
-  };
+  const missing = new Set<string>();
 
   for (const step of [...recipe.ready, ...recipe.steps]) {
-    if (step.kind === 'fill' && typeof step.value !== 'string') {
-      resolve(step.value.env, 'fill');
+    if (step.kind !== 'fill' || typeof step.value === 'string') {
+      continue;
+    }
+
+    const value = environment[step.value.env];
+
+    if (value === undefined || value === '') {
+      missing.add(step.value.env);
+    } else {
+      values.set(step.value.env, value);
     }
   }
 
-  for (const collector of recipe.collectors) {
-    if (collector.kind === 'api') {
-      for (const operation of collector.operations) {
-        for (const header of operation.headers ?? []) {
-          if ('env' in header) {
-            resolve(header.env, 'header');
-          }
-        }
-      }
-    }
-  }
-
-  const problems = [
-    missing.fill.size === 0
-      ? null
-      : `Fill value unavailable. Missing or empty environment variables: ${[...missing.fill].join(', ')}`,
-    missing.header.size === 0
-      ? null
-      : `API header value unavailable. Missing or empty environment variables: ${[...missing.header].join(', ')}`,
-  ].filter((problem) => problem !== null);
-
-  return problems.length === 0
+  return missing.size === 0
     ? Effect.succeed(values)
-    : Effect.fail(new FillValueFailure({ message: problems.join('. ') }));
+    : Effect.fail(
+        new FillValueFailure({
+          message: `Fill value unavailable. Missing or empty environment variables: ${[...missing].join(', ')}`,
+        }),
+      );
 };

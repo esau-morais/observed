@@ -15,14 +15,13 @@ import {
   type CollectorError,
   type CollectorServices,
   type EvidenceConditions,
+  type EvidenceProducer,
 } from './collectors/define';
 import { evidenceKinds, type EvidenceKind } from '../evidence-kinds';
 
 export { BrowserFailure };
 
 export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
-
-type EvidenceProducer = { readonly name: string; readonly version: string };
 
 export type PendingEvidence = (
   | {
@@ -152,6 +151,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   addEvidence: (entry: PendingEvidence) => void;
   recipe: Recipe;
   fillValues: ReadonlyMap<string, string>;
+  collectorValues: ReadonlyMap<string, string>;
   inputsHash: string;
   dependenciesHash: string | null;
 }) {
@@ -161,7 +161,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   const recipe = options.recipe;
   const origin = new URL(options.url).origin;
   const allowedOrigins = new Set([origin, ...(recipe.allowedOrigins ?? [])]);
-  const concealed = [...options.fillValues.values()];
+  const concealed = [
+    ...options.fillValues.values(),
+    ...options.collectorValues.values(),
+  ];
 
   yield* fs.writeFileString(config, '{}\n', { flag: 'wx' });
 
@@ -633,12 +636,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       yield* collectEvidence(
         config.kind,
         collector.collect(config, {
-          directory: options.directory,
           url: options.url,
-          recipe,
-          concealed,
-          addArtifact: options.addArtifact,
-          environment: options.fillValues,
+          environment: options.collectorValues,
         }),
         collector.conditions?.(config) ?? {},
         collector.producer,

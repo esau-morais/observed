@@ -1,8 +1,6 @@
 import type { Schema } from 'effect';
-import type { EvidenceValue } from './evidence-kinds';
+import type { OperationRecord as Recorded } from './evidence-kinds/api';
 import { isJsonObject, jsonType } from './json-schema';
-
-type Recorded = EvidenceValue<'api'>['operations'][number];
 
 type Shape = {
   readonly types: ReadonlyMap<string, ReadonlySet<string>>;

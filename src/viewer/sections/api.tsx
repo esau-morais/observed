@@ -5,6 +5,7 @@ import {
   describeContract,
   describeResponse,
   describeStatusChange,
+  incomparableNotice,
   recordFile,
   type ApiRow,
 } from '../../api-text';
@@ -61,6 +62,7 @@ const styles = stylex.create({
   changes: { display: 'grid', gap: 4, margin: 0, paddingInlineStart: 0 },
   change: { color: colors.changed, listStyleType: 'none' },
   steady: { color: colors.textSecondary, listStyleType: 'none' },
+  unknown: { color: colors.unknown, listStyleType: 'none' },
   notice: {
     backgroundColor: colors.unknownFill,
     borderRadius: geometry.radius,
@@ -70,6 +72,10 @@ const styles = stylex.create({
   list: { display: 'grid', gap: 8, marginBlock: 0, paddingInlineStart: 20 },
 });
 
+function Delta() {
+  return <span aria-hidden="true">Δ </span>;
+}
+
 function Fields({ row }: { row: ApiRow }) {
   if (row.contract === null) {
     return null;
@@ -77,20 +83,27 @@ function Fields({ row }: { row: ApiRow }) {
 
   const status = describeStatusChange(row);
   const lines = describeContract(row.contract);
-  const changed =
-    row.contract.kind === 'compared' && row.contract.changes.length > 0;
+  let state: 'unknown' | 'change' | 'steady' = 'steady';
+
+  if (row.contract.kind === 'unavailable') {
+    state = 'unknown';
+  } else if (row.contract.changes.length > 0) {
+    state = 'change';
+  }
 
   return (
     <ul {...stylex.props(styles.changes)}>
       {status === null ? null : (
-        <li {...stylex.props(styles.change)}>Δ {status}</li>
+        <li {...stylex.props(styles.change)}>
+          <Delta />
+          {status}
+        </li>
       )}
       {lines.map((line) => (
-        <li
-          key={line}
-          {...stylex.props(changed ? styles.change : styles.steady)}
-        >
-          {changed ? `Δ ${line}` : line}
+        <li key={line} {...stylex.props(styles[state])}>
+          {state === 'unknown' ? <span aria-hidden="true">? </span> : null}
+          {state === 'change' ? <Delta /> : null}
+          {line}
         </li>
       ))}
     </ul>
@@ -123,10 +136,14 @@ function File({
   );
 }
 
-export const ApiSection: ViewerSection<'api'> = ({ base, candidate }) => {
+export const ApiSection: ViewerSection<'api'> = ({
+  base,
+  candidate,
+  comparable,
+}) => {
   const comparison = base !== null;
   const current = comparison ? 'After' : 'Current capture';
-  const rows = apiRows(base?.evidence ?? null, candidate.evidence);
+  const rows = apiRows(base?.evidence ?? null, candidate.evidence, comparable);
   const columns = comparison
     ? ['Operation', 'Before', 'After', 'Fields']
     : ['Operation', 'Response'];
@@ -140,6 +157,9 @@ export const ApiSection: ViewerSection<'api'> = ({ base, candidate }) => {
   return (
     <div {...stylex.props(styles.stack)}>
       <p {...stylex.props(styles.text)}>{apiClaimLimit}</p>
+      {base === null || comparable ? null : (
+        <p {...stylex.props(styles.notice)}>{incomparableNotice}</p>
+      )}
       {unavailable.length === 0 ? null : (
         <div {...stylex.props(styles.notice)}>
           <p>API operations unavailable</p>

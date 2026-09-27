@@ -57,14 +57,17 @@ export type CollectorContext = {
 };
 
 // Without a browser: the collector talks to the application directly.
-export type DirectContext = Pick<
-  CollectorContext,
-  'directory' | 'url' | 'recipe' | 'concealed' | 'addArtifact'
-> & {
-  // Resolved environment references, by variable name. Every value is also
-  // in `concealed`.
+export type DirectContext = {
+  readonly url: string;
+  // Values of the variables the collector's `environment` names.
   readonly environment: ReadonlyMap<string, string>;
 };
+
+// Fails the capture as a configuration problem.
+export class EnvironmentValueFailure extends Schema.TaggedError<EnvironmentValueFailure>()(
+  'EnvironmentValueFailure',
+  { message: Schema.String },
+) {}
 
 export type SeparateSessionContext = CollectorContext & {
   readonly runSteps: (
@@ -84,10 +87,19 @@ export type EvidenceConditions = Readonly<
   Record<string, string | number | boolean | null>
 >;
 
+export type EvidenceProducer = {
+  readonly name: string;
+  readonly version: string;
+};
+
 type Common<K extends EvidenceKind> = {
   readonly conditions?: (config: CollectorConfig<K>) => EvidenceConditions;
   // Recorded as the evidence producer instead of agent-browser.
-  readonly producer?: { readonly name: string; readonly version: string };
+  readonly producer?: EvidenceProducer;
+  // Environment variables the collector reads. Observed resolves them before
+  // setup, fails the capture when one is missing or empty, and conceals their
+  // values in all evidence as it does fill values.
+  readonly environment?: (config: CollectorConfig<K>) => readonly string[];
 };
 
 export type Collector<K extends EvidenceKind> =

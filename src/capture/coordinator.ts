@@ -19,6 +19,8 @@ import { json, sha256 } from '../encoding';
 import { conceal } from '../redact';
 import type { Project } from '../project';
 import { FillValueFailure, resolveFillValues, type Recipe } from './recipe';
+import { resolveCollectorEnvironment } from './collectors';
+import { EnvironmentValueFailure } from './collectors/define';
 import { snapshotApplication } from './snapshot';
 
 class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
@@ -169,7 +171,11 @@ export const captureApplication = Effect.fn('captureApplication')(
         { flag: 'wx' },
       );
       const fillValues = yield* resolveFillValues(recipe, process.env);
-      concealed = [...fillValues.values()];
+      const collectorValues = yield* resolveCollectorEnvironment(
+        recipe.collectors,
+        process.env,
+      );
+      concealed = [...fillValues.values(), ...collectorValues.values()];
       const workspace = yield* fs.makeTempDirectoryScoped({
         prefix: 'observed-app-',
       });
@@ -231,6 +237,7 @@ export const captureApplication = Effect.fn('captureApplication')(
         },
         recipe,
         fillValues,
+        collectorValues,
         inputsHash: sha256(
           json({
             setup: options.project.setup,
@@ -264,7 +271,10 @@ export const captureApplication = Effect.fn('captureApplication')(
           });
         }
 
-        if (cause instanceof FillValueFailure) {
+        if (
+          cause instanceof FillValueFailure ||
+          cause instanceof EnvironmentValueFailure
+        ) {
           return new CaptureFailure({
             category: 'configuration',
             message: cause.message,

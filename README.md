@@ -242,10 +242,14 @@ megabytes.
 
 An `api` collector sends HTTP requests to the app without a browser. Observed
 sends them with Bun's `fetch` after the journey's browser steps and screenshot,
-to the copy of the app it started for that capture, so each capture starts
-from the app's own seed data. The journey still opens `path` in the browser;
-for an API-only journey, point it at a cheap page such as a health check and
-leave `steps` empty.
+to the copy of the app it started for that capture. State the app keeps in
+that copy, such as a SQLite file or memory, starts fresh on each side; a
+database outside the copy carries over from one capture to the next.
+
+The journey itself still needs Chrome. It opens `path`, takes a screenshot and
+records accessibility findings, steps and browser errors for that page. For an
+API-only journey, point `path` at a cheap page such as a health check and leave
+`steps` empty.
 
 ```json
 {
@@ -288,9 +292,12 @@ as plain text unless a `Content-Type` header says otherwise.
 Observed records each response's status, headers and body. It parses the body
 when `Content-Type` names JSON and keeps other bodies as text. It stops reading
 after 1 MiB and records only the size. It doesn't follow redirects, so a 302 is
-recorded as a 302. A request that gets no response within 10 seconds is
-recorded with the reason. Credential-named fields in bodies and `Set-Cookie`
-values read `[REDACTED]` in the evidence.
+recorded as a 302. A request whose response doesn't finish within 10 seconds,
+or that can't be sent, such as a header value with a line break, is recorded
+with the reason. Credential-named fields in bodies, such as `token` or
+`password`, and `Set-Cookie` values read `[REDACTED]` in the evidence. A check
+that would read a redacted value is unknown, and a retyped field under a
+credential name doesn't show as a change.
 
 Three checks read these records. Each names an operation by `id`, and
 Observed rejects a check that names one the collector doesn't list.
@@ -302,12 +309,16 @@ Observed rejects a check that names one the collector doesn't list.
   and `anyOf`, plus `title`, `description` and `$schema`, which are ignored.
   Any other keyword makes Observed reject `observed.json` rather than skip it.
   For a project that already describes the response with Effect Schema, paste
-  the `schema` field of `Schema.toJsonSchemaDocument(schema)`; a schema that
-  needs `$ref` doesn't fit the subset. A body that isn't JSON fails.
+  the `schema` field of `Schema.toJsonSchemaDocument(schema)`. Use
+  `Schema.Finite` rather than `Schema.Number`, which also accepts the strings
+  `"NaN"` and `"Infinity"`. A schema that needs `$ref` doesn't fit the subset,
+  and one that names a credential-like property such as `token` makes Observed
+  reject `observed.json`. A body that isn't JSON fails.
 - `api-readback` confirms a side effect. It passes when `operation` answered
   2xx and the later `readback` operation's JSON body holds `expected` at
   `pointer`, a JSON Pointer such as `/readings/4`. A refused write fails even
-  when the value was already there.
+  when the value was already there. A 2xx write followed by a value that was
+  already there passes, so read back something only the write creates.
 
 ```json
 {
@@ -322,12 +333,14 @@ Observed rejects a check that names one the collector doesn't list.
 }
 ```
 
-A request that got no response, or a body too large to record, leaves its
-checks unknown. When comparing, the report lists each operation's status on
-both sides and the JSON fields added, removed or retyped, such as
-`Removed stations[].average (number)`. Those are observations. Only a check
-that passed on base and failed on the candidate is a regression. Fields inside
-an array that is empty on either side aren't compared.
+A check is unknown when an operation it reads got no response, or when the
+body it reads was too large to record. When comparing, the report lists each
+operation's status on both sides and the JSON fields added, removed or retyped,
+such as `Removed stations[].average (number)`. Those are observations. Only a
+check that passed on base and failed on the candidate is a regression. Fields
+inside an array that is empty on either side aren't compared, and a field
+missing from some array elements but present in others isn't listed as
+removed.
 
 <details>
 <summary>Agent capture and import interfaces</summary>

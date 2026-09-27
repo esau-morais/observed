@@ -7,12 +7,14 @@ const headerName = nonEmpty.check(Schema.isPattern(/^[!#$%&'*+.^`|~\w-]+$/));
 
 // An environment reference keeps the value out of observed.json, recipes and
 // evidence. `prefix`, such as "Bearer ", is sent before it and recorded.
+const headerText = Schema.String.check(Schema.isPattern(/^[^\p{Cc}]*$/u));
+
 export const headerSchema = Schema.Union([
-  Schema.Struct({ name: headerName, value: Schema.String }),
+  Schema.Struct({ name: headerName, value: headerText }),
   Schema.Struct({
     name: headerName,
     env: envName,
-    prefix: Schema.optionalKey(Schema.String),
+    prefix: Schema.optionalKey(headerText),
   }),
 ]);
 
@@ -32,6 +34,10 @@ export const operationSchema = Schema.Struct({
 export type Operation = typeof operationSchema.Type;
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+export const httpStatusSchema = Schema.Int.check(
+  Schema.isBetween({ minimum: 100, maximum: 599 }),
+);
 
 export const responseBodySchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('json'), value: Schema.Json }),
@@ -68,9 +74,7 @@ export const api = defineEvidence({
         result: Schema.Union([
           Schema.Struct({
             kind: Schema.Literal('response'),
-            status: Schema.Int.check(
-              Schema.isBetween({ minimum: 100, maximum: 599 }),
-            ),
+            status: httpStatusSchema,
             headers: Schema.Array(
               Schema.Struct({ name: Schema.String, value: Schema.String }),
             ),
@@ -82,3 +86,6 @@ export const api = defineEvidence({
     ),
   }),
 });
+
+export type OperationRecord =
+  (typeof api)['value']['Type']['operations'][number];

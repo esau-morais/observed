@@ -1,7 +1,12 @@
 import { Schema } from 'effect';
 import { text as nonEmpty } from '../capture/model';
-import type { CollectorConfig, EvidenceValue } from '../evidence-kinds';
+import type { CollectorConfig } from '../evidence-kinds';
 import {
+  httpStatusSchema,
+  type OperationRecord as Recorded,
+} from '../evidence-kinds/api';
+import {
+  isJsonObject,
   jsonEqual,
   jsonPointerSchema,
   jsonSchema,
@@ -10,7 +15,6 @@ import {
 } from '../json-schema';
 import { defineCheck, perSide, type Evaluation } from './define';
 
-type Recorded = EvidenceValue<'api'>['operations'][number];
 type Response = Extract<Recorded['result'], { kind: 'response' }>;
 
 const identity = {
@@ -19,10 +23,6 @@ const identity = {
   scope: nonEmpty,
   operation: nonEmpty,
 };
-
-const status = Schema.Int.check(
-  Schema.isBetween({ minimum: 100, maximum: 599 }),
-);
 
 function configured(collectors: readonly CollectorConfig[]) {
   return (
@@ -50,10 +50,10 @@ function missingOperations(
 
 // A step towards a verdict: the value it needs, or the evaluation that
 // settles the check without it.
-type Found<T> =
-  { kind: 'found'; value: T } | { kind: 'settled'; evaluation: Evaluation };
+type Settled = { kind: 'settled'; evaluation: Evaluation };
+type Found<T> = { kind: 'found'; value: T } | Settled;
 
-const unknown = (detail: string): Found<never> => ({
+const unknown = (detail: string): Settled => ({
   kind: 'settled',
   evaluation: { outcome: 'unknown', actual: null, detail },
 });
@@ -81,7 +81,7 @@ export const apiStatus = defineCheck({
   definition: Schema.Struct({
     kind: Schema.Literal('api-status'),
     ...identity,
-    status,
+    status: httpStatusSchema,
   }),
   evidence: ['api'],
   collectors: () => [],
@@ -112,6 +112,22 @@ export const apiStatus = defineCheck({
   }),
 });
 
+// Credential-named fields and echoed environment values are redacted before
+// evidence is written, so the recorded value is not what the app sent.
+function holdsRedaction(value: Schema.Json): boolean {
+  if (typeof value === 'string') {
+    return value.includes('[REDACTED]');
+  }
+
+  if (Array.isArray(value)) {
+    const items: readonly Schema.Json[] = value;
+
+    return items.some(holdsRedaction);
+  }
+
+  return isJsonObject(value) && Object.values(value).some(holdsRedaction);
+}
+
 function describeIssues(issues: readonly string[]): string {
   const shown = issues.slice(0, 5).join('; ');
 
@@ -136,7 +152,7 @@ function jsonBody({ request, response: answer }: Answered): Found<Schema.Json> {
         kind: 'settled',
         evaluation: {
           outcome: 'failed',
-          actual: answer.status,
+          actual: body.kind === 'empty' ? 'empty body' : 'not JSON',
           detail: `${request} answered ${answer.status} with ${body.kind === 'empty' ? 'an empty body' : 'a body that is not JSON'}.`,
         },
       };
@@ -166,6 +182,12 @@ export const apiSchema = defineCheck({
 
     if (body.kind === 'settled') {
       return body.evaluation;
+    }
+
+    if (holdsRedaction(body.value)) {
+      return unknown(
+        `${found.value.request}: Observed redacted values in the body, so it can't check them against the schema.`,
+      ).evaluation;
     }
 
     const issues = validateJson(check.schema, body.value);
@@ -227,7 +249,7 @@ export const apiReadback = defineCheck({
     ) {
       return {
         outcome: 'failed',
-        actual: null,
+        actual: `write answered ${write.value.response.status}`,
         detail: `${written}, so there is no side effect to read back.`,
       };
     }
@@ -248,10 +270,16 @@ export const apiReadback = defineCheck({
     const location = check.pointer === '' ? 'the body root' : check.pointer;
     const readRequest = read.value.request;
 
+    if (value !== undefined && holdsRedaction(value)) {
+      return unknown(
+        `${readRequest}: Observed redacted the value at ${location}, so it can't compare it.`,
+      ).evaluation;
+    }
+
     if (value === undefined) {
       return {
         outcome: 'failed',
-        actual: null,
+        actual: `nothing at ${location}`,
         detail: `${written}; ${readRequest} answered ${read.value.response.status} with nothing at ${location}.`,
       };
     }

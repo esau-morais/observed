@@ -1,13 +1,21 @@
 import { DateTime, Effect, Option, Schema } from 'effect';
-import type { EvidenceValue } from '../../evidence-kinds';
-import type { Operation } from '../../evidence-kinds/api';
+import type {
+  Operation,
+  OperationRecord as Recorded,
+} from '../../evidence-kinds/api';
 import type { Collector, DirectContext } from './define';
-
-type Recorded = EvidenceValue<'api'>['operations'][number];
 
 const timeoutMs = 10_000;
 const maxBodyBytes = 1_048_576;
 
+function envNames(operation: Operation): string[] {
+  return (operation.headers ?? []).flatMap((header) =>
+    'env' in header ? [header.env] : [],
+  );
+}
+
+// Throws on a value fetch can't send, such as one with a line break, so the
+// operation is recorded as failed.
 function requestHeaders(
   operation: Operation,
   environment: DirectContext['environment'],
@@ -21,7 +29,7 @@ function requestHeaders(
       const value = environment.get(header.env);
 
       if (value === undefined) {
-        throw new Error(`Header value for ${header.env} was not resolved`);
+        throw new Error(`${header.env} was not resolved`);
       }
 
       headers.append(header.name, `${header.prefix ?? ''}${value}`);
@@ -99,14 +107,11 @@ function send(operation: Operation, context: DirectContext) {
   return Effect.gen(function* () {
     const startedAt = DateTime.formatIso(yield* DateTime.now);
     const started = performance.now();
-    const headers = yield* Effect.sync(() =>
-      requestHeaders(operation, context.environment),
-    );
     const result = yield* Effect.tryPromise({
       try: async (signal): Promise<Recorded['result']> => {
         const response = await fetch(new URL(operation.path, context.url), {
           method: operation.method,
-          headers,
+          headers: requestHeaders(operation, context.environment),
           redirect: 'manual',
           signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
           ...(operation.body === undefined
@@ -141,7 +146,7 @@ function send(operation: Operation, context: DirectContext) {
           kind: 'failed',
           reason:
             cause instanceof DOMException && cause.name === 'TimeoutError'
-              ? `No response within ${timeoutMs / 1000} s`
+              ? `No complete response within ${timeoutMs / 1000} s`
               : `Request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
         }),
       ),
@@ -161,6 +166,7 @@ function send(operation: Operation, context: DirectContext) {
 export const api: Collector<'api'> = {
   phase: 'no-browser',
   producer: { name: 'bun-fetch', version: Bun.version },
+  environment: ({ operations }) => operations.flatMap(envNames),
   conditions: () => ({ timeoutMs, maxBodyBytes, redirects: 'not followed' }),
   collect: ({ operations }, context) =>
     Effect.forEach(operations, (operation) => send(operation, context)).pipe(

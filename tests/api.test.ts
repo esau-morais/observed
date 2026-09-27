@@ -7,14 +7,13 @@ import { expect, test } from 'vitest';
 import shop from '../examples/shop/observed.json';
 import { compareContract } from '../src/api-contract';
 import { api as collector } from '../src/capture/collectors/api';
-import { resolveFillValues, type Recipe } from '../src/capture/recipe';
+import { resolveCollectorEnvironment } from '../src/capture/collectors';
 import { apiReadback, apiSchema, apiStatus } from '../src/checks/api';
 import type { Observations } from '../src/capture/model';
 import { json } from '../src/encoding';
 import type { EvidenceValue } from '../src/evidence-kinds';
 import { jsonSchema, validateJson } from '../src/json-schema';
 import { loadProject } from '../src/project';
-import { redactText } from '../src/redact';
 
 type Recorded = EvidenceValue<'api'>['operations'][number];
 
@@ -166,6 +165,27 @@ test('a wrong status fails, and a request without a response is unknown', () => 
   ).toBe('unknown');
 });
 
+test('a readback of a redacted value is unknown, not a match', () => {
+  expect(
+    apiReadback.evaluate({
+      definition: {
+        kind: 'api-readback',
+        ...identity,
+        operation: 'create',
+        readback: 'read',
+        pointer: '/token',
+        expected: '[REDACTED]',
+      },
+      base: null,
+      candidate: side([
+        recorded('create', answered(201, {}), 'POST'),
+        recorded('read', answered(200, { token: '[REDACTED]' })),
+      ]),
+      comparable: false,
+    }).candidate.outcome,
+  ).toBe('unknown');
+});
+
 test('a schema check is unknown when the body was too large to record', () => {
   expect(
     apiSchema.evaluate({
@@ -215,7 +235,7 @@ test('a readback passes only after a successful write returns the value', () => 
   // The value already present does not confirm a write that was refused.
   expect(evaluate(answered(403, { error: 'forbidden' }), readings)).toEqual({
     outcome: 'failed',
-    actual: null,
+    actual: 'write answered 403',
     detail:
       'POST /api/create answered 403, so there is no side effect to read back.',
   });
@@ -227,7 +247,20 @@ test('a readback passes only after a successful write returns the value', () => 
   ).toBe('failed');
 });
 
-test('sends env header values without recording them, even when echoed', async () => {
+const echoCollector = {
+  kind: 'api',
+  operations: [
+    {
+      id: 'create',
+      method: 'POST',
+      path: '/api/readings',
+      headers: [{ name: 'Authorization', env: 'API_TOKEN', prefix: 'Bearer ' }],
+      body: { json: { value: 13.2 } },
+    },
+  ],
+} as const;
+
+test('sends the header value from the environment it resolves', async () => {
   const token = 'fixture-token-6f1c';
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -237,73 +270,82 @@ test('sends env header values without recording them, even when echoed', async (
         {
           echoed: request.headers.get('authorization'),
           body: await request.text(),
-          method: request.method,
         },
-        { status: request.method === 'POST' ? 201 : 200 },
+        { status: 201 },
       ),
   });
 
   try {
-    const recipe = {
-      collectors: [
-        {
-          kind: 'api',
-          operations: [
-            {
-              id: 'create',
-              method: 'POST',
-              path: '/api/readings',
-              headers: [
-                { name: 'Authorization', env: 'API_TOKEN', prefix: 'Bearer ' },
-              ],
-              body: { json: { value: 13.2 } },
-            },
-          ],
-        },
-      ],
-      ready: [],
-      steps: [],
-    } as const;
     const environment = await Effect.runPromise(
-      // Only the fields resolveFillValues reads.
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      resolveFillValues(recipe as unknown as Recipe, { API_TOKEN: token }),
+      resolveCollectorEnvironment([echoCollector], { API_TOKEN: token }),
     );
     const value = await Effect.runPromise(
       collector.phase === 'no-browser'
         ? collector
-            .collect(recipe.collectors[0], {
-              directory: tmpdir(),
-              url: server.url.href,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-              recipe: recipe as unknown as Recipe,
-              concealed: [...environment.values()],
-              addArtifact: () => undefined,
-              environment,
-            })
+            .collect(echoCollector, { url: server.url.href, environment })
             .pipe(Effect.provide(BunServices.layer))
-        : Effect.die('api collector must not use a browser'),
+        : Effect.die('The api collector must not use a browser'),
     );
-    const [operation] = value.operations;
 
-    expect(operation?.result).toMatchObject({
+    expect(value.operations[0]?.result).toMatchObject({
       kind: 'response',
       status: 201,
       body: {
         kind: 'json',
-        value: {
-          echoed: `Bearer ${token}`,
-          body: '{"value":13.2}',
-          method: 'POST',
-        },
+        value: { echoed: `Bearer ${token}`, body: '{"value":13.2}' },
       },
     });
-    expect(redactText(json(value), [...environment.values()])).not.toContain(
-      token,
-    );
   } finally {
     await server.stop(true);
   }
+});
+
+function collect(url: string, environment = new Map<string, string>()) {
+  return Effect.runPromise(
+    collector.phase === 'no-browser'
+      ? collector
+          .collect(echoCollector, { url, environment })
+          .pipe(Effect.provide(BunServices.layer))
+      : Effect.die('The api collector must not use a browser'),
+  );
+}
+
+// Each of these would otherwise fail the whole capture or hold the body in
+// memory; recorded, they leave the operation's checks unknown.
+test('records an oversized body by size, and a request that got no answer', async () => {
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => new Response('x'.repeat(1_048_577)),
+  });
+  const token = new Map([['API_TOKEN', 'fixture-token']]);
+
+  try {
+    expect(
+      (await collect(server.url.href, token)).operations[0]?.result,
+    ).toMatchObject({ kind: 'response', body: { kind: 'too-large' } });
+    expect(
+      (await collect(server.url.href, new Map([['API_TOKEN', 'a\nb']])))
+        .operations[0]?.result.kind,
+    ).toBe('failed');
+  } finally {
+    await server.stop(true);
+  }
+
+  expect(
+    (await collect(server.url.href, token)).operations[0]?.result.kind,
+  ).toBe('failed');
+});
+
+// CI commonly expands an unavailable secret to an empty string.
+test('fails the capture when a header variable is missing or empty', async () => {
+  const failure = await Effect.runPromise(
+    Effect.flip(
+      resolveCollectorEnvironment([echoCollector], { API_TOKEN: '' }),
+    ),
+  );
+
+  expect(failure.message).toContain('API_TOKEN');
 });
 
 async function load(config: unknown) {

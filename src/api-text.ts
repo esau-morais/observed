@@ -4,9 +4,8 @@ import {
   type ContractComparison,
 } from './api-contract';
 import type { SideArtifact } from './comparison-model';
-import type { EvidenceValue, EvidenceView } from './evidence-kinds';
-
-type Recorded = EvidenceValue<'api'>['operations'][number];
+import type { EvidenceView } from './evidence-kinds';
+import type { OperationRecord as Recorded } from './evidence-kinds/api';
 
 export const apiClaimLimit =
   'Observed sent each operation once, in order, straight to the app it started for this capture, after the browser journey. A response covers that request and the data the app held then. Field changes are observations; the checks decide the result.';
@@ -33,12 +32,16 @@ export function describeResponse(operation: Recorded | null): string {
   return `${operation.result.status}, ${bodyLabels[operation.result.body.kind]}, ${operation.durationMs} ms`;
 }
 
+export const incomparableNotice =
+  "The captures aren't comparable, so statuses and fields are not compared.";
+
 export type ApiRow = {
   readonly id: string;
   readonly request: string;
   readonly base: Recorded | null;
   readonly candidate: Recorded | null;
-  // Null in a preview or when the base has no usable record.
+  // Null in a preview, when the base has no usable record, or when the
+  // captures are not comparable.
   readonly contract: ContractComparison | null;
 };
 
@@ -50,6 +53,7 @@ function recorded(view: EvidenceView<'api'> | null): readonly Recorded[] {
 export function apiRows(
   base: EvidenceView<'api'> | null,
   candidate: EvidenceView<'api'>,
+  comparable: boolean,
 ): ApiRow[] {
   const before = recorded(base);
   const after = recorded(candidate);
@@ -68,7 +72,7 @@ export function apiRows(
       base: beforeItem,
       candidate: afterItem,
       contract:
-        beforeItem === null || afterItem === null
+        !comparable || beforeItem === null || afterItem === null
           ? null
           : compareContract(beforeItem, afterItem),
     };
@@ -86,6 +90,10 @@ export function describeContract(contract: ContractComparison): string[] {
 }
 
 export function describeStatusChange(row: ApiRow): string | null {
+  if (row.contract === null) {
+    return null;
+  }
+
   const before = row.base?.result;
   const after = row.candidate?.result;
 
