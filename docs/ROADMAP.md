@@ -112,3 +112,5 @@ References for experiments: [Jev](https://docs.typesafe.ai/introduction), [Lean]
 PRODUCT.md owns scope; ARCHITECTURE.md owns contracts and boundaries; this file owns sequence, status, and open decisions. Update the owner and link to it rather than copying policy. Keep the three-file limit; add sections only when they change implementation or acceptance.
 
 This structure applies [Anthropic's context guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) and [progressive disclosure](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills). [GitHub's agent-file guidance](https://github.blog/ai-and-ml/github-copilot/how-to-write-a-great-agents-md-lessons-from-over-2500-repositories/) informs concrete commands and boundaries in AGENTS.md. Three files is a project choice, not a proven universal optimum.
+
+Throwaway control change; no viewer code changes.
