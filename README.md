@@ -525,6 +525,18 @@ the viewer against both example projects. Plain `bun test` stops with a pointer 
 these scripts. `bun run build` writes the published CLI and viewer to `dist/`.
 Test reports stay local under gitignored `evidence/`.
 
+Observed also observes itself. The root [observed.json](observed.json) serves
+the report viewer, built from the revision being captured, on a frozen
+regression report from [tests/fixtures/self-observe](tests/fixtures/self-observe),
+which also explains how to regenerate it. Three journeys check that the report
+opens on the "Regression" verdict without browser errors, new serious
+accessibility violations or a slow first paint; that the duplicate request is
+listed on its step; and that Enter opens a disclosure focused with the keyboard.
+The Observe workflow's `self-observe` job runs them on every pull request with
+the previous release of the action, pinned by commit SHA and never `./`, so the
+pull request's code is only ever the observed side. After each release, bump that
+pin to the new release's commit.
+
 To release, set the new `version` in `package.json`, add a `CHANGELOG.md`
 entry headed `## <version> (<date>)`, merge, and push the tag `v<version>`.
 [.github/workflows/release.yml](.github/workflows/release.yml) installs the

@@ -25,3 +25,32 @@ jobs:
         with:
           project: examples/request-lab
           base: ${{ github.event.pull_request.base.sha }}
+
+  # Observed observes its own report viewer with the previous release, never
+  # this checkout's action, so the pull request's code is only ever the
+  # observed side. Bump the pin after each release.
+  self-observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the base has the self-observe fixture
+        id: base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git cat-file -e "$BASE:observed.json" 2>/dev/null && git cat-file -e "$BASE:tests/fixtures/self-observe/README.md" 2>/dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Observed::The base has no observed.json or self-observe fixture, so its viewer can't be captured. Self-observation starts once they are on the base branch."
+          fi
+      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
+        if: steps.base.outputs.ready == 'true'
+        with:
+          project: .
+          base: ${{ github.event.pull_request.base.sha }}
+          timeout: '600000'
+          artifact-name: observed-self

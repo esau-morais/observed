@@ -1,0 +1,4 @@
+$ bun server.ts
+{"method":"GET","path":"/api/items"}
+{"method":"GET","path":"/api/items"}
+error: script "start" was terminated by signal SIGTERM (Polite quit request)

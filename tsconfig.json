@@ -21,5 +21,6 @@
     "examples/**/*.tsx",
     "scripts/**/*.ts",
     "*.config.ts"
-  ]
+  ],
+  "exclude": ["tests/fixtures/self-observe/**"]
 }

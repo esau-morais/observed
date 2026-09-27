@@ -1,0 +1,369 @@
+{
+  "schemaVersion": 5,
+  "kind": "capture",
+  "id": "1a015a0a-5c33-4dd5-adbf-d8e2564f0e40",
+  "label": "Candidate",
+  "application": "Request lab",
+  "source": {
+    "kind": "snapshot",
+    "sha256": "4784c077f480fb867fe768e2200a31131235b9254cb435a459f46f8c57fdd63a",
+    "entry": "server.ts",
+    "revision": {
+      "kind": "commit",
+      "commit": "305f4cdb76d710ddce3a564fa3275e37fbc78933"
+    },
+    "files": [
+      {
+        "path": "App.tsx",
+        "sha256": "881cb6aad53f713baaee1c84df3882e497dd23a9746ea02a2584824953d877c3",
+        "executable": false
+      },
+      {
+        "path": "base.ts",
+        "sha256": "5398013f251f6cbcad87488f674522c3461936bf1b522d901888f3a9673c2e31",
+        "executable": false
+      },
+      {
+        "path": "build.ts",
+        "sha256": "a7cf7f0fe982ae42792287ec52ee56c353f759f9c9fdbd20e8134af2c0fb8e19",
+        "executable": false
+      },
+      {
+        "path": "bun.lock",
+        "sha256": "8fd3b635689f232c60ec2e5c8e55c978f282910f788aaae863177dab345af606",
+        "executable": false
+      },
+      {
+        "path": "duplicate.ts",
+        "sha256": "ffda0f99cc67bb62bd7fece33b5fc3bcf59e00a37a71f3a90ce00edd8afdfcca",
+        "executable": false
+      },
+      {
+        "path": "index.html",
+        "sha256": "947f90399fb9e8debad7a891935786cd85952f5dbc79e476ba90cc1ffc95da2a",
+        "executable": false
+      },
+      {
+        "path": "items.ts",
+        "sha256": "775a93457c90aa7cf703eb27ff9a5f875fe4c2964ea3c6c1b55aef381f62c768",
+        "executable": false
+      },
+      {
+        "path": "main.tsx",
+        "sha256": "d9b42bcdf6355cba9e50dcb611403082d316f4b67a0e59ada2e7079547284379",
+        "executable": false
+      },
+      {
+        "path": "package.json",
+        "sha256": "d8b57fa79809c18a91b78a3b3a2a8dfb1be4ef1e0d12e3d2bd9704c4e5947944",
+        "executable": false
+      },
+      {
+        "path": "server.ts",
+        "sha256": "070cba275464fb88317a0dba1907af687370f520c6c1a7a8ee6fdbcc94b7f115",
+        "executable": false
+      },
+      {
+        "path": "style.css",
+        "sha256": "25e8ca1220810764d6705aee5efae670904cb0a8b56059f49b6e7d0659662a8f",
+        "executable": false
+      },
+      {
+        "path": "tokens.stylex.ts",
+        "sha256": "19bd11a35541587fdb723ec6647086f5cfc4ca0451776a9315be91c0f9ef3806",
+        "executable": false
+      }
+    ]
+  },
+  "recipe": {
+    "id": "Load items",
+    "sha256": "f4e13f8141cf5bed7a5f6b8af8e313a9351582d1185fa796f0fc7f8a41df67c9"
+  },
+  "producer": {
+    "name": "agent-browser",
+    "version": "0.38.1"
+  },
+  "observed": {
+    "version": "0.2.0-alpha.0",
+    "source": {
+      "kind": "git",
+      "commit": "305f4cdb76d710ddce3a564fa3275e37fbc78933",
+      "trackedChanges": false
+    }
+  },
+  "conditions": {
+    "kind": "recorded",
+    "value": {
+      "browser": "Chrome 154.0.8037.57",
+      "platform": "linux/x64",
+      "bun": "1.4.2",
+      "viewport": {
+        "width": 1120,
+        "height": 800,
+        "scale": 1
+      },
+      "colorScheme": "light",
+      "locale": "en-US",
+      "timezone": "UTC",
+      "inputsHash": "c3aea4a92d21f976c0f9eb67c895362bea27b0536fbca2b3fbb588cb87bd0510",
+      "dependenciesHash": "36c658e6a89320816e995c0ffe2ac98f2c523844fc5afaf638b4f5c028a5dacc"
+    }
+  },
+  "startedAt": "2026-09-27T16:44:04.086Z",
+  "finishedAt": "2026-09-27T16:44:09.391Z",
+  "execution": {
+    "kind": "complete"
+  },
+  "artifacts": [
+    {
+      "id": "source-0",
+      "path": "source/App.tsx",
+      "description": "Source snapshot: App.tsx",
+      "sha256": "881cb6aad53f713baaee1c84df3882e497dd23a9746ea02a2584824953d877c3"
+    },
+    {
+      "id": "source-1",
+      "path": "source/base.ts",
+      "description": "Source snapshot: base.ts",
+      "sha256": "5398013f251f6cbcad87488f674522c3461936bf1b522d901888f3a9673c2e31"
+    },
+    {
+      "id": "source-2",
+      "path": "source/build.ts",
+      "description": "Source snapshot: build.ts",
+      "sha256": "a7cf7f0fe982ae42792287ec52ee56c353f759f9c9fdbd20e8134af2c0fb8e19"
+    },
+    {
+      "id": "source-3",
+      "path": "source/bun.lock",
+      "description": "Source snapshot: bun.lock",
+      "sha256": "8fd3b635689f232c60ec2e5c8e55c978f282910f788aaae863177dab345af606"
+    },
+    {
+      "id": "source-4",
+      "path": "source/duplicate.ts",
+      "description": "Source snapshot: duplicate.ts",
+      "sha256": "ffda0f99cc67bb62bd7fece33b5fc3bcf59e00a37a71f3a90ce00edd8afdfcca"
+    },
+    {
+      "id": "source-5",
+      "path": "source/index.html",
+      "description": "Source snapshot: index.html",
+      "sha256": "947f90399fb9e8debad7a891935786cd85952f5dbc79e476ba90cc1ffc95da2a"
+    },
+    {
+      "id": "source-6",
+      "path": "source/items.ts",
+      "description": "Source snapshot: items.ts",
+      "sha256": "775a93457c90aa7cf703eb27ff9a5f875fe4c2964ea3c6c1b55aef381f62c768"
+    },
+    {
+      "id": "source-7",
+      "path": "source/main.tsx",
+      "description": "Source snapshot: main.tsx",
+      "sha256": "d9b42bcdf6355cba9e50dcb611403082d316f4b67a0e59ada2e7079547284379"
+    },
+    {
+      "id": "source-8",
+      "path": "source/package.json",
+      "description": "Source snapshot: package.json",
+      "sha256": "d8b57fa79809c18a91b78a3b3a2a8dfb1be4ef1e0d12e3d2bd9704c4e5947944"
+    },
+    {
+      "id": "source-9",
+      "path": "source/server.ts",
+      "description": "Source snapshot: server.ts",
+      "sha256": "070cba275464fb88317a0dba1907af687370f520c6c1a7a8ee6fdbcc94b7f115"
+    },
+    {
+      "id": "source-10",
+      "path": "source/style.css",
+      "description": "Source snapshot: style.css",
+      "sha256": "25e8ca1220810764d6705aee5efae670904cb0a8b56059f49b6e7d0659662a8f"
+    },
+    {
+      "id": "source-11",
+      "path": "source/tokens.stylex.ts",
+      "description": "Source snapshot: tokens.stylex.ts",
+      "sha256": "19bd11a35541587fdb723ec6647086f5cfc4ca0451776a9315be91c0f9ef3806"
+    },
+    {
+      "id": "recipe",
+      "path": "recipe.json",
+      "description": "Protected saved journey and expectation",
+      "sha256": "f4e13f8141cf5bed7a5f6b8af8e313a9351582d1185fa796f0fc7f8a41df67c9"
+    },
+    {
+      "id": "transcript",
+      "path": "transcript.jsonl",
+      "description": "Original producer and build command output",
+      "sha256": "514e8cd244abe4321614028612637c25e5c12ba82ddd2a07307f9542254beb38"
+    },
+    {
+      "id": "project",
+      "path": "project.json",
+      "description": "Project startup and source selection",
+      "sha256": "1f2440e652dca73b301c8bf1e22f368b03f3a650538f49592983466409d542fc"
+    },
+    {
+      "id": "server-cleanup",
+      "path": "server-cleanup.json",
+      "description": "Owned application shutdown",
+      "sha256": "d598f2c4e6412e96516b89ef42f9512d1c85d4d86a584da4bfef2cb60d418db6"
+    },
+    {
+      "id": "browser-cleanup",
+      "path": "browser-cleanup.json",
+      "description": "Owned browser shutdown",
+      "sha256": "f34796d916b8422a78f344405da0692c57b7b55d03039647976a24f9ca2d01c2"
+    },
+    {
+      "id": "owner",
+      "path": "owner.json",
+      "description": "Run-owned session and process identity",
+      "sha256": "25ed887dbd4fba87e8c7900ad03bed5d0f3f23b041f590d37ef5dec4281e7483"
+    },
+    {
+      "id": "source-transcript",
+      "path": "source-transcript.jsonl",
+      "description": "Source revision selection",
+      "sha256": "06ba1ef05e664830e4b6e0e0161a52b92713a11039027aca51eb7b287c689bd7"
+    },
+    {
+      "id": "application",
+      "path": "application.json",
+      "description": "Owned application process",
+      "sha256": "b3b46027ea163167e00b8ad8c564a53a580972c721b0c78c37fc7143ead5b653"
+    },
+    {
+      "id": "application-log",
+      "path": "application.log",
+      "description": "Application output",
+      "sha256": "42ffb7956949e7f04f46857d034f5307c54ee77920a242a5c9b1c57b59d51862"
+    },
+    {
+      "id": "browser-config",
+      "path": "browser-config.json",
+      "description": "Explicit producer configuration",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    {
+      "id": "environment",
+      "path": "environment.json",
+      "description": "agent-browser eval -b KHtsb2NhbGU6IG5hdmlnYXRvci5sYW5ndWFnZSwgdGltZXpvbmU6IEludGwuRGF0ZVRpbWVGb3JtYXQoKS5yZXNvbHZlZE9wdGlvbnMoKS50aW1lWm9uZSwgd2lkdGg6IGlubmVyV2lkdGgsIGhlaWdodDogaW5uZXJIZWlnaHQsIHNjYWxlOiBkZXZpY2VQaXhlbFJhdGlvfSk= output; credentials redacted",
+      "sha256": "0f42190a6159d9a1b96a07ddf37c6c520e16fe195c0c7089abc96090ddfcc63f"
+    },
+    {
+      "id": "snapshot",
+      "path": "snapshot.json",
+      "description": "agent-browser snapshot output; credentials redacted",
+      "sha256": "46db5ff847ee759a41c5a89aa0231bab538f134acb11b27694ce46003f4bcda2"
+    },
+    {
+      "id": "errors",
+      "path": "errors.json",
+      "description": "agent-browser errors output; credentials redacted",
+      "sha256": "2d8538f242b05f5b85b88c8fdc6a8022628d67f7199eaac0eab0146c68a18b8f"
+    },
+    {
+      "id": "console",
+      "path": "console.json",
+      "description": "agent-browser console output; credentials redacted",
+      "sha256": "a30d368029160adc58e6932d98428fc1a3af40a8fd32dea837ab7c80c4a45a09"
+    },
+    {
+      "id": "a11y",
+      "path": "a11y.json",
+      "description": "agent-browser a11y output; credentials redacted",
+      "sha256": "786eff03e9c6a6603122f825922286f407911b12579c911f1d729c5e1a3a6411"
+    },
+    {
+      "id": "evidence-accessibility",
+      "path": "evidence/accessibility.json",
+      "description": "Accessibility evidence, schema version 1; credentials redacted",
+      "sha256": "359025f24d02592d3de132cb034394eccc099671673f81e0e136b485f0baaba6"
+    },
+    {
+      "id": "evidence-timeline",
+      "path": "evidence/timeline.json",
+      "description": "Steps and resulting state evidence, schema version 1; credentials redacted",
+      "sha256": "10e91ae213285ee87fd4a5f7cd7e1ac5249b7e89f016d05c07e1c4d9fc75ec8c"
+    },
+    {
+      "id": "evidence-browser-errors",
+      "path": "evidence/browser-errors.json",
+      "description": "Browser errors evidence, schema version 1; credentials redacted",
+      "sha256": "e2bebe84264d6c547b4a017c4330980e5aac7adbd4978ee0f248a964ef738235"
+    },
+    {
+      "id": "screenshot",
+      "path": "screenshot.png",
+      "description": "Browser screenshot after the configured actions",
+      "sha256": "802af4170ebbca4ecb8ccc58e01bce0a26cbd83251e5eecd67af895cb4b7f67c"
+    },
+    {
+      "id": "request-log",
+      "path": "requests.json",
+      "description": "agent-browser network requests output; credentials redacted",
+      "sha256": "0a74a85abd5c3e2554e001c3013a47d582a6cfa3da60cbac4d1c147bd1d6b463"
+    },
+    {
+      "id": "requests",
+      "path": "requests.har",
+      "description": "Browser HAR for the recorded window; credentials redacted",
+      "sha256": "166081e066f6117742068403441d941cbc6df821fcaaebc57e43ddc624c4a4ad"
+    },
+    {
+      "id": "observations",
+      "path": "observations.json",
+      "description": "Normalized browser measurements; no imported pass/fail claims",
+      "sha256": "652eb717dd9ef70327fbabe6f3456967fdfe7695ba9e7d9a6013f2c926d79e9c"
+    },
+    {
+      "id": "source-maps",
+      "path": "source-maps.json",
+      "description": "Source maps fetched for scripts named by error frames and React sources",
+      "sha256": "25248a2dd9a00a69576d801c2babe46091d50a436b9d83fc5ebeea08d32af041"
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "accessibility",
+      "schemaVersion": 1,
+      "status": "recorded",
+      "path": "evidence/accessibility.json",
+      "sha256": "359025f24d02592d3de132cb034394eccc099671673f81e0e136b485f0baaba6",
+      "producer": {
+        "name": "agent-browser",
+        "version": "0.38.1"
+      },
+      "conditions": {}
+    },
+    {
+      "kind": "timeline",
+      "schemaVersion": 1,
+      "status": "recorded",
+      "path": "evidence/timeline.json",
+      "sha256": "10e91ae213285ee87fd4a5f7cd7e1ac5249b7e89f016d05c07e1c4d9fc75ec8c",
+      "producer": {
+        "name": "agent-browser",
+        "version": "0.38.1"
+      },
+      "conditions": {}
+    },
+    {
+      "kind": "browser-errors",
+      "schemaVersion": 1,
+      "status": "recorded",
+      "path": "evidence/browser-errors.json",
+      "sha256": "e2bebe84264d6c547b4a017c4330980e5aac7adbd4978ee0f248a964ef738235",
+      "producer": {
+        "name": "agent-browser",
+        "version": "0.38.1"
+      },
+      "conditions": {
+        "errorReads": "after-each-step"
+      }
+    }
+  ]
+}

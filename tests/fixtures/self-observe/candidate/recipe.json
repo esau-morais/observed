@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "id": "Load items",
+  "name": "Load items",
+  "path": "/",
+  "ready": [
+    {
+      "kind": "wait-text",
+      "text": "Load items"
+    },
+    {
+      "kind": "network-idle"
+    }
+  ],
+  "steps": [
+    {
+      "kind": "click-role",
+      "role": "button",
+      "name": "Load items"
+    },
+    {
+      "kind": "wait-text",
+      "text": "Items loaded"
+    },
+    {
+      "kind": "network-idle"
+    }
+  ],
+  "checks": [
+    {
+      "kind": "request-count",
+      "id": "one-items-request",
+      "name": "One request per load action",
+      "scope": "One Load items click through completion and network idle.",
+      "method": "GET",
+      "path": "/api/items",
+      "expectedCount": 1,
+      "status": 200
+    }
+  ],
+  "collectors": [
+    {
+      "kind": "accessibility"
+    },
+    {
+      "kind": "timeline"
+    },
+    {
+      "kind": "browser-errors"
+    }
+  ],
+  "viewport": {
+    "width": 1120,
+    "height": 800,
+    "scale": 1
+  },
+  "browserArguments": [
+    "--no-sandbox"
+  ],
+  "maxAgeMs": 86400000
+}
