@@ -571,18 +571,19 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: esau-morais/observed@d706b53c67fa61a841c85e3c8fbc9dbe8a5a2ce3 # v0.1.0
+      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
 ```
 
-- The full commit SHA pins the action to the `v0.1.0` release; the comment
-  names the tag. The action installs `@observed-software/cli` with the same
-  version. To upgrade, use the commit of a newer
-  [release](https://github.com/esau-morais/observed/releases) tag, or let
-  Dependabot's `github-actions` updates propose it. `@v0` follows the latest
-  0.x release, but a tag can move, so prefer the SHA.
+- The full commit SHA pins the action to the `v0.2.0-alpha.0` prerelease,
+  which this README describes; the comment names the tag. The action installs
+  `@observed-software/cli` with the same version. To upgrade, use the commit of
+  a newer [release](https://github.com/esau-morais/observed/releases) tag, or
+  let Dependabot's `github-actions` updates propose it. `@v0` follows the latest
+  0.x release, currently 0.1.0, which lacks inputs such as `job-outcome` and
+  `slack-images`. A tag can move, so prefer the SHA.
 - Set `project` to the directory holding `observed.json`, relative to the
   repository root.
 - `base` is the base commit recorded in the pull request event. It stays fixed
@@ -607,7 +608,7 @@ step before Observed's, with the version your project uses:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: esau-morais/observed@d706b53c67fa61a841c85e3c8fbc9dbe8a5a2ce3 # v0.1.0
+      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
 ```
 
 Pin those actions by full commit SHA, as here.
@@ -654,7 +655,7 @@ A journey that signs in reads its secret from an environment variable, as in
 `{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
 
 ```yaml
-      - uses: esau-morais/observed@d706b53c67fa61a841c85e3c8fbc9dbe8a5a2ce3 # v0.1.0
+      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
         env:
           LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
         with:
@@ -704,7 +705,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: esau-morais/observed@d706b53c67fa61a841c85e3c8fbc9dbe8a5a2ce3 # v0.1.0
+      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
