@@ -12,7 +12,6 @@ import {
   type Side,
 } from '../src/comparison-model';
 import type { Capture, Source } from '../src/capture/model';
-import { escapeText } from '../src/markdown';
 import { loadProject } from '../src/project';
 import { packageName, packaged } from '../src/installation';
 import { renderReportPage } from '../src/report-page';
@@ -38,9 +37,13 @@ import { describeVisual } from '../src/visual-text';
 import {
   checkSummary,
   conclusionTones,
-  executionLabels,
+  describeMeasure,
   headline,
+  headlineParts,
+  resultCounts,
+  toneSymbols,
   verdictLabels,
+  verdictTones,
   type Tone,
 } from '../src/result-text';
 
@@ -59,59 +62,85 @@ const alerts = {
   neutral: 'NOTE',
 } satisfies Record<Tone, string>;
 
-const consequences = {
-  regression: 'The job fails.',
-  'check-failed': 'The job fails.',
-  unavailable: 'Missing evidence is not a pass. The job fails.',
-  'no-regression': 'The job passes.',
-  'not-checked': 'The job passes.',
-  preview: 'A preview compares no revisions. The job passes.',
-} satisfies Record<Kind, string>;
+const controls = /[\p{Cc}\p{Zl}\p{Zp}]/gu;
 
-// GitHub autolinks bare URLs even when their punctuation is escaped, and in a
-// comment captured @mentions and #references would notify people or issues.
+// Escapes only what GitHub would render as Markdown, so an agent reading the
+// raw body gets plain text. GitHub autolinks bare URLs even when escaped, and
+// captured @mentions and #references would notify people or link issues.
 export function inlineText(value: string): string {
   return value
-    .split(/(https?:\/\/[^\s`]+)/)
+    .replace(controls, ' ')
+    .split(/((?:https?:\/\/|www\.)[^\s`]+)/)
     .map((part, index) =>
       index % 2 === 1
         ? `\`${part.replace(/\.$/, '')}\`${part.endsWith('.') ? '.' : ''}`
-        : escapeText(
-            part.replaceAll('@', '@\u200b').replaceAll('#', '#\u200b'),
-          ),
+        : part
+            .replace(/\\(?=[!-/:-@[-`{-~])/g, '\\\\')
+            .replace(/[`*[|~]/g, '\\$&')
+            .replace(/(?<![\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, '\\_')
+            .replace(/<(?=[A-Za-z/!?])/g, '\\<')
+            .replace(/&(?=#?\w+;)/g, '&amp;')
+            .replace(/@(?=\w)/g, '@​')
+            .replace(/#(?=\d)/g, '#​'),
     )
-    .join('');
+    .join('')
+    .replace(/^(\s*)(>|[#+-](?=\s))/, '$1\\$2')
+    .replace(/^(\s*\d+)([.)])(?=\s)/, '$1\\$2');
 }
 
-function revisionCell(side: Side, repository: string | null): string {
-  if (side.capture === null) {
-    return 'Unavailable';
+function code(value: string): string {
+  const flat = value.replace(controls, ' ');
+  const longest = Math.max(
+    0,
+    ...Array.from(flat.matchAll(/`+/g), (run) => run[0].length),
+  );
+  const fence = '`'.repeat(longest + 1);
+  const pad = flat.startsWith('`') || flat.endsWith('`') ? ' ' : '';
+
+  return `${fence}${pad}${flat}${pad}${fence}`;
+}
+
+// GitHub adds a copy button to a fenced block and renders nothing inside it,
+// so captured text needs no escaping there.
+function fenced(value: string): string {
+  const longest = Math.max(
+    2,
+    ...Array.from(value.matchAll(/`+/g), (run) => run[0].length),
+  );
+  const fence = '`'.repeat(longest + 1);
+
+  return [`${fence}text`, value, fence].join('\n');
+}
+
+type Revisions = { base: Source | null; head: Source | null };
+
+function revisions(result: Comparison): Revisions {
+  const source = (side: Side) => side.capture?.manifest.source ?? null;
+
+  return {
+    base:
+      result.mode === 'preview'
+        ? null
+        : (result.journeys
+            .map((journey) => source(journey.base))
+            .find((item) => item !== null) ?? null),
+    head:
+      result.journeys
+        .map((journey) => source(journey.candidate))
+        .find((item) => item !== null) ?? null,
+  };
+}
+
+function revisionLink(source: Source | null, repository: string | null) {
+  if (source === null) {
+    return 'unavailable';
   }
 
-  const revision = side.capture.manifest.source.revision;
-  const label = `\`${shortSource(side.capture.manifest.source)}\``;
+  const label = code(shortSource(source));
 
-  return repository !== null && revision.kind === 'commit'
-    ? `[${label}](${repository}/commit/${revision.commit})`
+  return repository !== null && source.revision.kind === 'commit'
+    ? `[${label}](${repository}/commit/${source.revision.commit})`
     : label;
-}
-
-export function sideChecks(side: Side): string {
-  if (side.execution !== 'complete') {
-    return 'Unknown';
-  }
-
-  const passed = side.checks.filter(
-    (check) => check.outcome === 'passed',
-  ).length;
-
-  return side.checks.length === 0
-    ? 'None configured'
-    : `${passed} of ${side.checks.length} passed`;
-}
-
-function sideRow(label: string, side: Side, repository: string | null) {
-  return `| ${label} | ${revisionCell(side, repository)} | ${executionLabels[side.execution]} | ${sideChecks(side)} |`;
 }
 
 export function journeySides(
@@ -138,49 +167,43 @@ const severity = [
   'failed',
   'unknown',
   'not-run',
-  'passed',
 ] as const satisfies readonly CheckVerdict['verdict'][];
 
-export function checkList(result: Comparison): string {
-  const entries = result.journeys.flatMap((journey) => {
-    const where =
-      result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
-    const imported = new Set(
-      journey.candidate.checks
-        .filter((check) => check.authority !== 'Executed by Observed')
-        .map((check) => check.id),
-    );
-    const folded = (check: CheckVerdict) =>
-      check.verdict === 'passed' && imported.has(check.id);
-    const passedImported = journey.checks.filter(folded).length;
+type Open = { journey: Journey; check: CheckVerdict };
 
-    return [
-      ...journey.checks
-        .filter((check) => !folded(check))
-        .map((check) => ({
-          verdict: check.verdict,
-          count: 1,
-          text: `- **${verdictLabels[check.verdict]}** · ${where}${inlineText(check.name)}. Scope: ${inlineText(check.scope)}${check.verdict === 'passed' ? '' : ` ${inlineText(check.detail)}`}`,
-        })),
-      ...(passedImported === 0
-        ? []
-        : [
-            {
-              verdict: 'passed' as const,
-              count: passedImported,
-              text: `- **${verdictLabels.passed}** · ${where}${passedImported} imported ${passedImported === 1 ? 'test' : 'tests'}, listed in the report.`,
-            },
-          ]),
-    ];
-  });
-  const ordered = severity.flatMap((verdict) =>
-    entries.filter((entry) => entry.verdict === verdict),
+function openChecks(result: Comparison): Open[] {
+  return severity.flatMap((verdict) =>
+    result.journeys.flatMap((journey) =>
+      journey.checks
+        .filter((check) => check.verdict === verdict)
+        .map((check) => ({ journey, check })),
+    ),
   );
-  const hidden = ordered.slice(listedChecks);
+}
+
+// A failing check shows its measured values; an unknown one says why it is
+// unknown, which its values alone would not.
+function reading(result: Comparison, check: CheckVerdict): string {
+  return check.measure !== undefined &&
+    (check.verdict === 'regression' || check.verdict === 'failed')
+    ? describeMeasure(check.measure, result.mode)
+    : check.detail;
+}
+
+function rowText(result: Comparison, { journey, check }: Open): string {
+  const where =
+    result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
+
+  return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}`;
+}
+
+export function checkRows(result: Comparison): string[] {
+  const open = openChecks(result);
+  const hidden = open.slice(listedChecks);
   const more = severity.flatMap((verdict) => {
-    const count = hidden
-      .filter((entry) => entry.verdict === verdict)
-      .reduce((sum, entry) => sum + entry.count, 0);
+    const count = hidden.filter(
+      ({ check }) => check.verdict === verdict,
+    ).length;
 
     return count === 0
       ? []
@@ -188,10 +211,40 @@ export function checkList(result: Comparison): string {
   });
 
   return [
-    `**${checkSummary(result)}.**`,
-    ...ordered.slice(0, listedChecks).map((entry) => entry.text),
+    ...open
+      .slice(0, listedChecks)
+      .map(
+        (item) =>
+          `- ${toneSymbols[verdictTones[item.check.verdict]]} **${verdictLabels[item.check.verdict]}** · ${rowText(result, item)}`,
+      ),
     ...(more.length === 0 ? [] : [`- More in the report: ${more.join(', ')}.`]),
-  ].join('\n');
+  ];
+}
+
+function unchanged(result: Comparison): string | null {
+  const compared = result.journeys.map((journey) => journey.comparison);
+
+  if (
+    result.mode === 'preview' ||
+    !compared.every((comparison) => comparison.kind === 'available')
+  ) {
+    return null;
+  }
+
+  const items = [
+    ...(compared.every(
+      (comparison) =>
+        comparison.visual.kind === 'identical' ||
+        comparison.visual.kind === 'below-threshold',
+    )
+      ? ['screenshots']
+      : []),
+    ...(compared.every((comparison) => comparison.requestDifference === 0)
+      ? ['request count']
+      : []),
+  ];
+
+  return items.length === 0 ? null : `Unchanged: ${items.join(', ')}.`;
 }
 
 export function describeFailure(
@@ -245,25 +298,111 @@ function alert(kind: string, lines: string[]): string {
   ].join('\n');
 }
 
-function collapsed(summary: string, items: string[]): string {
+function collapsed(summary: string, body: string): string {
   return [
     `<details><summary>${summary}</summary>`,
     '',
-    items.map((item) => `- ${item}`).join('\n'),
+    body,
     '',
     '</details>',
   ].join('\n');
 }
 
-export function summarize(options: {
+const promptedChecks = 10;
+
+// Built from the result alone, so the same run always gives the same prompt.
+function agentPrompt(
+  result: Comparison,
+  options: { artifact: string; download: string | null },
+): string {
+  const { base, head } = revisions(result);
+  const full = (source: Source | null) =>
+    source === null ? 'unavailable' : describeRevision(source.revision);
+  const open = openChecks(result);
+  const unavailable = result.journeys.flatMap((journey) =>
+    journey.comparison.kind === 'unavailable' ? journey.comparison.reasons : [],
+  );
+
+  return [
+    `Observed ran the saved journey "${result.title}" on ${result.mode === 'preview' ? '' : `base ${full(base)} and `}head ${full(head)}: ${resultCounts(result)}.`,
+    ...open
+      .slice(0, promptedChecks)
+      .flatMap(({ journey, check }) => [
+        '',
+        `${verdictLabels[check.verdict]}: ${result.journeys.length === 1 ? '' : `${journey.title}: `}${check.name}`,
+        ...(check.measure === undefined
+          ? [`- Expected: ${check.expectation}`]
+          : [`- Measured: ${describeMeasure(check.measure, result.mode)}`]),
+        `- Evidence: ${check.detail}`,
+        `- Scope: ${check.scope}`,
+      ]),
+    ...(open.length > promptedChecks
+      ? ['', `${open.length - promptedChecks} more in result.json.`]
+      : []),
+    ...(unavailable.length === 0
+      ? []
+      : ['', `Not compared: ${unavailable.join('; ')}`]),
+    '',
+    `Artifacts: ${options.download ?? `download the workflow artifact ${options.artifact}`}, then read result.json and run/report/report.md. Raw captures are in run/captures/.`,
+    '',
+    'A changed value is not a regression by itself; verify against the artifacts before changing code, and name the evidence your change addresses.',
+  ]
+    .join('\n')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, (character) =>
+      character === '\n' ? character : ' ',
+    );
+}
+
+// Hidden from readers; an agent reading the raw body finds the run here.
+function agentBlock(
+  result: Comparison | null,
+  options: { artifact: string; run: string | null },
+): string {
+  const found = result === null ? null : revisions(result);
+  const entries = [
+    ...(result === null
+      ? []
+      : [
+          `schema: ${result.schemaVersion}`,
+          `conclusion: ${result.conclusion.kind}`,
+        ]),
+    ...(found?.base === null || found === null
+      ? []
+      : [`base: ${describeRevision(found.base.revision)}`]),
+    ...(found?.head === null || found === null
+      ? []
+      : [`head: ${describeRevision(found.head.revision)}`]),
+    `artifact: ${options.artifact}`,
+    ...(options.run === null ? [] : [`run: ${options.run}`]),
+    'result: result.json',
+    'report: run/report/result.json',
+  ];
+
+  return [
+    '<!-- observed:agent',
+    ...entries.map((entry) => entry.replace(/[>\p{Cc}]/gu, '')),
+    '-->',
+  ].join('\n');
+}
+
+export type SummaryOptions = {
   output: string | null;
   exitCode: number | null;
   artifact: string;
   page: string | null;
   repository?: string | null;
   delivery?: string | null;
+  // Set only for the job summary, which says what the job does with the
+  // result; a check run or comment does not.
+  checkPosted?: boolean;
+  // False for a check run, whose title already carries the verdict line.
   headline?: boolean;
-}): Summary {
+  run?: string | null;
+  download?: string | null;
+  sourceBuild?: { commit: string | null } | null;
+};
+
+export function summarize(options: SummaryOptions): Summary {
   const decoded =
     options.output === null
       ? Option.none()
@@ -274,20 +413,33 @@ export function summarize(options: {
   const repository = Option.getOrNull(
     Schema.decodeUnknownOption(httpsUrlSchema)(options.repository ?? null),
   );
-  const bundle = `Raw evidence: workflow artifact \`${options.artifact.replaceAll('`', '')}\`. Download it and run \`bunx ${packageName}${packaged === null ? '' : `@${packaged.version}`} view <download>/run/report\`.`;
+  const artifact = options.artifact.replace(controls, '');
+  const viewer =
+    options.sourceBuild === undefined || options.sourceBuild === null
+      ? `run \`bunx ${packageName}${packaged === null ? '' : `@${packaged.version}`} view <download>/run/report\``
+      : `run \`bun run view <download>/run/report\` in an Observed checkout${options.sourceBuild.commit === null ? '' : ` at ${code(options.sourceBuild.commit.slice(0, 7))}`}, since this job built Observed from source`;
+  const bundle = `Raw evidence: workflow artifact ${code(artifact)}. Download it and ${viewer}.`;
   const exit = `Observed exited with code ${formatExit(options.exitCode)}.`;
+  const extra = (value: string | null | undefined) =>
+    value === undefined || value === null ? [] : [value];
+  const job = (fails: boolean) =>
+    options.checkPosted === undefined || !fails
+      ? []
+      : [jobOutcome(options.checkPosted)];
+  const block = (result: Comparison | null) =>
+    agentBlock(result, { artifact, run: options.run ?? null });
   const untrusted = (reason: string) => ({
     markdown: [
+      block(null),
       alert('WARNING', [
         ...(options.headline === false
           ? []
           : ['**No result. Treat this run as unavailable, not passed.**']),
-        `${reason} The job fails. The job log has details.`,
+        `${reason} The job log has details.`,
       ]),
+      ...job(true),
       bundle,
-      ...(options.delivery === undefined || options.delivery === null
-        ? []
-        : [options.delivery]),
+      ...extra(options.delivery),
     ].join('\n\n'),
     trusted: false,
     title: 'No result: treat this run as unavailable',
@@ -316,17 +468,14 @@ export function summarize(options: {
   const failures = labelled.flatMap(([label, side]) =>
     describeFailure(label, side.capture?.manifest.execution),
   );
-  const reasons =
-    failures.length > 0
-      ? failures
-      : result.journeys.flatMap((journey) =>
-          journey.comparison.kind === 'unavailable'
-            ? journey.comparison.reasons.map(
-                (reason) =>
-                  `- ${result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `}${inlineText(reason)}`,
-              )
-            : [],
-        );
+  const unavailableReasons = result.journeys.flatMap((journey) =>
+    journey.comparison.kind === 'unavailable'
+      ? journey.comparison.reasons.map(
+          (reason) =>
+            `${result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `}${inlineText(reason)}`,
+        )
+      : [],
+  );
   const visuals = result.journeys.flatMap((journey) =>
     journey.comparison.kind === 'available' &&
     (journey.comparison.visual.kind === 'changed' ||
@@ -336,55 +485,74 @@ export function summarize(options: {
         ]
       : [],
   );
-  const revisions = labelled.flatMap(([label, side]) =>
-    side.capture === null
-      ? []
-      : [
-          `${label}: \`${describeRevision(side.capture.manifest.source.revision)}\``,
-        ],
-  );
   const limitations = [
     ...new Set(result.journeys.flatMap((journey) => journey.limitations)),
   ];
+  const reasons =
+    failures.length > 0
+      ? failures
+      : unavailableReasons.map((reason) => `- ${reason}`);
+  const { label, subject } = headlineParts(result);
+  const counts =
+    result.summary.total === 0 ? checkSummary(result) : resultCounts(result);
+  const open = openChecks(result);
+  const { base, head } = revisions(result);
+  // A single open check is the verdict line itself, except in a check run,
+  // whose title already carries its values.
+  const [only] = open.length === 1 && options.headline !== false ? open : [];
+  const rows = only === undefined ? checkRows(result) : [];
 
   const markdown = [
+    block(result),
     alert(alerts[conclusionTones[kind]], [
       ...(options.headline === false
         ? []
-        : [`**${inlineText(headline(result))}**`]),
-      `${inlineText(result.conclusion.text.replace(/\.?$/, '.'))} ${consequences[kind]}`,
-    ]),
-    [
-      '| | Revision | Capture | Checks |',
-      '| --- | --- | --- | --- |',
-      ...labelled.map(([label, side]) => sideRow(label, side, repository)),
-    ].join('\n'),
-    ...(reasons.length === 0 ? [] : [reasons.join('\n')]),
-    ...(result.summary.total === 0 ? [] : [checkList(result)]),
-    ...visuals,
-    ...(page === null ? [] : [`**[Open the report](${page})**`]),
-    ...(page === null ? [`No report page was uploaded. ${bundle}`] : []),
-    collapsed('Limits and raw evidence', [
-      ...(failures.length > 0
-        ? result.journeys.flatMap((journey) =>
-            journey.comparison.kind === 'unavailable'
-              ? journey.comparison.reasons.map(inlineText)
-              : [],
-          )
-        : []),
-      ...limitations.map(inlineText),
-      ...revisions,
-      ...(page === null
-        ? []
         : [
-            'The report opens for signed-in users who can read this repository, until the artifact expires.',
-            bundle,
+            `**${label}** · ${only === undefined ? inlineText(subject) : rowText(result, only)}`,
           ]),
-      ...(options.delivery === undefined || options.delivery === null
-        ? []
-        : [options.delivery]),
-      exit,
+      kind === 'unavailable'
+        ? `${counts}. Missing evidence is not a pass.`
+        : counts,
     ]),
+    ...(rows.length === 0 ? [] : [rows.join('\n')]),
+    ...extra(reasons.length === 0 ? null : reasons.join('\n')),
+    ...extra(unchanged(result)),
+    ...visuals,
+    page === null
+      ? `No report page was uploaded. ${bundle}`
+      : `**[Open the report](${page})**`,
+    ...job(options.exitCode !== 0),
+    ...(open.length === 0 && kind !== 'unavailable'
+      ? []
+      : [
+          collapsed(
+            'Prompt for your agent',
+            fenced(
+              agentPrompt(result, {
+                artifact,
+                download: options.download ?? null,
+              }),
+            ),
+          ),
+        ]),
+    collapsed(
+      'Run details and limits',
+      [
+        ...(failures.length > 0 ? unavailableReasons : []),
+        ...limitations.map(inlineText),
+        ...(page === null
+          ? []
+          : [
+              'The report opens for signed-in users who can read this repository, until the artifact expires.',
+              bundle,
+            ]),
+        ...extra(options.delivery),
+        exit,
+      ]
+        .map((item) => `- ${item}`)
+        .join('\n'),
+    ),
+    `<sub>${inlineText(checkName(options.artifact))} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}</sub>`,
   ].join('\n\n');
 
   return { markdown, trusted: true, title: headline(result), kind };
@@ -473,6 +641,23 @@ export function candidateIdentity(
   return identities.includes('match') ? 'match' : 'unavailable';
 }
 
+export function jobOutcome(checkPosted: boolean): string {
+  return checkPosted
+    ? 'The Observed check carries this result, so this job passes. Require that check, not the job.'
+    : 'The job fails, because no Observed check carries this result.';
+}
+
+function captureStart(result: Comparison): string | null {
+  const [first] = result.journeys
+    .flatMap((journey) => [journey.base, journey.candidate])
+    .flatMap((side) =>
+      side.capture === null ? [] : [side.capture.manifest.startedAt],
+    )
+    .sort();
+
+  return first ?? null;
+}
+
 function link(label: string, url: string | null): string | null {
   return url !== null && Schema.is(httpsUrlSchema)(url)
     ? `[${label}](${url})`
@@ -510,6 +695,36 @@ async function writeSummary(markdown: string) {
   await appendFile(file, `${markdown}\n`);
 }
 
+// Options every rendering of this run shares: the job summary, the check run
+// and the pull request comment.
+function runContext(args: {
+  resultFile: string;
+  exitCode: string;
+  artifact: string;
+  page: string;
+}) {
+  const run = environment('GITHUB_RUN_ID');
+  const repository = environment('GITHUB_REPOSITORY');
+
+  return {
+    exitCode: Option.getOrNull(
+      Schema.decodeUnknownOption(exitCodeSchema)(args.exitCode),
+    ),
+    artifact: args.artifact,
+    page: args.page === '' ? null : args.page,
+    repository: repositoryUrl(),
+    run: /^\d+$/.test(run) ? run : null,
+    download:
+      /^\d+$/.test(run) && /^[\w.-]+\/[\w.-]+$/.test(repository)
+        ? `gh run download ${run} -R ${repository} -n '${args.artifact.replaceAll("'", '')}'`
+        : null,
+    sourceBuild:
+      environment('OBSERVED_FROM_SOURCE') === 'true'
+        ? { commit: packaged?.commit ?? null }
+        : null,
+  };
+}
+
 async function readOptional(file: string): Promise<string | null> {
   try {
     return await readFile(file, 'utf8');
@@ -523,7 +738,7 @@ async function readOptional(file: string): Promise<string | null> {
 }
 
 async function notRun(reason: string): Promise<never> {
-  await writeSummary(['## Observed: not run', escapeText(reason)].join('\n\n'));
+  await writeSummary(['## Observed: not run', inlineText(reason)].join('\n\n'));
   process.stderr.write(`Observed: ${reason}\n`);
   process.exit(1);
 }
@@ -576,15 +791,8 @@ if (import.meta.main) {
     const [resultFile = '', exitCode = '', artifact = '', page = ''] = args;
     const output = await readOptional(resultFile);
     const repository = repositoryUrl();
-    const summary = summarize({
-      output,
-      exitCode: Option.getOrNull(
-        Schema.decodeUnknownOption(exitCodeSchema)(exitCode),
-      ),
-      artifact,
-      page: page === '' ? null : page,
-      repository,
-    });
+    const context = runContext({ resultFile, exitCode, artifact, page });
+    const summary = summarize({ output, ...context });
     const headSha = environment('OBSERVED_HEAD_SHA');
     const decoded =
       output === null
@@ -647,25 +855,26 @@ if (import.meta.main) {
 
     const name = checkName(artifact);
     const marker = commentMarker(artifact);
-    const checkUrl = github
-      ? await attempt('GitHub check', () =>
-          postCheckRun(target, {
+    const check = github
+      ? await attempt('GitHub check', async () => ({
+          url: await postCheckRun(target, {
             name,
             title: summary.title,
-            markdown: summarize({
-              output,
-              exitCode: Option.getOrNull(
-                Schema.decodeUnknownOption(exitCodeSchema)(exitCode),
-              ),
-              artifact,
-              page: page === '' ? null : page,
-              repository,
-              headline: false,
-            }).markdown,
+            markdown: summarize({ output, ...context, headline: false })
+              .markdown,
             conclusion: checkConclusion(summary.kind),
+            startedAt: Option.isNone(decoded)
+              ? null
+              : captureStart(decoded.value.result),
           }),
-        )
+        }))
       : null;
+    const checkUrl = check?.url ?? null;
+
+    if (check !== null) {
+      await writeOutput('check', 'posted');
+    }
+
     const lookup = github
       ? await attempt('pull request comment', async () => ({
           comment: await findComment(target, marker),
@@ -754,9 +963,6 @@ if (import.meta.main) {
               marker,
               [
                 ...(slackState === null ? [] : [writeSlackState(slackState)]),
-                ...(name === 'Observed'
-                  ? []
-                  : [`<sub>${inlineText(name)}</sub>`, '']),
                 summary.markdown,
               ].join('\n'),
             ),
@@ -775,14 +981,11 @@ if (import.meta.main) {
     );
   } else if (command === 'summary' && args.length === 4) {
     const [resultFile = '', exitCode = '', artifact = '', page = ''] = args;
+    const context = runContext({ resultFile, exitCode, artifact, page });
     const summary = summarize({
       output: await readOptional(resultFile),
-      exitCode: Option.getOrNull(
-        Schema.decodeUnknownOption(exitCodeSchema)(exitCode),
-      ),
-      artifact,
-      page: page === '' ? null : page,
-      repository: repositoryUrl(),
+      ...context,
+      checkPosted: environment('OBSERVED_CHECK_POSTED') === 'true',
       delivery: deliveryNote({
         note: environment('OBSERVED_DELIVERY_NOTE'),
         configured: environment('OBSERVED_APP_CONFIGURED') === 'true',
@@ -792,10 +995,7 @@ if (import.meta.main) {
     });
 
     await writeSummary(summary.markdown);
-
-    if (!summary.trusted) {
-      process.exit(1);
-    }
+    await writeOutput('trusted', String(summary.trusted));
   } else {
     process.stderr.write(
       'Usage: github-action.ts preflight <project> | page <report-directory> <result.json> <output.html> | summary|deliver <result.json> <exit-code> <artifact-name> <page-url>\n',

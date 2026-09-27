@@ -196,6 +196,7 @@ function evaluateSide(
     outcome: combine(parts),
     actual: describeSummary(check, summary),
     detail: parts.map((part) => part.detail).join(' '),
+    reading: formatMetric(check.metric, summary.median),
   };
 }
 
@@ -260,6 +261,21 @@ export const performance = defineCheck({
   evidence: ['performance'],
   collectors: () => [{ kind: 'performance' }],
   expectation,
+  measure: (check) => {
+    const limits = [
+      ...(check.max === undefined
+        ? []
+        : [`at most ${formatMetric(check.metric, check.max)}`]),
+      ...(check.maxIncreasePercent === undefined
+        ? []
+        : [`+${check.maxIncreasePercent}% on base`]),
+    ];
+
+    return {
+      label: `Median ${metricAbbreviations[check.metric]}`,
+      limit: limits.join(' and '),
+    };
+  },
   needsBase: (definition) => definition.maxIncreasePercent !== undefined,
   evaluate: ({ definition, base, candidate, comparable }) =>
     evaluatePerformance({

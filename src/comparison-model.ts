@@ -201,6 +201,15 @@ const conclusionSchema = Schema.Struct({
   text,
 });
 
+// The quantity a check compares, formatted once so every adapter shows the
+// same values. It never holds captured page text.
+const measureSchema = Schema.Struct({
+  label: text,
+  base: Schema.NullOr(text),
+  candidate: Schema.NullOr(text),
+  limit: Schema.NullOr(text),
+});
+
 // One verdict per configured check, derived once from both sides so delivery
 // renders it without recomputing.
 const checkVerdictSchema = Schema.Struct({
@@ -216,6 +225,7 @@ const checkVerdictSchema = Schema.Struct({
     'not-run',
   ]),
   detail: text,
+  measure: Schema.optionalKey(measureSchema),
 });
 
 export const journeySchema = Schema.Struct({
@@ -267,6 +277,8 @@ export type Comparison = typeof comparisonSchema.Type;
 export type Journey = typeof journeySchema.Type;
 
 export type CheckVerdict = typeof checkVerdictSchema.Type;
+
+export type Measure = typeof measureSchema.Type;
 
 export type Conclusion = typeof conclusionSchema.Type;
 

@@ -1,4 +1,10 @@
-import type { Check, CheckVerdict, Comparison, Side } from './comparison-model';
+import type {
+  Check,
+  CheckVerdict,
+  Comparison,
+  Measure,
+  Side,
+} from './comparison-model';
 
 type Kind = Comparison['conclusion']['kind'];
 
@@ -73,30 +79,69 @@ export function checkSummary(result: Comparison): string {
     : `${passed} of ${total} ${total === 1 ? 'check' : 'checks'} passed`;
 }
 
-export function headline(result: Comparison): string {
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+// The pull request line from the original product research. "Automatically
+// fixed" joins it once repair exists.
+export function resultCounts(result: Comparison): string {
+  const verdicts = result.journeys.flatMap((journey) =>
+    journey.checks.map((check) => check.verdict),
+  );
+  const count = (...kinds: CheckVerdict['verdict'][]) =>
+    verdicts.filter((verdict) => kinds.includes(verdict)).length;
+
+  return [
+    `${plural(count('regression', 'failed'), 'issue', 'issues')} found`,
+    `${plural(count('passed'), 'behavior', 'behaviors')} verified`,
+    `${count('unknown', 'not-run')} unresolved`,
+  ].join(' · ');
+}
+
+export function describeMeasure(
+  measure: Measure,
+  mode: Comparison['mode'],
+): string {
+  const value = (reading: string | null) => reading ?? 'unknown';
+  const values =
+    mode === 'preview'
+      ? value(measure.candidate)
+      : `${value(measure.base)} → ${value(measure.candidate)}`;
+
+  return `${measure.label} ${values}${measure.limit === null ? '' : `, ${measure.limit}`}`;
+}
+
+const leadingVerdicts = {
+  regression: 'regression',
+  'check-failed': 'failed',
+  unavailable: 'unknown',
+  'no-regression': null,
+  'not-checked': null,
+  preview: null,
+} satisfies Record<Kind, CheckVerdict['verdict'] | null>;
+
+// The verdict and the one reading that explains it, short enough for a check
+// run title or a notification.
+export function headlineParts(result: Comparison): {
+  label: string;
+  subject: string;
+} {
   const kind = result.conclusion.kind;
   const [first, ...rest] = result.journeys.flatMap((journey) =>
-    journey.checks.filter(
-      (item) =>
-        (kind === 'regression' && item.verdict === 'regression') ||
-        (kind === 'check-failed' && item.verdict === 'failed'),
-    ),
+    journey.checks.filter((check) => check.verdict === leadingVerdicts[kind]),
   );
   let subject = result.title;
 
   if (first !== undefined) {
-    subject =
-      rest.length === 0 ? first.name : `${first.name} and ${rest.length} more`;
-  } else if (kind === 'no-regression') {
-    const [only, ...others] = result.journeys.flatMap(
-      (journey) => journey.checks,
-    );
-
-    subject =
-      only !== undefined && others.length === 0
-        ? only.name
-        : checkSummary(result);
+    subject = `${first.measure === undefined ? first.name : describeMeasure(first.measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
   }
 
-  return `${conclusionLabels[kind]}: ${subject}`;
+  return { label: conclusionLabels[kind], subject };
+}
+
+export function headline(result: Comparison): string {
+  const { label, subject } = headlineParts(result);
+
+  return `${label}: ${subject}`;
 }

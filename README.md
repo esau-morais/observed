@@ -601,9 +601,17 @@ Pin those actions by full commit SHA, as here.
 
 The job also fails when `observed.json` is rejected before capture, when Observed
 writes no readable result, or when the result disagrees with the exit code.
+With the [GitHub App](#post-results-to-the-pull-request), a failing result fails
+the Observed check instead, and the job passes.
 
-The job summary states the conclusion, each side's revision, capture state, and
-check outcome, and why a capture failed. Its **Open the report** link opens
+The job summary opens with the verdict and the values that decided it, such as
+`Median LCP 52 ms → 452 ms, at most 250 ms`, then one line per failing or
+unknown check and a count of the rest. It says why a capture failed and names
+the base and head commits. **Prompt for your agent** holds a copyable prompt
+built from the result: the values, commits, evidence and artifact paths, and
+the reminder that a changed value is not a regression by itself. A hidden
+`<!-- observed:agent -->` block lists the result schema version, commits,
+artifact name and `result.json` paths. Its **Open the report** link opens
 `observed-bundle.html` in the browser: the same report as `observed view`, with
 the screenshots, changed regions, checks, requests and original artifacts in
 one file. GitHub shows it only to signed-in users who can read the repository;
@@ -644,9 +652,10 @@ written, so never write a password as a literal value.
 ### Post results to the pull request
 
 With a GitHub App, the action also posts each result as an **Observed** check run
-and as a pull request comment. The check shows in the merge box, and its
-Details link opens the report page. The comment has the same verdict, revisions
-and report link, and later runs edit it instead of adding new ones. A workflow
+and as a pull request comment. The check shows in the merge box with the
+deciding values in its title, and its Details link opens the report page. The
+comment has the same verdict, checks, prompt and report link as the job summary,
+and later runs edit it instead of adding new ones. A workflow
 that calls the action more than once, such as a matrix, gets one check and one
 comment per `artifact-name`. The App needs
 no server or webhook: the job creates a short-lived token after capture finishes.
@@ -699,6 +708,12 @@ GitHub treats a neutral check as passing when you make it required, so a project
 without a named check can merge on a neutral Observed check. Add a check to
 `observed.json` before you require it.
 
+Once the App has posted the check, the job passes and the Observed check carries
+the verdict, so the merge box shows one failing row, not two. Make the
+**Observed** check required in branch protection, never the workflow job. When
+the App is missing or posting the check fails, the job fails on Observed's result
+as the exit code table says. To fail the job as well, set `job-outcome: result`.
+
 Pull requests from forks and Dependabot receive no secrets, so the App posts
 nothing for them. The job summary still shows the result and says why nothing
 was posted, and the job passes or fails on Observed's result as before. A
@@ -713,10 +728,11 @@ evidence. Later runs of that pull request edit the same message, including a
 recovery to no regression, so retries don't notify anyone again. A pull request
 that never fails posts nothing, and runs outside pull requests post nothing.
 
-The message has the same headline as the GitHub check, each side's revision,
-capture and check outcome, and links to the pull request, report page, check and
-workflow run. It leaves out measured values and captured text, because a
-channel can include people who can't read the repository. A workflow that runs
+The message has the same headline as the GitHub check, including the deciding
+measured values, each side's revision, capture and check outcome, and links to
+the pull request, report page, check and workflow run. It leaves out captured
+text, such as error messages and page text, because a channel can include people
+who can't read the repository. A workflow that runs
 the action more than once gets one message per `artifact-name`.
 
 Editing the earlier message needs the GitHub App above, because its comment

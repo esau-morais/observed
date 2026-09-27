@@ -89,6 +89,10 @@ export const apiStatus = defineCheck({
     missingOperations(check, [check.operation], collectors),
   expectation: (check) =>
     `Operation ${check.operation} answers with status ${check.status}.`,
+  measure: (check) => ({
+    label: `${check.operation} status`,
+    limit: `expected ${check.status}`,
+  }),
   evaluate: perSide((check, { evidence }) => {
     const found = response(evidence.api.operations, check.operation);
 

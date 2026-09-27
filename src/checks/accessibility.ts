@@ -22,6 +22,10 @@ export const accessibility = defineCheck({
   collectors: () => [{ kind: 'accessibility' }],
   expectation: (check) =>
     `No new ${check.impact ?? defaultImpact} or higher axe-core violations compared with base.`,
+  measure: (check) => ({
+    label: `New ${check.impact ?? defaultImpact} or higher violations`,
+    limit: 'none allowed',
+  }),
   evaluate: ({ definition: check, base, candidate }) =>
     evaluateAccessibility({
       threshold: check.impact ?? defaultImpact,

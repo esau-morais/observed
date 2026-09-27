@@ -58,7 +58,7 @@ test('captured names cannot mention anyone in Slack, and captured values stay ou
   const [journey] = result.journeys;
   const verdict = {
     id: 'total',
-    name: 'Order total',
+    name: 'Order total <!channel> <@U123>',
     scope: 'One checkout',
     expectation: 'Exactly one .total element with text "$10".',
   };
@@ -91,7 +91,9 @@ test('captured names cannot mention anyone in Slack, and captured values stay ou
   expect(message).not.toMatch(/<!channel>|<@U123>/);
   expect(message).toContain('&lt;!channel&gt;');
   expect(message).toContain('1 of 2 checks passed');
-  expect(message).toContain('Unknown · Order total. Scope: One checkout');
+  expect(message).toContain(
+    'Unknown · Order total &lt;!channel&gt; &lt;@U123&gt;. Scope: One checkout',
+  );
   expect(message).not.toContain('Captured page text');
   expect(message).not.toContain('Captured item text');
 });

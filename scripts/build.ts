@@ -25,12 +25,20 @@ async function git(...args: string[]) {
   return result.exitCode === 0 ? result.stdout.toString().trim() : null;
 }
 
-const commit = await git('rev-parse', '--verify', 'HEAD^{commit}');
+const checkout = await git('rev-parse', '--verify', 'HEAD^{commit}');
+// GitHub downloads an action pinned by SHA without its Git history, so
+// action.yml passes that SHA to a source build.
+const downloaded = /^[0-9a-f]{40}$/.test(
+  process.env.OBSERVED_SOURCE_COMMIT ?? '',
+)
+  ? (process.env.OBSERVED_SOURCE_COMMIT ?? null)
+  : null;
+const commit = checkout ?? downloaded;
 const status =
-  commit === null
+  checkout === null
     ? null
     : await git('status', '--porcelain', '--untracked-files=no');
-if (commit !== null && status === null) {
+if (checkout !== null && status === null) {
   console.error(
     'git status failed, so the build cannot say whether it has changes',
   );

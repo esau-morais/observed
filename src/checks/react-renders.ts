@@ -78,6 +78,10 @@ export const reactRenders = defineCheck({
   evidence: ['react'],
   collectors: () => [{ kind: 'react' }],
   expectation,
+  measure: (check) => ({
+    label: `${check.component} renders`,
+    limit: `at most ${check.maxRenders}`,
+  }),
   evaluate: ({ definition: check, base, candidate, comparable }) => {
     const before =
       base === null ? null : evaluateReactRenders(check, base.evidence.react);

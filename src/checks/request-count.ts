@@ -25,6 +25,10 @@ export const requestCount = defineCheck({
   collectors: () => [],
   expectation: (check) =>
     `Exactly ${check.expectedCount} ${check.method} ${check.origin ?? ''}${check.path} request(s) with status ${check.status}.`,
+  measure: (check) => ({
+    label: `${check.method} ${check.path} requests`,
+    limit: `exactly ${check.expectedCount}`,
+  }),
   evaluate: perSide((check, { observations }) => {
     const requests = observations.requests.filter(
       (request) =>

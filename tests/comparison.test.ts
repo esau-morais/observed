@@ -47,7 +47,8 @@ import { renderComparison } from '../src/comparison-report';
 import { exportComparison } from '../src/export';
 import { encodeRgbPng } from '../src/png';
 import { serveReport } from '../src/view';
-import { checkList } from '../scripts/github-action';
+import { checkRows } from '../scripts/github-action';
+import { resultCounts } from '../src/result-text';
 import { collectReport } from '../src/playwright/collect';
 import { parseJsonReport } from '../src/playwright/report';
 
@@ -1985,6 +1986,33 @@ test('an absolute performance budget still fails the candidate when the base is 
   expect(relative.detail).toContain('Base: capture unavailable');
 });
 
+test('the measure delivery shows is the median each side was judged on, and unknown when a side was not judged', async () => {
+  const definition = { ...performanceBudget, maxIncreasePercent: 20 };
+  const candidate = await performanceSide('slow-document.json');
+
+  expect(
+    evaluateCheck(checkKinds.performance, definition, {
+      base: await performanceSide('base.json'),
+      candidate,
+      mode: 'comparison',
+      comparable: true,
+    }).measure,
+  ).toEqual({
+    label: 'Median LCP',
+    base: '32 ms',
+    candidate: '428 ms',
+    limit: 'at most 200 ms and +20% on base',
+  });
+  expect(
+    evaluateCheck(checkKinds.performance, definition, {
+      base: null,
+      candidate,
+      mode: 'comparison',
+      comparable: false,
+    }).measure,
+  ).toMatchObject({ base: null, candidate: null });
+});
+
 test('a candidate with browser errors fails without a usable base instead of becoming unknown', async () => {
   const check = {
     kind: 'browser-errors',
@@ -2203,20 +2231,20 @@ test('GitHub lists failures before a long run of unknown tests', async () => {
   const skipped = Array.from({ length: 60 }, (_, index) =>
     playwrightTest(`skipped ${index}`, 'skipped'),
   );
-  const list = checkList(
+  const list = checkRows(
     single(
       await playwrightJourney({
         base: [...skipped, playwrightTest('late', 'expected')],
         candidate: [...skipped, playwrightTest('late', 'unexpected')],
       }),
     ),
-  ).split('\n');
+  );
 
-  expect(list[1]).toMatch(/^- \*\*Regression\*\* · late\. /);
+  expect(list[0]).toMatch(/^- ! \*\*Regression\*\* · late · /);
   expect(list.at(-1)).toBe('- More in the report: 11 unknown.');
 });
 
-test('GitHub lists a large imported suite in one line and never every passing test', async () => {
+test('GitHub counts the passing tests of a large imported suite and lists only the failure', async () => {
   const passing = Array.from({ length: 400 }, (_, index) =>
     playwrightTest(`case ${index}`, 'expected'),
   );
@@ -2226,13 +2254,12 @@ test('GitHub lists a large imported suite in one line and never every passing te
       candidate: [...passing.slice(1), playwrightTest('case 0', 'unexpected')],
     }),
   );
-  const list = checkList(result);
-
   expect(result.summary).toEqual({ passed: 399, total: 400 });
-  expect(list.split('\n')).toEqual([
-    '**399 of 400 checks passed.**',
-    expect.stringMatching(/^- \*\*Regression\*\* · case 0\. Scope: /),
-    '- **Passed** · 399 imported tests, listed in the report.',
+  expect(resultCounts(result)).toBe(
+    '1 issue found · 399 behaviors verified · 0 unresolved',
+  );
+  expect(checkRows(result)).toEqual([
+    expect.stringMatching(/^- ! \*\*Regression\*\* · case 0 · /),
   ]);
   expect(result.conclusion.text.length).toBeLessThan(2000);
 });

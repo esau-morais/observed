@@ -37,6 +37,9 @@ inputs:
   slack-channel:
     description: ID of the Slack channel to post to, such as C0123456789. Invite the bot to it first.
     default: ''
+  job-outcome:
+    description: 'check: when the GitHub App posted the Observed check, the job passes and that check carries the result, so require the check rather than the job. result: the job also fails whenever the result fails or is unavailable.'
+    default: check
 
 runs:
   using: composite
@@ -55,6 +58,9 @@ runs:
       run: |
         cli="$(mktemp -d "$RUNNER_TEMP/observed-cli-XXXXXX")"
         if [ "${OBSERVED_FROM_SOURCE:-}" = true ]; then
+          # The runner stores an action pinned by SHA under that SHA, without Git history.
+          ref="$(basename "$GITHUB_ACTION_PATH")"
+          if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then export OBSERVED_SOURCE_COMMIT="$ref"; fi
           (cd "$GITHUB_ACTION_PATH" && bun install --frozen-lockfile && bun run build && bun pm pack --destination "$cli" --quiet >/dev/null)
           package="$(ls "$cli"/*.tgz)"
         else
@@ -170,6 +176,7 @@ runs:
       run: bun "$OBSERVED_SCRIPT" deliver "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 
     - name: Summarize the result
+      id: summary
       if: always() && steps.observe.outcome != 'skipped'
       shell: bash
       env:
@@ -181,14 +188,23 @@ runs:
         OBSERVED_APP_CONFIGURED: ${{ inputs.github-app-client-id != '' || inputs.github-app-private-key != '' || inputs.slack-channel != '' }}
         OBSERVED_UNTRUSTED_SOURCE: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
         OBSERVED_APP_TOKEN_OUTCOME: ${{ steps.app-token.outcome }}
+        OBSERVED_CHECK_POSTED: ${{ inputs.job-outcome == 'check' && steps.deliver.outputs.check == 'posted' }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: bun "$OBSERVED_SCRIPT" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 
+    # With job-outcome: check, a posted check run carries the verdict, so the
+    # merge box shows one failing row instead of the check and this job.
     - name: Fail unless Observed found no failure
-      if: steps.observe.outputs.exit-code != '0'
+      if: steps.observe.outputs.exit-code != '0' || steps.summary.outputs.trusted != 'true'
       shell: bash
       env:
         OBSERVED_EXIT: ${{ steps.observe.outputs.exit-code }}
+        OBSERVED_CHECK_POSTED: ${{ inputs.job-outcome == 'check' && steps.deliver.outputs.check == 'posted' }}
       run: |
-        echo "Observed exited with $OBSERVED_EXIT. See the job summary."
+        if [ "$OBSERVED_CHECK_POSTED" = true ]; then
+          echo "The Observed check carries this result. See the job summary."
+          exit 0
+        fi
+        echo "Observed exited with ${OBSERVED_EXIT:-no code}. See the job summary."
+        if [ "${OBSERVED_EXIT:-0}" = 0 ]; then exit 1; fi
         exit "$OBSERVED_EXIT"

@@ -112,6 +112,7 @@ export async function postCheckRun(
     title: string;
     markdown: string;
     conclusion: 'success' | 'failure' | 'neutral';
+    startedAt: string | null;
   },
 ): Promise<string | null> {
   const run = await request(
@@ -123,6 +124,7 @@ export async function postCheckRun(
       name: check.name,
       head_sha: target.headSha,
       status: 'completed',
+      ...(check.startedAt === null ? {} : { started_at: check.startedAt }),
       conclusion: check.conclusion,
       details_url: target.detailsUrl,
       output: {

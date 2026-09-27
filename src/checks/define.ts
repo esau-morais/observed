@@ -24,6 +24,9 @@ export type Evaluation = {
   readonly outcome: 'passed' | 'failed' | 'unknown' | 'not-run';
   readonly actual: number | string | null;
   readonly detail: string;
+  // The measured value as delivery shows it, when a numeric actual alone
+  // would lose its unit or summary.
+  readonly reading?: string;
 };
 
 export type Evaluated<K extends EvidenceKind> = CheckInput<K> & {
@@ -39,6 +42,9 @@ export type CheckKind<D extends CheckIdentity, K extends EvidenceKind> = {
     definitions: readonly D[],
   ) => readonly CollectorConfig[];
   readonly expectation: (definition: D) => string;
+  // Names the compared quantity and its limit for a kind whose readings are
+  // numbers. Captured page text never belongs here.
+  readonly measure?: (definition: D) => { label: string; limit: string | null };
   // Configuration problems found against the journey's collectors, reported
   // when the project loads.
   readonly validate?: (

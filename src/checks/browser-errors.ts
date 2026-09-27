@@ -90,6 +90,7 @@ export const browserErrors = defineCheck({
       ? 'No uncaught page errors or console errors during the recorded steps.'
       : `No uncaught page errors or console errors during the recorded steps, except messages matching ${ignore.map((pattern) => JSON.stringify(pattern)).join(', ')}.`;
   },
+  measure: () => ({ label: 'Browser errors', limit: 'none allowed' }),
   evaluate: perSide((check, { evidence }) => {
     const record = evidence['browser-errors'];
 

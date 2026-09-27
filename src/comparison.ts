@@ -38,6 +38,7 @@ import type {
   Conclusion,
   Journey,
   JourneySelection,
+  Measure,
   Selection,
   Side,
   SideArtifact,
@@ -184,6 +185,7 @@ export type CheckPair = {
   candidate: Check;
   // Set when a comparable, known pair establishes a regression.
   regression: string | null;
+  measure?: Measure;
 };
 
 const unknownEvaluation = (detail: string): Evaluation => ({
@@ -191,6 +193,20 @@ const unknownEvaluation = (detail: string): Evaluation => ({
   actual: null,
   detail,
 });
+
+function reading(evaluation: Evaluation | null): string | null {
+  if (
+    evaluation === null ||
+    (evaluation.outcome !== 'passed' && evaluation.outcome !== 'failed')
+  ) {
+    return null;
+  }
+
+  return (
+    evaluation.reading ??
+    (typeof evaluation.actual === 'number' ? String(evaluation.actual) : null)
+  );
+}
 
 function describeActual(check: Check | undefined): string {
   return check === undefined || check.actual === null
@@ -296,7 +312,23 @@ export function evaluateCheck<D extends CheckIdentity>(
     }
   }
 
-  return { base: before, candidate: after, regression };
+  const measured = kind.measure?.(definition);
+
+  return {
+    base: before,
+    candidate: after,
+    regression,
+    ...(measured === undefined
+      ? {}
+      : {
+          measure: {
+            label: measured.label,
+            base: reading(baseEvaluation),
+            candidate: reading(candidateEvaluation),
+            limit: measured.limit,
+          },
+        }),
+  };
 }
 
 function evaluateDefinition<K extends CheckDefinition['kind']>(
@@ -964,7 +996,7 @@ function observedSourceNotes(base: Side, candidate: Side): string[] {
       second === undefined ? `the ${first.name} capture` : 'both captures';
 
     notes.push(
-      `Observed's source commit is unknown for ${subject}, so the same Observed ${after.version} code cannot be confirmed on both sides. ${unknown.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}.`,
+      `Observed's source commit is unknown for ${subject}, so the same Observed ${after.version} code cannot be confirmed on both sides. ${second !== undefined && first.reason === second.reason ? `Both: ${first.reason}` : unknown.map(({ name, reason }) => `${name}: ${reason}`).join('; ')}.`,
     );
   } else if (
     before.source.kind === 'git' &&
@@ -1006,8 +1038,11 @@ function verdictsFor(
     }));
   }
 
-  return pairs.map(({ candidate: check, regression }) => {
-    const common = identity(check);
+  return pairs.map(({ candidate: check, regression, measure }) => {
+    const common = {
+      ...identity(check),
+      ...(measure === undefined ? {} : { measure }),
+    };
 
     if (regression !== null) {
       return { ...common, verdict: 'regression', detail: regression };

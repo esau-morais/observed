@@ -5,6 +5,7 @@ import {
   capturedRevision,
   describeFailure,
   inlineText,
+  jobOutcome,
   pageMatchesRun,
   summarize,
 } from '../scripts/github-action';
@@ -47,7 +48,7 @@ test('CI summaries never present unavailable or unreadable results as passing', 
   });
 
   expect(unavailable.trusted).toBe(true);
-  expect(unavailable.markdown).toMatch(/^> \[!WARNING\]\n> \*\*Unavailable: /);
+  expect(unavailable.markdown).toContain('> [!WARNING]\n> **Unavailable** · ');
   expect(unavailable.markdown).toContain('Missing evidence is not a pass');
 
   for (const summary of [mismatched, unreadable]) {
@@ -90,8 +91,9 @@ test('a capture failure reason cannot break the job summary markup', () => {
     reason: 'exited | <img src=x> [link](http://x)',
   });
 
-  expect(line).toContain('Candidate capture failed (application)');
-  expect(line).not.toMatch(/<img|[^\\]\||[^\\]\[/);
+  expect(line).toBe(
+    '- Candidate capture failed (application): exited \\| \\<img src=x> \\[link](`http://x)`',
+  );
   expect(describeFailure('Base', { kind: 'complete' })).toEqual([]);
 });
 
@@ -167,12 +169,25 @@ test('a URL in check text renders as code so GitHub cannot autolink the captured
       'Exactly 1 GET http://127.0.0.1:4010/api/books request(s) with status 200.',
     ),
   ).toBe(
-    'Exactly 1 GET `http://127.0.0.1:4010/api/books` request\\(s\\) with status 200\\.',
+    'Exactly 1 GET `http://127.0.0.1:4010/api/books` request(s) with status 200.',
   );
   expect(inlineText('See https://x.test/a.')).toBe('See `https://x.test/a`.');
 });
 
-test('the job summary counts passed checks and states each check scope and verdict', async () => {
+test('captured text stays plain for agents yet cannot add markup, mentions or references', () => {
+  expect(
+    inlineText(
+      'median 1.5 ms (+20%) in my_file.ts: *bold* _em_ [x](y) <b> ~s~ `c` \\* &amp; @octocat #12 #book-filter',
+    ),
+  ).toBe(
+    'median 1.5 ms (+20%) in my_file.ts: \\*bold\\* \\_em\\_ \\[x](y) \\<b> \\~s\\~ \\`c\\` \\\\\\* &amp;amp; @\u200boctocat #\u200b12 #book-filter',
+  );
+  expect(inlineText('> quoted')).toBe('\\> quoted');
+  expect(inlineText('- item')).toBe('\\- item');
+  expect(inlineText('1. first')).toBe('1\\. first');
+});
+
+async function regressionRun(detail: string) {
   const missing = await Effect.runPromise(
     inspectSide({ directory: null, prefix: 'candidate', evaluatedAt }),
   );
@@ -183,52 +198,126 @@ test('the job summary counts passed checks and states each check scope and verdi
     visual: { kind: 'unavailable', reason: 'No captures' },
   });
   const [journey] = result.journeys;
-  const verdict = {
-    expectation: 'Exactly 1 GET /api/items request(s) with status 200.',
-    detail: 'Observed 2 matching GET /api/items request(s).',
+  const identity = {
+    scope: 'Open the page',
+    expectation: 'Median LCP at most 250 ms.',
   };
-  const markdown = summarize({
-    output: json({
-      directory: '/bundle',
-      result: {
-        ...result,
-        journeys: [
-          {
-            ...journey,
-            checks: [
-              {
-                ...verdict,
-                id: 'items',
-                name: 'One items request',
-                scope: 'One Load items click',
-                verdict: 'failed',
+
+  return json({
+    directory: '/bundle',
+    result: {
+      ...result,
+      journeys: [
+        {
+          ...journey,
+          checks: [
+            {
+              ...identity,
+              id: 'lcp',
+              name: 'Largest contentful paint stays fast',
+              verdict: 'regression',
+              detail,
+              measure: {
+                label: 'Median LCP',
+                base: '52 ms',
+                candidate: '452 ms',
+                limit: 'at most 250 ms',
               },
-              {
-                ...verdict,
-                id: 'title',
-                name: 'Page title',
-                scope: 'The loaded page heading',
-                verdict: 'passed',
-              },
-            ],
-          },
-        ],
-        summary: { passed: 1, total: 2 },
-        conclusion: { kind: 'check-failed', text: 'One items request failed.' },
-      },
-    }),
+            },
+            {
+              ...identity,
+              id: 'books',
+              name: 'One books request',
+              verdict: 'passed',
+              detail: 'Observed 1 matching request.',
+            },
+          ],
+        },
+      ],
+      summary: { passed: 1, total: 2 },
+      conclusion: { kind: 'regression', text: detail },
+    },
+  });
+}
+
+test('the verdict line carries the values once and passing checks become a count', async () => {
+  const detail = 'Largest contentful paint stays fast regressed.';
+  const summary = summarize({
+    output: await regressionRun(detail),
     exitCode: 2,
     artifact: 'observed-bundle',
     page: null,
+  });
+  const visible = summary.markdown
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<details>[\s\S]*?<\/details>/g, '');
+
+  expect(summary.title).toBe(
+    'Regression: Median LCP 52 ms → 452 ms, at most 250 ms',
+  );
+  expect(visible).toContain(
+    '> **Regression** · Largest contentful paint stays fast · Median LCP 52 ms → 452 ms, at most 250 ms\n>\n> 1 issue found · 1 behavior verified · 0 unresolved',
+  );
+  expect(visible.split('52 ms → 452 ms')).toHaveLength(2);
+  expect(visible).not.toContain(detail);
+  expect(visible).not.toContain('One books request');
+
+  const check = summarize({
+    output: await regressionRun(detail),
+    exitCode: 2,
+    artifact: 'observed-bundle',
+    page: null,
+    headline: false,
   }).markdown;
 
-  expect(markdown).toContain('**1 of 2 checks passed.**');
-  expect(markdown).toContain(
-    '**Failed** · One items request. Scope: One Load items click',
+  expect(check).toContain(
+    '- ! **Regression** · Largest contentful paint stays fast · Median LCP 52 ms → 452 ms, at most 250 ms',
   );
-  expect(markdown).toContain(
-    '**Passed** · Page title. Scope: The loaded page heading',
+});
+
+test('captured text cannot close the agent prompt fence or the hidden agent block', async () => {
+  const detail = 'Error: ```\n</details>\n--> @octocat';
+  const { markdown } = summarize({
+    output: await regressionRun(detail),
+    exitCode: 2,
+    artifact: 'observed-bundle',
+    page: null,
+  });
+  const prompt =
+    /<summary>Prompt for your agent<\/summary>\n\n(`{4,})text\n([\s\S]*?)\n\1\n\n<\/details>/.exec(
+      markdown,
+    );
+
+  expect(prompt?.[2]).toContain(`- Evidence: ${detail}`);
+  expect(prompt?.[2]).toContain(
+    'A changed value is not a regression by itself; verify against the artifacts',
   );
+  expect(markdown.match(/-->/g)).toHaveLength(2);
+});
+
+test('the job summary says the job passes only when the Observed check carries a failing result', async () => {
+  const output = await regressionRun('Regressed.');
+  const job = (checkPosted?: boolean) =>
+    summarize({
+      output,
+      exitCode: 2,
+      artifact: 'observed-bundle',
+      page: null,
+      ...(checkPosted === undefined ? {} : { checkPosted }),
+    }).markdown;
+
+  expect(job(true)).toContain(jobOutcome(true));
+  expect(job(false)).toContain('The job fails');
+  expect(job()).not.toMatch(/The job|this job/);
+  expect(
+    summarize({
+      output: null,
+      exitCode: 0,
+      artifact: 'observed-bundle',
+      page: null,
+      checkPosted: false,
+    }).markdown,
+  ).toContain('The job fails');
 });
 
 test('a result is posted to a pull request only when its candidate is that head or its merge commit', () => {
