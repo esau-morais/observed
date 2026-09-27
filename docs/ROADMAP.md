@@ -53,7 +53,7 @@ Advance when the exit condition holds.
 | 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, including non-React, use the same runner without core edits. Optional checks distinguish failed expectations from visual changes; missing requested captures stay visible |
 | 2. Repeatable use | Executed recipes, isolated runs, one existing hook or CI trigger, export. Fresh-checkout runs need no recurring setup help; stale or failed captures never pass |
 | 3. One extension | Choose an existing-test importer, deeper performance, or an API operation from pilot demand. It saves work and preserves the report contract |
-| 4. Bounded repair | Agent handoff, isolated patches, protected checks, budgets, independent reruns. Repair stops correctly and improves on manual handoff |
+| 4. Bounded repair | Patch agent driven by the evidence handoff, isolated patches, protected checks, budgets, independent reruns. Repair stops correctly and improves on handing the evidence to the user's agent |
 | Later | Database, jobs, traces, additional frameworks, and optional proof adapters, each tied to a recurring workflow |
 
 ## First implementation sequence

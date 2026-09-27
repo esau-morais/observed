@@ -58,7 +58,7 @@ A bundled demonstration is an integration test of this same public workflow.
 
 ## Report behavior
 
-Lead with the captured application. When a comparison was requested, show both
+Lead with the evidence that explains the verdict: a failed or unknown check's evidence when present, otherwise the captured application. When a comparison was requested, show both
 versions and identify any missing capture. A standalone preview needs no baseline.
 Keep checks and technical details one disclosure away. Absent checks do not become
 passes. Label agent interpretations when present.
@@ -76,25 +76,28 @@ A behavior can change while its checks pass. Call it a regression when a compara
 
 A source location is stated as a fact about where evidence was read: "thrown at
 App.jsx:10", never "caused by App.jsx:10". Show a line only when the evidence
-places it there. When nothing does, show no line rather than a guess.
+places it there, or when a name matches a changed line and is labeled as a match.
+When neither holds, show no line rather than a guess.
 
 Illustrative summary: "One filter action sent 1 request before and 4 after. The saved check allows 1. Seven of eight checks passed; checkout was outside scope." Counts refer to actual named checks. Never imply complete change coverage or unconditional merge readiness.
 
 ## GitHub, Slack, and unattended use
 
-GitHub and Slack deliver the same revision-bound result. They are not evidence types or separate verdict engines. One check and one comment cover every evidence type from a run, with a report link. Line-level output appears only where a measurement has a source location.
+GitHub and Slack deliver the same revision-bound result. They are not evidence types or separate verdict engines. One check and at most one summary comment cover every evidence type from a run, with a report link. Line-level output appears only where a finding has a source location.
 
-The PR line takes the shape "N issues found · N behaviors verified · N unresolved". Leave out "automatically fixed" until repair exists, and never say "ready to merge". Name the head commit the result describes.
+The PR line takes the shape "N issues found · N behaviors verified · N unresolved", counting failed, passed, and unknown named checks. Leave out "automatically fixed" until repair exists. Name the head commit the result describes.
 
-| Delivery mode | Behavior |
+Set the `comment` input to choose when to post:
+
+| Mode | Behavior |
 | --- | --- |
-| `always` (default) | Post the check and the comment on every run |
+| `always` (default) | Post or update the check and the comment on every run |
 | `quiet` | Always post the check. Comment only when a result fails or is unknown, and still update an existing comment when the result recovers |
 | `mention` | Run only when a PR comment starts with `/observed`. A slash command, because an @handle can notify a real user |
 
 Update an existing result instead of adding a message for every retry. Reuse established permissions for routine work. Ask when intent, credentials, risk, or an unapproved action prevents progress.
 
-Self-correction starts with an evidence handoff. Each result includes a deterministic prompt the user can give their own agent: the values, commit SHAs, source locations, artifact paths, and the reminder that a changed value is not a regression by itself and must be checked against the artifacts. Observed does not write the fix. Patching and re-verification belong to [Phase 4](ROADMAP.md#milestones), and rerun actions wait for authorization and run identity work.
+The evidence handoff is the first step of self-correction. Each result includes a deterministic prompt the user can give their own agent: the values, commit SHAs, source locations, artifact paths, and the reminder that a changed value is not a regression by itself and must be checked against the artifacts. Observed writes no model-generated fix; a suggestion block appears only for a mechanical fix. Patching and re-verification belong to [Phase 4](ROADMAP.md#milestones), and rerun actions wait for authorization and run identity work.
 
 Mobile access needs an accessible report copy. Remote actions need a reachable runner, such as existing CI or a self-hosted worker. Show offline, queued, stale, and expired states; a sleeping laptop cannot execute a rerun.
 
