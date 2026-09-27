@@ -61,6 +61,16 @@ Use explicit links and adapter extension payloads. No graph database or universa
 
 Hashes detect changed artifacts; they do not establish collector honesty. A stack trace can associate a source location with an error. Temporal proximity cannot prove that a changed line caused a slowdown. Expose missing mappings and inferred relationships.
 
+### Source anchors
+
+The comparator computes a finding's source anchor together with the result and writes it to `result.json`. Delivery adapters and the viewer render anchors; they never compute or adjust them. Each anchor records its basis and whether its line was added, removed, or unchanged in the base..candidate diff.
+
+Resolve anchors in this order:
+
+1. Locations the evidence carries: stack frames and component positions resolved through source maps, and test locations from a test report. Follow `sourceMappingURL`, or fetch `<script>.map` for a hidden map. Keep the maps as artifacts.
+2. Name matching against the lines the base..candidate diff changed, such as a component, element id, or route. This basis is weaker and is recorded as a match, not a resolution.
+3. Otherwise no anchor, with the reason recorded. Never guess a line.
+
 ## Comparable and safe runs
 
 - Snapshot the selected source, including intended worktree changes and untracked files. The snapshot hash identifies a worktree capture; its HEAD commit is recorded as context. Pin the base when comparing versions. Exclude credentials and unrelated ignored data.
@@ -81,6 +91,10 @@ Evaluate [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools
 Later backend adapters import concrete operation results: response contracts, database readbacks against disposable fixtures, and job events. Preserve [OpenTelemetry trace IDs](https://opentelemetry.io/docs/concepts/signals/traces/) and link to existing storage instead of collecting all production telemetry.
 
 GitHub and Slack adapters consume one normalized result. Bind remote actions to repository, authenticated user, permitted action, and current revision. Recheck authorization at execution. A casual reply is not permission to merge or modify production data. Acknowledge long jobs before running them and retain their job identity.
+
+On GitHub, every anchored measurement becomes a check-run annotation. A review comment is reserved for a regression or new error anchored by a stack frame, component source, or test location; a name match never gets one. Post one review per run, find earlier comments through a hidden finding ID, and mark a thread fixed when its finding clears instead of posting again.
+
+The `/observed` trigger runs only for a comment from a user with write access on a pull request from the same repository. Untrusted pull request code must never run where the GitHub App key or Slack token can be read. If one workflow cannot guarantee that, split it: an unprivileged capture uploads the result, and a privileged delivery started by `workflow_run` reads only that upload. Never use `pull_request_target`. If neither design is safe, fall back to a label trigger on `pull_request`.
 
 ## Code, skills, and AI
 

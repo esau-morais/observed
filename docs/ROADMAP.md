@@ -21,6 +21,18 @@ therefore no longer a Phase 3 option. [PRODUCT.md](PRODUCT.md#github-slack-and-u
 and [ARCHITECTURE.md](ARCHITECTURE.md#reuse-and-adapters) own the delivery rules;
 remote actions still wait for authorization and run identity work.
 
+Decision, 2026-09-27: the maintainer set delivery to present Observed as a
+proof-check, with source locations and an evidence handoff to the user's own
+agent. [PRODUCT.md](PRODUCT.md#github-slack-and-unattended-use) and
+[ARCHITECTURE.md](ARCHITECTURE.md#source-anchors) own the rules. The delivery
+refresh is five changes:
+
+- Source anchors: source-map resolution, diff name matching, and anchor fields in the result.
+- Summary and Slack: the brief GitHub summary, job outcome, and Slack message.
+- Report: open on failing evidence, section index, provenance drawer, dark theme, and agent copy.
+- Line delivery, after source anchors and the summary: check-run annotations and review comments.
+- Posting modes, after the summary: the `comment` input and the `/observed` workflow.
+
 Read only the document relevant to the task:
 
 | Task | Document |
