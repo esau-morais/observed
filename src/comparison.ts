@@ -1024,6 +1024,13 @@ function journeyConclusion(
     base.checks.find((check) => check.id === id);
   const candidateCheck = (id: string) =>
     candidate.checks.find((check) => check.id === id);
+  const baseOutcome = (id: string) =>
+    ({
+      passed: 'passed',
+      failed: 'failed',
+      'not-run': 'was not run',
+      unknown: 'was unknown',
+    })[baseCheck(id)?.outcome ?? 'unknown'];
 
   if (regressions.length > 0) {
     return {
@@ -1044,7 +1051,7 @@ function journeyConclusion(
           }
 
           return comparison.kind === 'available'
-            ? `${item.name} failed. Base ${baseCheck(item.id)?.outcome === 'failed' ? 'also failed' : 'did not pass'}, so this is not a regression. Base: ${describeActual(baseCheck(item.id))}; candidate: ${describeActual(after)}. ${item.expectation}`
+            ? `${item.name} failed. Base ${baseOutcome(item.id) === 'failed' ? 'also failed' : baseOutcome(item.id)}, so this is not a regression. Base: ${describeActual(baseCheck(item.id))}; candidate: ${describeActual(after)}. ${item.expectation}`
             : `${item.name} failed. The revisions were not compared, so a regression cannot be established. Candidate: ${describeActual(after)}. ${item.expectation}`;
         })
         .join(' '),
@@ -1097,9 +1104,9 @@ function journeyConclusion(
     kind: 'no-regression',
     text: passed
       .map((item) =>
-        baseCheck(item.id)?.outcome === 'passed'
+        baseOutcome(item.id) === 'passed'
           ? `${item.name} passed on base and candidate.`
-          : `${item.name} failed on base and passed on candidate.`,
+          : `${item.name} ${baseOutcome(item.id)} on base and passed on candidate.`,
       )
       .join(' '),
   };
@@ -1176,21 +1183,30 @@ export function compareJourney({
       ? side
       : { ...side, checks };
 
+  const evaluatedBase = withChecks(
+    base,
+    pairs?.every((pair) => pair.base !== null) === true
+      ? pairs.flatMap((pair) => (pair.base === null ? [] : [pair.base.check]))
+      : undefined,
+  );
+  const evaluatedCandidate = withChecks(
+    candidate,
+    pairs?.map((pair) => pair.candidate.check),
+  );
+
   return {
     title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
-    base: withChecks(
-      base,
-      pairs?.every((pair) => pair.base !== null) === true
-        ? pairs.flatMap((pair) => (pair.base === null ? [] : [pair.base.check]))
-        : undefined,
-    ),
-    candidate: withChecks(
-      candidate,
-      pairs?.map((pair) => pair.candidate.check),
-    ),
+    base: evaluatedBase,
+    candidate: evaluatedCandidate,
     comparison,
     checks: verdicts,
-    conclusion: journeyConclusion(base, candidate, verdicts, comparison, mode),
+    conclusion: journeyConclusion(
+      evaluatedBase,
+      evaluatedCandidate,
+      verdicts,
+      comparison,
+      mode,
+    ),
     limitations: [
       'Checks cover only their stated expectations and scopes. Browser errors remain available as evidence.',
       'Screenshot differences are observations of rendered pixels, not a visual regression.',
