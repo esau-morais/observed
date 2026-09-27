@@ -482,10 +482,15 @@ Every run checks permissions, records its revision and recipe, and retains the o
 | Evidence | What you can inspect |
 | --- | --- |
 | Browser and framework | Appearance, interactions, runtime errors, requests, performance, accessibility, component behavior |
+
+Planned, not available yet:
+
+| Evidence | What you can inspect |
+| --- | --- |
 | Backend | API contracts, database changes, job events, distributed traces |
 | Formal checks, optional | A specified property, its assumptions, checker result, and connection to the implementation |
 
-GitHub and Slack present the same report and offer authorized follow-up actions. Remote actions need a reachable runner. AI explanations stay labeled as interpretations; an unavailable check never becomes a pass. A passing result covers its named checks, not the entire application or permission to merge.
+GitHub and Slack present the same report. Planned: authorized follow-up actions such as rerun and fix, which need a reachable runner. AI explanations stay labeled as interpretations; an unavailable check never becomes a pass. A passing result covers its named checks, not the entire application or permission to merge.
 
 ## Project documents
 

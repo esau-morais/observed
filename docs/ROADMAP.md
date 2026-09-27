@@ -11,15 +11,19 @@ Phase 2 is complete: an agent in another environment configured an unfamiliar
 app from the README without help, and the GitHub Action runs it on pull requests
 on Linux and macOS. Failed, missing, and stale captures never pass.
 
-Next, run the pilot gates below. They choose the Phase 3 extension. Keep the
-adoption study separate: working code does not establish that people find it
-useful.
+Next, ship Phase 3, then run the pilot gates below. Keep the adoption study
+separate: working code does not establish that people find it useful.
 
 Decision, 2026-09-26: the maintainer moved GitHub App and Slack delivery ahead of
 the pilot, so pilot participants see results where they already work. Slack is
 therefore no longer a Phase 3 option. [PRODUCT.md](PRODUCT.md#github-slack-and-unattended-use)
 and [ARCHITECTURE.md](ARCHITECTURE.md#reuse-and-adapters) own the delivery rules;
 remote actions still wait for authorization and run identity work.
+
+Decision, 2026-09-27: the maintainer chose to ship every evidence type Observed
+promises before the pilot onboards: all browser views in
+[PRODUCT.md](PRODUCT.md#evidence-views), the existing-test importer, and API
+operation checks. Phase 3 no longer picks one extension from pilot demand.
 
 Read only the document relevant to the task:
 
@@ -40,7 +44,7 @@ Advance when the exit condition holds.
 | 0. Validate | Reports from existing artifacts. Developers use the combined view and repeated verification pain is observed |
 | 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, including non-React, use the same runner without core edits. Optional checks distinguish failed expectations from visual changes; missing requested captures stay visible |
 | 2. Repeatable use | Executed recipes, isolated runs, one existing hook or CI trigger, export. Fresh-checkout runs need no recurring setup help; stale or failed captures never pass |
-| 3. One extension | Choose an existing-test importer, deeper performance, or an API operation from pilot demand. It saves work and preserves the report contract |
+| 3. Evidence types | All browser evidence views, an existing-test importer, and API operation checks, shipped before the pilot. Each preserves the report contract |
 | 4. Bounded repair | Agent handoff, isolated patches, protected checks, budgets, independent reruns. Repair stops correctly and improves on manual handoff |
 | Later | Database, jobs, traces, additional frameworks, and optional proof adapters, each tied to a recurring workflow |
 
