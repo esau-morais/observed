@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
 import { recipeSchema } from './capture/recipe';
+import { evidenceViewSchema } from './evidence-kinds';
 import {
   captureSchema,
   captureArtifactSchema,
@@ -43,12 +44,7 @@ const check = Schema.Union([
   Schema.Struct({
     ...checkIdentity,
     outcome: Schema.Literals(['passed', 'failed']),
-    actual: Schema.NullOr(
-      Schema.Union([
-        Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-        Schema.String,
-      ]),
-    ),
+    actual: Schema.NullOr(Schema.Union([Schema.Finite, Schema.String])),
   }),
   Schema.Struct({
     ...checkIdentity,
@@ -68,14 +64,21 @@ const sideEvidence = {
   unresolved: Schema.Array(text),
 };
 
+const uniqueCheckIds = Schema.makeFilter(
+  (checks: readonly { id: string }[]) =>
+    new Set(checks.map((item) => item.id)).size === checks.length,
+  { message: 'Check IDs must be unique within a side' },
+);
+
 export const sideSchema = Schema.Union([
   Schema.Struct({
     execution: Schema.Literal('complete'),
     capture: capturedManifest,
     recipe: recipeSchema,
     observations: observationsSchema,
+    evidence: Schema.Array(evidenceViewSchema),
     screenshot: text,
-    check,
+    checks: Schema.Array(check).check(uniqueCheckIds),
     ...sideEvidence,
   }),
   Schema.Struct({
@@ -83,7 +86,7 @@ export const sideSchema = Schema.Union([
     capture: capturedManifest,
     recipe: Schema.NullOr(recipeSchema),
     screenshot: Schema.NullOr(text),
-    check: unknownCheck,
+    checks: Schema.Array(unknownCheck).check(uniqueCheckIds),
     ...sideEvidence,
   }),
   Schema.Struct({
@@ -91,7 +94,7 @@ export const sideSchema = Schema.Union([
     capture: Schema.NullOr(capturedManifest),
     recipe: Schema.NullOr(recipeSchema),
     screenshot: Schema.NullOr(text),
-    check: unknownCheck,
+    checks: Schema.Array(unknownCheck).check(uniqueCheckIds),
     ...sideEvidence,
   }),
 ]);
@@ -148,7 +151,9 @@ export const visualSchema = Schema.Union([
     regionCount: pixels,
     regions: Schema.NonEmptyArray(visualRegion),
     diff: Schema.Struct({
-      path: Schema.Literal('visual-diff.png'),
+      path: text.check(
+        Schema.isPattern(/^(?:journey-[1-9][0-9]*\/)?visual-diff\.png$/),
+      ),
       sha256: digest,
     }),
   }).check(
@@ -177,11 +182,39 @@ export type Visual = typeof visualSchema.Type;
 
 export type VisualRegion = typeof visualRegion.Type;
 
-export const comparisonSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(5),
-  mode: Schema.Literals(['preview', 'comparison']),
+const conclusionKinds = [
+  'regression',
+  'check-failed',
+  'unavailable',
+  'no-regression',
+  'not-checked',
+  'preview',
+] as const;
+
+const conclusionSchema = Schema.Struct({
+  kind: Schema.Literals(conclusionKinds),
+  text,
+});
+
+// One verdict per configured check, derived once from both sides so delivery
+// renders it without recomputing.
+const checkVerdictSchema = Schema.Struct({
+  id: text,
+  name: text,
+  scope: text,
+  expectation: text,
+  verdict: Schema.Literals([
+    'regression',
+    'failed',
+    'unknown',
+    'passed',
+    'not-run',
+  ]),
+  detail: text,
+});
+
+export const journeySchema = Schema.Struct({
   title: text,
-  evaluatedAt: timestamp,
   base: sideSchema,
   candidate: sideSchema,
   comparison: Schema.Union([
@@ -197,21 +230,40 @@ export const comparisonSchema = Schema.Struct({
       reasons: Schema.NonEmptyArray(text),
     }),
   ]),
-  conclusion: Schema.Struct({
-    kind: Schema.Literals([
-      'regression',
-      'no-regression',
-      'unavailable',
-      'not-checked',
-      'preview',
-      'check-failed',
-    ]),
-    text,
-  }),
+  checks: Schema.Array(checkVerdictSchema),
+  conclusion: conclusionSchema,
   limitations: Schema.Array(text),
 });
 
+const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+export const resultSchemaVersion = 6;
+
+export const comparisonSchema = Schema.Struct({
+  schemaVersion: Schema.Literal(resultSchemaVersion),
+  mode: Schema.Literals(['preview', 'comparison']),
+  title: text,
+  evaluatedAt: timestamp,
+  journeys: Schema.NonEmptyArray(journeySchema),
+  summary: Schema.Struct({ passed: count, total: count }),
+  conclusion: conclusionSchema,
+}).check(
+  Schema.makeFilter(
+    (result) =>
+      result.summary.passed <= result.summary.total &&
+      result.summary.total ===
+        result.journeys.reduce((sum, item) => sum + item.checks.length, 0),
+    { message: 'The check summary must match the journeys' },
+  ),
+);
+
 export type Comparison = typeof comparisonSchema.Type;
+
+export type Journey = typeof journeySchema.Type;
+
+export type CheckVerdict = typeof checkVerdictSchema.Type;
+
+export type Conclusion = typeof conclusionSchema.Type;
 
 export const conclusionExitCodes = {
   regression: 2,
@@ -220,20 +272,18 @@ export const conclusionExitCodes = {
   'no-regression': 0,
   'not-checked': 0,
   preview: 0,
-} satisfies Record<Comparison['conclusion']['kind'], number>;
+} satisfies Record<Conclusion['kind'], number>;
 
 export type Side = typeof sideSchema.Type;
 
-export type Check = Side['check'];
+export type Check = Side['checks'][number];
 
 export type UnknownCheck = typeof unknownCheck.Type;
 
 export type SideArtifact = Side['artifacts'][number];
 
-export const selectionSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
-  evaluatedAt: timestamp,
-  mode: Schema.optionalKey(Schema.Literals(['preview', 'comparison'])),
+const journeySelectionSchema = Schema.Struct({
+  directory: text.check(Schema.isPattern(/^journey-[1-9][0-9]*$/)),
   baseIssue: Schema.optionalKey(text),
   candidateIssue: Schema.optionalKey(text),
   baseFailureArtifacts: Schema.optionalKey(Schema.Array(captureArtifactSchema)),
@@ -248,4 +298,20 @@ export const selectionSchema = Schema.Struct({
   ),
 });
 
+export const selectionSchema = Schema.Struct({
+  schemaVersion: Schema.Literal(2),
+  evaluatedAt: timestamp,
+  mode: Schema.Literals(['preview', 'comparison']),
+  journeys: Schema.NonEmptyArray(journeySelectionSchema),
+}).check(
+  Schema.makeFilter(
+    (selection) =>
+      new Set(selection.journeys.map((item) => item.directory)).size ===
+      selection.journeys.length,
+    { message: 'Journey directories must be unique' },
+  ),
+);
+
 export type Selection = typeof selectionSchema.Type;
+
+export type JourneySelection = typeof journeySelectionSchema.Type;

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parseCapture, type CaptureArtifact } from './capture/model';
 import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
-import { selectionSchema, type Selection } from './comparison-model';
+import { selectionSchema } from './comparison-model';
 import { readVerifiedArtifact } from './evidence';
 import { viewerIntegritySchema } from './export';
 
@@ -61,8 +61,8 @@ function evidenceType(file: string, bytes: Uint8Array): string {
 const stageCapture = Effect.fnUntraced(function* (
   root: string,
   staging: string,
-  prefix: 'base' | 'candidate',
-  expected: NonNullable<Selection['base']>,
+  prefix: string,
+  expected: { manifestHash: string; sourceHash: string },
   assets: Map<string, Asset>,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -104,7 +104,7 @@ const stageCapture = Effect.fnUntraced(function* (
 const stageArtifacts = Effect.fnUntraced(function* (
   root: string,
   staging: string,
-  prefix: 'base' | 'candidate',
+  prefix: string,
   artifacts: readonly CaptureArtifact[],
   assets: Map<string, Asset>,
 ) {
@@ -182,51 +182,36 @@ export const preloadReport = Effect.fnUntraced(function* (directory: string) {
     prefix: 'observed-view-',
   });
 
-  if (selection.candidate !== null) {
-    yield* stageCapture(
-      root,
-      staging,
-      'candidate',
-      selection.candidate,
-      assets,
-    );
+  for (const journey of selection.journeys) {
+    yield* fs.makeDirectory(path.join(staging, journey.directory));
+
+    for (const side of ['candidate', 'base'] as const) {
+      const prefix = `${journey.directory}/${side}`;
+      const expected = journey[side];
+
+      if (expected !== null) {
+        yield* stageCapture(root, staging, prefix, expected, assets);
+      } else {
+        yield* fs.makeDirectory(path.join(staging, prefix));
+        yield* stageArtifacts(
+          root,
+          staging,
+          prefix,
+          (side === 'base'
+            ? journey.baseFailureArtifacts
+            : journey.candidateFailureArtifacts) ?? [],
+          assets,
+        );
+      }
+    }
   }
 
-  if (selection.base !== null) {
-    yield* stageCapture(root, staging, 'base', selection.base, assets);
-  }
-
-  if (selection.candidate === null) {
-    yield* stageArtifacts(
-      root,
-      staging,
-      'candidate',
-      selection.candidateFailureArtifacts ?? [],
-      assets,
-    );
-  }
-
-  if (selection.base === null) {
-    yield* stageArtifacts(
-      root,
-      staging,
-      'base',
-      selection.baseFailureArtifacts ?? [],
-      assets,
-    );
-  }
-
-  const { result, visualDiff } = yield* inspectComparison({
-    baseDirectory:
-      selection.base === null && selection.baseIssue === undefined
-        ? null
-        : path.join(staging, 'base'),
-    candidateDirectory: path.join(staging, 'candidate'),
-    evaluatedAt: selection.evaluatedAt,
+  const { result, visualDiffs } = yield* inspectComparison({
+    root: staging,
     selection,
   });
 
-  if (visualDiff !== null) {
+  for (const visualDiff of visualDiffs) {
     assets.set(`/${visualDiff.path}`, {
       bytes: yield* readRequired(
         root,

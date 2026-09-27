@@ -2,7 +2,11 @@ import { Cause, DateTime, Effect, Exit, FileSystem, Schema } from 'effect';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { ApplicationFailure, startApplication } from './application';
-import { captureBrowser, producer } from './agent-browser';
+import {
+  captureBrowser,
+  producer,
+  type PendingEvidence,
+} from './agent-browser';
 import {
   captureSchema,
   captureSchemaVersion,
@@ -93,6 +97,8 @@ export const captureApplication = Effect.fn('captureApplication')(
     const addArtifact = (id: string, filename: string, description: string) => {
       artifacts.set(id, { path: filename, description });
     };
+
+    const pendingEvidence: PendingEvidence[] = [];
 
     addArtifact(
       'recipe',
@@ -220,6 +226,9 @@ export const captureApplication = Effect.fn('captureApplication')(
         session,
         url,
         addArtifact,
+        addEvidence: (entry) => {
+          pendingEvidence.push(entry);
+        },
         recipe,
         fillValues,
         inputsHash: sha256(
@@ -303,6 +312,20 @@ export const captureApplication = Effect.fn('captureApplication')(
             }
           }
 
+          const evidence = pendingEvidence.flatMap(
+            (entry): Capture['evidence'] => {
+              if (entry.status === 'unavailable') {
+                return [{ ...entry, producer }];
+              }
+
+              const record = records.find((item) => item.path === entry.path);
+
+              return record === undefined
+                ? []
+                : [{ ...entry, sha256: record.sha256, producer }];
+            },
+          );
+
           let execution: Capture['execution'] = { kind: 'complete' };
 
           if (Exit.isFailure(exit)) {
@@ -350,6 +373,7 @@ export const captureApplication = Effect.fn('captureApplication')(
             finishedAt,
             execution,
             artifacts: records,
+            evidence,
           });
 
           yield* fs.writeFileString(

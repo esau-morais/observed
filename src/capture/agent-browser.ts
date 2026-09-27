@@ -10,13 +10,38 @@ import { processOutput } from './process';
 import { json } from '../encoding';
 import { conceal, redact, redactText } from '../redact';
 import type { Recipe, Step } from './recipe';
+import { collectorFor } from './collectors';
+import {
+  BrowserFailure,
+  EvidenceUnavailable,
+  type CollectorContext,
+  type CollectorError,
+  type CollectorServices,
+} from './collectors/define';
+import {
+  evidenceKinds,
+  type CollectorConfig,
+  type EvidenceKind,
+} from '../evidence-kinds';
+
+export { BrowserFailure };
 
 export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
 
-export class BrowserFailure extends Schema.TaggedError<BrowserFailure>()(
-  'BrowserFailure',
-  { message: Schema.String },
-) {}
+export type PendingEvidence =
+  | {
+      kind: string;
+      schemaVersion: number;
+      status: 'recorded';
+      path: string;
+      conditions: Record<string, string | number | boolean | null>;
+    }
+  | {
+      kind: string;
+      schemaVersion: number;
+      status: 'unavailable';
+      reason: string;
+    };
 
 const response = <S extends Schema.Constraint>(data: S) =>
   Schema.Struct({
@@ -141,6 +166,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   session: string;
   url: string;
   addArtifact: (id: string, filename: string, description: string) => void;
+  addEvidence: (entry: PendingEvidence) => void;
   recipe: Recipe;
   fillValues: ReadonlyMap<string, string>;
   inputsHash: string;
@@ -172,124 +198,133 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     AGENT_BROWSER_DEFAULT_TIMEOUT: '20000',
   };
 
-  const command = Effect.fnUntraced(function* (
-    args: readonly string[],
-    stdin?: string,
-  ) {
-    return yield* processOutput({
-      command: process.execPath,
-      args: [
-        agentBrowserPath(options.projectRoot),
-        '--config',
-        config,
-        '--session',
-        options.session,
-        '--headed',
-        'false',
-        '--args',
-        recipe.browserArguments.join(','),
-        '--no-webmcp',
-        '--idle-timeout',
-        '60s',
-        '--allowed-domains',
-        [
-          ...new Set(
-            [...allowedOrigins].map((value) => new URL(value).hostname),
-          ),
-        ].join(','),
-        '--json',
-        ...args,
-      ],
-      cwd: options.projectRoot,
-      env: environment,
-      transcript: path.join(options.directory, 'transcript.jsonl'),
-      concealed,
-      ...(stdin === undefined ? {} : { stdin }),
+  const sessionCommand = (session: string, launch: readonly string[]) =>
+    Effect.fnUntraced(function* (args: readonly string[], stdin?: string) {
+      return yield* processOutput({
+        command: process.execPath,
+        args: [
+          agentBrowserPath(options.projectRoot),
+          '--config',
+          config,
+          '--session',
+          session,
+          ...launch,
+          '--headed',
+          'false',
+          '--args',
+          recipe.browserArguments.join(','),
+          '--no-webmcp',
+          '--idle-timeout',
+          '60s',
+          '--allowed-domains',
+          [
+            ...new Set(
+              [...allowedOrigins].map((value) => new URL(value).hostname),
+            ),
+          ].join(','),
+          '--json',
+          ...args,
+        ],
+        cwd: options.projectRoot,
+        env: environment,
+        transcript: path.join(options.directory, 'transcript.jsonl'),
+        concealed,
+        ...(stdin === undefined ? {} : { stdin }),
+      });
     });
-  });
 
-  const saveOutput = Effect.fnUntraced(function* (
-    id: string,
-    filename: string,
-    args: readonly string[],
-  ) {
-    options.addArtifact(
-      id,
-      filename,
-      `agent-browser ${args.join(' ')} output; credentials redacted`,
-    );
+  const command = sessionCommand(options.session, []);
 
-    const output = yield* command(args);
+  type Command = typeof command;
 
-    yield* fs.writeFileString(
-      path.join(options.directory, filename),
-      redactText(output, concealed),
-      {
-        flag: 'wx',
-      },
-    );
+  const outputSaver = (run: Command) =>
+    Effect.fnUntraced(function* (
+      id: string,
+      filename: string,
+      args: readonly string[],
+    ) {
+      options.addArtifact(
+        id,
+        filename,
+        `agent-browser ${args.join(' ')} output; credentials redacted`,
+      );
 
-    return output;
-  });
+      const output = yield* run(args);
 
-  const step = Effect.fnUntraced(function* (action: Step) {
-    switch (action.kind) {
-      case 'navigate':
-        return yield* command([
-          'open',
-          new URL(action.path, options.url).toString(),
-        ]);
-      case 'click':
-        return yield* command(['click', action.selector]);
-      case 'click-role':
-        return yield* command([
-          'find',
-          'role',
-          action.role,
-          'click',
-          '--name',
-          action.name,
-        ]);
-      case 'fill': {
-        if (typeof action.value === 'string') {
-          return yield* command(['fill', action.selector, action.value]);
-        }
+      yield* fs.writeFileString(
+        path.join(options.directory, filename),
+        redactText(output, concealed),
+        {
+          flag: 'wx',
+        },
+      );
 
-        const value = options.fillValues.get(action.value.env);
+      return output;
+    });
 
-        if (value === undefined) {
-          return yield* Effect.die(
-            `Fill value for ${action.value.env} was not resolved`,
+  const saveOutput = outputSaver(command);
+
+  const stepRunner = (run: Command) =>
+    Effect.fnUntraced(function* (action: Step) {
+      switch (action.kind) {
+        case 'navigate':
+          return yield* run([
+            'open',
+            new URL(action.path, options.url).toString(),
+          ]);
+        case 'click':
+          return yield* run(['click', action.selector]);
+        case 'click-role':
+          return yield* run([
+            'find',
+            'role',
+            action.role,
+            'click',
+            '--name',
+            action.name,
+          ]);
+        case 'fill': {
+          if (typeof action.value === 'string') {
+            return yield* run(['fill', action.selector, action.value]);
+          }
+
+          const value = options.fillValues.get(action.value.env);
+
+          if (value === undefined) {
+            return yield* Effect.die(
+              `Fill value for ${action.value.env} was not resolved`,
+            );
+          }
+
+          // Batch input arrives on stdin, so the value stays out of process
+          // arguments. Its echoed command output is concealed in the transcript.
+          const output = yield* run(
+            ['batch', '--bail'],
+            JSON.stringify([['fill', action.selector, value]]),
+          );
+
+          return yield* decode(filledSchema, output).pipe(
+            Effect.mapError(
+              () =>
+                new BrowserFailure({
+                  message: `agent-browser did not confirm the fill on ${action.selector}`,
+                }),
+            ),
+            Effect.as(output),
           );
         }
-
-        // Batch input arrives on stdin, so the value stays out of process
-        // arguments. Its echoed command output is concealed in the transcript.
-        const output = yield* command(
-          ['batch', '--bail'],
-          JSON.stringify([['fill', action.selector, value]]),
-        );
-
-        return yield* decode(filledSchema, output).pipe(
-          Effect.mapError(
-            () =>
-              new BrowserFailure({
-                message: `agent-browser did not confirm the fill on ${action.selector}`,
-              }),
-          ),
-          Effect.as(output),
-        );
+        case 'press':
+          return yield* run(['press', action.key]);
+        case 'wait-text':
+          return yield* run(['wait', '--text', action.text]);
+        case 'wait-selector':
+          return yield* run(['wait', action.selector]);
+        case 'network-idle':
+          return yield* run(['wait', '--load', 'networkidle']);
       }
-      case 'press':
-        return yield* command(['press', action.key]);
-      case 'wait-text':
-        return yield* command(['wait', '--text', action.text]);
-      case 'wait-selector':
-        return yield* command(['wait', action.selector]);
-      case 'network-idle':
-        return yield* command(['wait', '--load', 'networkidle']);
-    }
-  });
+    });
+
+  const step = stepRunner(command);
 
   const version = yield* command(['--version']);
 
@@ -299,34 +334,99 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     });
   }
 
-  yield* Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      yield* command(['close']);
+  const closeOnExit = (run: Command, session: string, cleanup: string) =>
+    Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        yield* run(['close']);
 
-      const waitClosed = Effect.gen(function* () {
-        while (true) {
-          const state = yield* decode(
-            sessionSchema,
-            yield* command(['session', 'info']),
-          );
-
-          if (!state.data.active) {
-            yield* fs.writeFileString(
-              path.join(options.directory, 'browser-cleanup.json'),
-              json({ session: options.session, active: false }),
-              { flag: 'wx' },
+        const waitClosed = Effect.gen(function* () {
+          while (true) {
+            const state = yield* decode(
+              sessionSchema,
+              yield* run(['session', 'info']),
             );
 
-            return;
-          }
+            if (!state.data.active) {
+              yield* fs.writeFileString(
+                path.join(options.directory, cleanup),
+                json({ session, active: false }),
+                { flag: 'wx' },
+              );
 
-          yield* Effect.sleep('100 millis');
-        }
+              return;
+            }
+
+            yield* Effect.sleep('100 millis');
+          }
+        });
+
+        yield* waitClosed.pipe(Effect.timeout('10 seconds'));
+      }).pipe(Effect.orDie),
+    );
+
+  yield* closeOnExit(command, options.session, 'browser-cleanup.json');
+
+  const context: CollectorContext = {
+    directory: options.directory,
+    url: options.url,
+    recipe,
+    concealed,
+    browser: command,
+    saveOutput,
+    addArtifact: options.addArtifact,
+  };
+
+  const collectEvidence = Effect.fnUntraced(function* (
+    kind: EvidenceKind,
+    collected: Effect.Effect<unknown, CollectorError, CollectorServices>,
+  ) {
+    const definition = evidenceKinds[kind];
+    const filename = `evidence/${definition.kind}.json`;
+    const value = yield* collected.pipe(
+      Effect.map((result) => ({ kind: 'recorded', result }) as const),
+      Effect.catchTag('EvidenceUnavailable', ({ reason }) =>
+        Effect.succeed({ kind: 'unavailable', reason } as const),
+      ),
+    );
+
+    if (value.kind === 'unavailable') {
+      options.addEvidence({
+        kind: definition.kind,
+        schemaVersion: definition.schemaVersion,
+        status: 'unavailable',
+        reason: redactText(value.reason, concealed),
       });
 
-      yield* waitClosed.pipe(Effect.timeout('10 seconds'));
-    }).pipe(Effect.orDie),
-  );
+      return;
+    }
+
+    const file = yield* Schema.encodeUnknownEffect(definition.file)({
+      kind: definition.kind,
+      schemaVersion: definition.schemaVersion,
+      value: value.result,
+    });
+
+    yield* fs.makeDirectory(path.join(options.directory, 'evidence'), {
+      recursive: true,
+    });
+    options.addArtifact(
+      `evidence-${definition.kind}`,
+      filename,
+      `${definition.title} evidence, schema version ${definition.schemaVersion}; credentials redacted`,
+    );
+    yield* fs.writeFileString(
+      path.join(options.directory, filename),
+      redactText(json(file), concealed),
+      { flag: 'wx' },
+    );
+    options.addEvidence({
+      kind: definition.kind,
+      schemaVersion: definition.schemaVersion,
+      status: 'recorded',
+      path: filename,
+      conditions: {},
+    });
+  });
 
   yield* command(['open', new URL(recipe.path, options.url).toString()]);
 
@@ -373,40 +473,12 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   yield* saveOutput('snapshot', 'snapshot.json', ['snapshot']);
 
-  let text: Observations['text'];
+  for (const config of recipe.collectors) {
+    const collector = collectorFor(config);
 
-  if (recipe.check?.kind === 'text') {
-    const selector = recipe.check.selector;
-    const count = yield* decode(
-      response(
-        Schema.Struct({
-          count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-        }),
-      ),
-      yield* saveOutput('text-count', 'text-count.json', [
-        'get',
-        'count',
-        selector,
-      ]),
-    );
-    let value: string | null = null;
-
-    if (count.data.count === 1) {
-      const observed = yield* decode(
-        response(Schema.Struct({ text: Schema.String })),
-        yield* saveOutput('text', 'text.json', ['get', 'text', selector]),
-      );
-      value = observed.data.text;
-
-      if (redact(value) !== value || conceal(value, concealed) !== value) {
-        return yield* new BrowserFailure({
-          message:
-            'Text observation contains credentials. Exact-text evaluation and screenshot capture are unavailable.',
-        });
-      }
+    if (collector.phase === 'journey') {
+      yield* collectEvidence(config.kind, collector.collect(config, context));
     }
-
-    text = { selector, count: count.data.count, value };
   }
 
   options.addArtifact(
@@ -484,7 +556,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   }
 
   const observations = yield* Schema.decodeUnknownEffect(observationsSchema)({
-    schemaVersion: 2,
+    schemaVersion: 3,
     requests: har.log.entries.map((entry) => ({
       method: entry.request.method,
       origin:
@@ -502,7 +574,6 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         .map((message) => message.text),
     ],
     window: { startedAt, finishedAt },
-    ...(text === undefined ? {} : { text }),
   });
 
   options.addArtifact(
@@ -516,6 +587,38 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     redactText(json(observations), concealed),
     { flag: 'wx' },
   );
+
+  for (const [index, config] of recipe.collectors.entries()) {
+    const collector = collectorFor(config);
+
+    if (collector.phase === 'separate-session') {
+      const session = `${options.session}-${index}`;
+      const run = sessionCommand(session, collector.launchArguments ?? []);
+      const cleanup = `browser-cleanup-${config.kind}.json`;
+
+      options.addArtifact(
+        `browser-cleanup-${config.kind}`,
+        cleanup,
+        `Owned browser shutdown for the ${config.kind} collector`,
+      );
+
+      yield* Effect.gen(function* () {
+        yield* closeOnExit(run, session, cleanup);
+        const runStep = stepRunner(run);
+
+        yield* collectEvidence(
+          config.kind,
+          collector.collect(config, {
+            ...context,
+            browser: run,
+            saveOutput: outputSaver(run),
+            runSteps: (steps) =>
+              Effect.forEach(steps, runStep, { discard: true }),
+          }),
+        );
+      }).pipe(Effect.scoped);
+    }
+  }
 
   return {
     browser: `${har.log.browser.name} ${har.log.browser.version}`,

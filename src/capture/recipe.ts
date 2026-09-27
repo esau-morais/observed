@@ -1,17 +1,22 @@
 import { Effect, Schema } from 'effect';
-import { httpOriginSchema, text } from './model';
+import {
+  checkKinds,
+  checkSchema,
+  type CheckDefinition,
+  type CheckKinds,
+} from '../checks';
+import {
+  collectorSchema,
+  defaultCollectors,
+  type CollectorConfig,
+} from '../evidence-kinds';
+import { httpOriginSchema, routeSchema, text } from './model';
 
-const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+export { routeSchema };
+
+export { checkSchema };
+
 const positive = Schema.Int.check(Schema.isGreaterThan(0));
-
-export const routeSchema = text.check(
-  Schema.makeFilter(
-    (value) =>
-      value.startsWith('/') &&
-      !value.startsWith('//') &&
-      !/[\\\p{Cc}]/u.test(value),
-  ),
-);
 
 export const stepSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('navigate'), path: routeSchema }),
@@ -33,39 +38,17 @@ export const stepSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('network-idle') }),
 ]);
 
-const checkIdentity = { id: text, name: text, scope: text };
-
-export const checkSchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal('request-count'),
-    ...checkIdentity,
-    method: text.check(Schema.isPattern(/^[A-Z]+$/)),
-    origin: Schema.optionalKey(httpOriginSchema),
-    path: routeSchema.check(
-      Schema.isPattern(/^[^?#]+$/, {
-        message:
-          'Request checks match a pathname without query strings or fragments',
-      }),
-    ),
-    expectedCount: count,
-    status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal('text'),
-    ...checkIdentity,
-    selector: text,
-    expectedText: Schema.String,
-  }),
-]);
+export const recipeSchemaVersion = 2;
 
 export const recipeSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
+  schemaVersion: Schema.Literal(recipeSchemaVersion),
   id: text,
   name: text,
   path: routeSchema,
   ready: Schema.Array(stepSchema),
   steps: Schema.Array(stepSchema),
-  check: Schema.NullOr(checkSchema),
+  checks: Schema.Array(checkSchema),
+  collectors: Schema.Array(collectorSchema),
   viewport: Schema.Struct({
     width: positive,
     height: positive,
@@ -75,18 +58,81 @@ export const recipeSchema = Schema.Struct({
   allowedOrigins: Schema.optionalKey(Schema.Array(httpOriginSchema)),
   maxAgeMs: positive,
 }).check(
-  Schema.makeFilter(
-    (recipe) =>
-      recipe.check?.kind !== 'request-count' ||
-      recipe.check.origin === undefined ||
-      recipe.allowedOrigins?.includes(recipe.check.origin) === true,
-    { message: 'Request check origin must be listed in allowedOrigins' },
-  ),
+  Schema.makeFilter((recipe) => {
+    const issues: Schema.FilterIssue[] = [];
+    const collected = new Set(recipe.collectors.map((item) => item.kind));
+
+    if (
+      new Set(recipe.checks.map((check) => check.id)).size !==
+      recipe.checks.length
+    ) {
+      issues.push('Check IDs must be unique within a journey');
+    }
+
+    if (collected.size !== recipe.collectors.length) {
+      issues.push('A journey lists at most one collector of each kind');
+    }
+
+    if (
+      recipe.checks.some(
+        (check) =>
+          check.kind === 'request-count' &&
+          check.origin !== undefined &&
+          recipe.allowedOrigins?.includes(check.origin) !== true,
+      )
+    ) {
+      issues.push('Request check origin must be listed in allowedOrigins');
+    }
+
+    for (const check of recipe.checks) {
+      for (const kind of checkKinds[check.kind].evidence) {
+        if (!collected.has(kind)) {
+          issues.push(`Check ${check.id} needs a ${kind} collector`);
+        }
+      }
+    }
+
+    return issues;
+  }),
 );
+
+// Adds the collectors checks need, unless the journey already lists that kind.
+export function journeyCollectors(
+  checks: readonly CheckDefinition[],
+  listed: readonly CollectorConfig[],
+): CollectorConfig[] {
+  const collectors = [...listed, ...defaultCollectors];
+
+  for (const kind of new Set(checks.map((check) => check.kind))) {
+    const definitions = checks.filter((check) => check.kind === kind);
+
+    for (const collector of collectorsFor(kind, definitions)) {
+      if (!collectors.some((item) => item.kind === collector.kind)) {
+        collectors.push(collector);
+      }
+    }
+  }
+
+  return collectors;
+}
+
+function collectorsFor<K extends CheckDefinition['kind']>(
+  kind: K,
+  definitions: readonly CheckDefinition[],
+): readonly CollectorConfig[] {
+  const entry: CheckKinds[K] = checkKinds[kind];
+
+  return entry.collectors(
+    definitions.filter(
+      (check): check is Extract<CheckDefinition, { kind: K }> =>
+        check.kind === kind,
+    ),
+  );
+}
 
 export type Recipe = typeof recipeSchema.Type;
 export type Step = typeof stepSchema.Type;
-export type CheckDefinition = typeof checkSchema.Type;
+export type { CheckDefinition };
 
 export const parseRecipe = Schema.decodeUnknownEffect(
   Schema.fromJsonString(recipeSchema),

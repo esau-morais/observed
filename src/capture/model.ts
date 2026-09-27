@@ -17,6 +17,15 @@ export const httpOriginSchema = text.check(
   ),
 );
 
+export const routeSchema = text.check(
+  Schema.makeFilter(
+    (value) =>
+      value.startsWith('/') &&
+      !value.startsWith('//') &&
+      !/[\\\p{Cc}]/u.test(value),
+  ),
+);
+
 export const digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 
 export const timestamp = Schema.String.check(
@@ -121,7 +130,35 @@ export const observedSchema = Schema.Struct({
   ]),
 });
 
-export const captureSchemaVersion = 4;
+const evidenceProducer = Schema.Struct({ name: text, version: text });
+
+// A typed pointer to one versioned evidence file. The file itself is also
+// listed in artifacts, which carry integrity for export and viewing.
+export const evidenceEntrySchema = Schema.Union([
+  Schema.Struct({
+    kind: text,
+    schemaVersion: positive,
+    status: Schema.Literal('recorded'),
+    path: text,
+    sha256: digest,
+    producer: evidenceProducer,
+    conditions: Schema.Record(
+      text,
+      Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]),
+    ),
+  }),
+  Schema.Struct({
+    kind: text,
+    schemaVersion: positive,
+    status: Schema.Literal('unavailable'),
+    reason: text,
+    producer: evidenceProducer,
+  }),
+]);
+
+export type EvidenceEntry = typeof evidenceEntrySchema.Type;
+
+export const captureSchemaVersion = 5;
 
 export const captureSchema = Schema.Struct({
   schemaVersion: Schema.Literal(captureSchemaVersion),
@@ -144,6 +181,7 @@ export const captureSchema = Schema.Struct({
   finishedAt: timestamp,
   execution,
   artifacts: Schema.Array(captureArtifactSchema),
+  evidence: Schema.Array(evidenceEntrySchema),
 }).check(
   Schema.makeFilter((capture) => {
     const issues: Schema.FilterIssue[] = [];
@@ -167,6 +205,25 @@ export const captureSchema = Schema.Struct({
     }
 
     if (
+      new Set(capture.evidence.map((item) => item.kind)).size !==
+      capture.evidence.length
+    ) {
+      issues.push('Duplicate evidence kinds');
+    }
+
+    if (
+      capture.evidence.some(
+        (entry) =>
+          entry.status === 'recorded' &&
+          !capture.artifacts.some(
+            (item) => item.path === entry.path && item.sha256 === entry.sha256,
+          ),
+      )
+    ) {
+      issues.push('Recorded evidence is missing from artifacts');
+    }
+
+    if (
       new Set(capture.source.files.map((item) => item.path)).size !==
       capture.source.files.length
     ) {
@@ -178,7 +235,7 @@ export const captureSchema = Schema.Struct({
 );
 
 export const observationsSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(2),
+  schemaVersion: Schema.Literal(3),
   requests: Schema.Array(
     Schema.Struct({
       method: text,
@@ -189,13 +246,6 @@ export const observationsSchema = Schema.Struct({
     }),
   ),
   browserErrors: Schema.Array(Schema.String),
-  text: Schema.optionalKey(
-    Schema.Struct({
-      selector: text,
-      count,
-      value: Schema.NullOr(Schema.String),
-    }),
-  ),
   window: Schema.Struct({ startedAt: timestamp, finishedAt: timestamp }),
 });
 

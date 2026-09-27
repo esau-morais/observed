@@ -178,6 +178,10 @@ const capture = Command.make(
       Flag.withDescription('Revision to capture instead of the working tree'),
       Flag.optional,
     ),
+    journey: Flag.String('journey').pipe(
+      Flag.withDescription('Journey name to capture; default the first'),
+      Flag.optional,
+    ),
     output: outputFlag,
     machine: machineFlag,
     timeout: timeoutFlag,
@@ -185,13 +189,26 @@ const capture = Command.make(
   Effect.fn('captureCommand')(function* ({
     project: directory,
     revision,
+    journey,
     output,
     machine,
     timeout,
   }) {
-    const { root, project, recipe } = yield* loadProject(
+    const { root, project, recipes } = yield* loadProject(
       path.resolve(directory),
     );
+    const requested = Option.getOrNull(journey);
+    const recipe =
+      requested === null
+        ? recipes[0]
+        : recipes.find((item) => item.name === requested);
+
+    if (recipe === undefined) {
+      return yield* new SetupFailure({
+        message: `No journey named ${JSON.stringify(requested)}. Journeys: ${recipes.map((item) => JSON.stringify(item.name)).join(', ')}`,
+      });
+    }
+
     const destination = yield* chooseDirectory(output, 'capture', root);
     const captured = yield* captureApplication({
       projectRoot: root,
@@ -240,8 +257,12 @@ const compare = Command.make(
     const exported = yield* Effect.scoped(
       Effect.gen(function* () {
         return yield* exportComparison({
-          baseDirectory: base === 'none' ? null : path.resolve(base),
-          candidateDirectory: path.resolve(candidate),
+          journeys: [
+            {
+              baseDirectory: base === 'none' ? null : path.resolve(base),
+              candidateDirectory: path.resolve(candidate),
+            },
+          ],
           directory,
           viewerDirectory: yield* buildViewer(toolRoot),
           mode: base === 'none' ? 'preview' : 'comparison',

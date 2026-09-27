@@ -4,10 +4,13 @@ import { redact } from './redact';
 import { text } from './capture/model';
 import {
   checkSchema,
+  journeyCollectors,
   recipeSchema,
+  recipeSchemaVersion,
   routeSchema,
   stepSchema,
 } from './capture/recipe';
+import { collectorSchema } from './evidence-kinds';
 
 export const relativePathSchema = text.check(
   Schema.makeFilter(
@@ -19,6 +22,28 @@ export const relativePathSchema = text.check(
 );
 
 export const commandSchema = Schema.NonEmptyArray(text);
+
+const journeySchema = Schema.Struct({
+  name: text,
+  path: routeSchema,
+  ready: Schema.Array(stepSchema),
+  steps: Schema.Array(stepSchema),
+  check: Schema.optionalKey(checkSchema),
+  checks: Schema.optionalKey(Schema.Array(checkSchema)),
+  collectors: Schema.optionalKey(Schema.Array(collectorSchema)),
+  viewport: Schema.optionalKey(recipeSchema.fields.viewport),
+  browserArguments: Schema.optionalKey(Schema.Array(text)),
+  allowedOrigins: recipeSchema.fields.allowedOrigins,
+  maxAgeMs: Schema.optionalKey(recipeSchema.fields.maxAgeMs),
+}).check(
+  Schema.makeFilter((journey) =>
+    journey.check !== undefined && journey.checks !== undefined
+      ? 'Set either check or checks, not both'
+      : undefined,
+  ),
+);
+
+export type Journey = typeof journeySchema.Type;
 
 export const projectSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -33,18 +58,23 @@ export const projectSchema = Schema.Struct({
     path: routeSchema,
     status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
   }),
-  capture: Schema.Struct({
-    name: text,
-    path: routeSchema,
-    ready: Schema.Array(stepSchema),
-    steps: Schema.Array(stepSchema),
-    check: Schema.optionalKey(checkSchema),
-    viewport: Schema.optionalKey(recipeSchema.fields.viewport),
-    browserArguments: Schema.optionalKey(Schema.Array(text)),
-    allowedOrigins: recipeSchema.fields.allowedOrigins,
-    maxAgeMs: Schema.optionalKey(recipeSchema.fields.maxAgeMs),
+  capture: Schema.optionalKey(journeySchema),
+  journeys: Schema.optionalKey(
+    Schema.NonEmptyArray(journeySchema).check(Schema.isMaxLength(3)),
+  ),
+}).check(
+  Schema.makeFilter((project) => {
+    if ((project.capture === undefined) === (project.journeys === undefined)) {
+      return 'Set either capture, for one journey, or journeys, for one to three';
+    }
+
+    const names = (project.journeys ?? []).map((journey) => journey.name);
+
+    return new Set(names).size === names.length
+      ? undefined
+      : 'Journey names must be unique';
   }),
-});
+);
 
 export type Project = typeof projectSchema.Type;
 
@@ -95,19 +125,39 @@ export const loadProject = Effect.fn('loadProject')(function* (
     ),
   );
 
-  const recipe = yield* Schema.decodeUnknownEffect(recipeSchema)({
-    schemaVersion: 1,
-    id: project.capture.name,
-    ...project.capture,
-    check: project.capture.check ?? null,
-    viewport: project.capture.viewport ?? {
-      width: 1280,
-      height: 800,
-      scale: 1,
-    },
-    browserArguments: project.capture.browserArguments ?? [],
-    maxAgeMs: project.capture.maxAgeMs ?? 86_400_000,
-  });
+  const journeys = project.journeys ?? [
+    project.capture ?? (yield* Effect.die('Project has no journey')),
+  ];
+  const recipes = yield* Effect.forEach(journeys, (journey) =>
+    Schema.decodeUnknownEffect(recipeSchema)(journeyRecipe(journey)).pipe(
+      Effect.mapError(
+        (error) =>
+          new ProjectFailure({
+            message: `${filename}: journey ${JSON.stringify(journey.name)} is inconsistent:\n${error.message}`,
+          }),
+      ),
+    ),
+  );
+  const [first, ...rest] = recipes;
 
-  return { root, project, recipe };
+  if (first === undefined) {
+    return yield* Effect.die('Project has no journey');
+  }
+
+  return { root, project, recipes: [first, ...rest] as const };
 });
+
+function journeyRecipe({ check, checks, collectors, ...journey }: Journey) {
+  const configured = checks ?? (check === undefined ? [] : [check]);
+
+  return {
+    schemaVersion: recipeSchemaVersion,
+    id: journey.name,
+    ...journey,
+    checks: configured,
+    collectors: journeyCollectors(configured, collectors ?? []),
+    viewport: journey.viewport ?? { width: 1280, height: 800, scale: 1 },
+    browserArguments: journey.browserArguments ?? [],
+    maxAgeMs: journey.maxAgeMs ?? 86_400_000,
+  };
+}

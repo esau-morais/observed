@@ -10,7 +10,10 @@ import {
 } from './capture/model';
 import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
-import { selectionSchema, type Selection } from './comparison-model';
+import {
+  selectionSchema,
+  type JourneySelection,
+} from './comparison-model';
 import { renderComparison } from './comparison-report';
 import { readVerifiedArtifact } from './evidence';
 import { nodeIo, type EvidenceIoError } from './node-io';
@@ -246,31 +249,43 @@ function contains(root: string, directory: string): boolean {
   );
 }
 
+export type JourneyDirectories = {
+  baseDirectory: string | null;
+  candidateDirectory: string;
+};
+
 export const exportComparison = Effect.fn('exportComparison')(function* ({
-  baseDirectory,
-  candidateDirectory,
+  journeys,
   directory,
   viewerDirectory,
   mode = 'comparison',
 }: {
-  baseDirectory: string | null;
-  candidateDirectory: string;
+  journeys: readonly [JourneyDirectories, ...JourneyDirectories[]];
   directory: string;
   viewerDirectory: string;
   mode?: 'preview' | 'comparison';
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const candidate = yield* loadSide(candidateDirectory, 'Candidate');
-  const base =
-    baseDirectory === null ? null : yield* loadSide(baseDirectory, 'Baseline');
+  const sides = yield* Effect.forEach(journeys, (journey) =>
+    Effect.all({
+      candidate: loadSide(journey.candidateDirectory, 'Candidate'),
+      base:
+        journey.baseDirectory === null
+          ? Effect.succeed(null)
+          : loadSide(journey.baseDirectory, 'Baseline'),
+    }),
+  );
 
   const parent = yield* fs.realPath(path.dirname(path.resolve(directory)));
   const destination = path.join(parent, path.basename(path.resolve(directory)));
   const viewer = yield* fs.realPath(viewerDirectory);
 
   if (
-    (candidate.root !== null && contains(candidate.root, destination)) ||
-    (base !== null && base.root !== null && contains(base.root, destination)) ||
+    sides.some(
+      ({ base, candidate }) =>
+        (candidate.root !== null && contains(candidate.root, destination)) ||
+        (base !== null && base.root !== null && contains(base.root, destination)),
+    ) ||
     contains(viewer, destination)
   ) {
     return yield* new ExportFailure({
@@ -312,47 +327,61 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
   yield* fs.makeDirectory(destination, { mode: 0o700 });
 
-  yield* copyCapture(candidate, path.join(destination, 'candidate'));
+  const evaluatedAt = DateTime.formatIso(yield* DateTime.now);
+  const selected: JourneySelection[] = [];
 
-  if (base !== null) {
-    yield* copyCapture(base, path.join(destination, 'base'));
+  for (const [index, { base, candidate }] of sides.entries()) {
+    const journeyDirectory = `journey-${index + 1}`;
+
+    yield* fs.makeDirectory(path.join(destination, journeyDirectory));
+    yield* copyCapture(
+      candidate,
+      path.join(destination, journeyDirectory, 'candidate'),
+    );
+
+    if (base !== null) {
+      yield* copyCapture(base, path.join(destination, journeyDirectory, 'base'));
+    }
+
+    selected.push({
+      directory: journeyDirectory,
+      ...(base?.kind === 'unavailable'
+        ? {
+            baseIssue: base.issue,
+            baseFailureArtifacts: base.artifacts.map((item) => item.artifact),
+          }
+        : {}),
+      ...(candidate.kind === 'unavailable'
+        ? {
+            candidateIssue: candidate.issue,
+            candidateFailureArtifacts: candidate.artifacts.map(
+              (item) => item.artifact,
+            ),
+          }
+        : {}),
+      base:
+        base?.kind !== 'captured'
+          ? null
+          : {
+              manifestHash: base.manifest.hash,
+              sourceHash: base.capture.source.sha256,
+            },
+      candidate:
+        candidate.kind !== 'captured'
+          ? null
+          : {
+              manifestHash: candidate.manifest.hash,
+              sourceHash: candidate.capture.source.sha256,
+            },
+    });
   }
 
-  const evaluatedAt = DateTime.formatIso(yield* DateTime.now);
-
   const selection = yield* Schema.decodeUnknownEffect(selectionSchema)({
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode,
     evaluatedAt,
-    ...(base?.kind === 'unavailable'
-      ? {
-          baseIssue: base.issue,
-          baseFailureArtifacts: base.artifacts.map((item) => item.artifact),
-        }
-      : {}),
-    ...(candidate.kind === 'unavailable'
-      ? {
-          candidateIssue: candidate.issue,
-          candidateFailureArtifacts: candidate.artifacts.map(
-            (item) => item.artifact,
-          ),
-        }
-      : {}),
-    base:
-      base?.kind !== 'captured'
-        ? null
-        : {
-            manifestHash: base.manifest.hash,
-            sourceHash: base.capture.source.sha256,
-          },
-    candidate:
-      candidate.kind !== 'captured'
-        ? null
-        : {
-            manifestHash: candidate.manifest.hash,
-            sourceHash: candidate.capture.source.sha256,
-          },
-  } satisfies Selection);
+    journeys: selected,
+  });
 
   yield* fs.writeFileString(
     path.join(destination, 'selection.json'),
@@ -360,14 +389,12 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     { flag: 'wx' },
   );
 
-  const { result, visualDiff } = yield* inspectComparison({
-    baseDirectory: base === null ? null : path.join(destination, 'base'),
-    candidateDirectory: path.join(destination, 'candidate'),
-    evaluatedAt,
+  const { result, visualDiffs } = yield* inspectComparison({
+    root: destination,
     selection,
   });
 
-  if (visualDiff !== null) {
+  for (const visualDiff of visualDiffs) {
     yield* fs.writeFile(
       path.join(destination, visualDiff.path),
       visualDiff.bytes,
