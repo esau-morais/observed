@@ -278,18 +278,25 @@ test('the image upload follows the documented steps and sends its bytes as octet
     'https://slack.com/api/files.completeUploadExternal': () =>
       Response.json({ ok: true }),
   };
-  const calls: { url: string; headers: Headers; body: string }[] = [];
+  const calls: {
+    url: string;
+    headers: Headers;
+    body: string | Uint8Array;
+  }[] = [];
 
-  vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
-    calls.push({
-      url,
-      headers: new Headers(init.headers),
-      body: typeof init.body === 'string' ? init.body : '',
-    });
+  vi.stubGlobal('fetch', async (target: string | URL, init: RequestInit) => {
+    const url = String(target);
+    let body: string | Uint8Array = '';
 
-    return Promise.resolve(
-      (answers[url] ?? (() => new Response(null, { status: 404 })))(),
-    );
+    if (init.body instanceof Blob) {
+      body = new Uint8Array(await init.body.arrayBuffer());
+    } else if (typeof init.body === 'string') {
+      body = init.body;
+    }
+
+    calls.push({ url, headers: new Headers(init.headers), body });
+
+    return (answers[url] ?? (() => new Response(null, { status: 404 })))();
   });
 
   await expect(
@@ -308,6 +315,7 @@ test('the image upload follows the documented steps and sends its bytes as octet
   expect(start?.body).toContain('length=3');
   expect(upload?.url).toBe('https://files.slack.com/upload/v1/abc');
   expect(upload?.headers.get('content-type')).toBe('application/octet-stream');
+  expect(upload?.body).toEqual(new Uint8Array([1, 2, 3]));
   expect(complete?.body).toContain('channel_id=C1');
   expect(complete?.body).toContain('thread_ts=1.1');
 });
