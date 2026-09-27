@@ -205,7 +205,9 @@ Observed doesn't check which URL the tests open: a config that keeps a fixed
 says nothing about the revisions. The command must turn on Playwright's
 JSON reporter without an `outputFile`; `--reporter=line,json` does that. List
 the test files and the Playwright config in `source.paths`, and install
-`@playwright/test` and its browsers in `setup`. The suite counts toward
+`@playwright/test` and its browsers in `setup`. Tests that record video also
+need Playwright's ffmpeg: add `["npx", "playwright", "install", "ffmpeg"]`, or
+every test fails when it opens a page. The suite counts toward
 `--timeout`.
 
 Each test becomes a check whose scope starts with "Imported from Playwright".
