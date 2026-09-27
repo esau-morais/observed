@@ -69,6 +69,8 @@ export const react = defineEvidence({
   value: reactValueSchema,
 });
 
+// A name missing from the counts rendered zero times only when it is mounted
+// and the recording did not drop names at its component limit.
 export function renderCount(
   value: ReactEvidence,
   component: string,
@@ -79,7 +81,9 @@ export function renderCount(
     return entry.mounts + entry.updates;
   }
 
-  return value.mounted.includes(component) ? 0 : null;
+  return value.mounted.includes(component) && !value.truncated.components
+    ? 0
+    : null;
 }
 
 export type RenderChange = {
@@ -88,8 +92,8 @@ export type RenderChange = {
   candidate: number;
 };
 
-// Components absent from one side's counts rendered zero times there, or were
-// not mounted; either way the journey produced no render of them.
+// A component absent from one side's counts rendered zero times there, unless
+// that side dropped names at its component limit; such rows are left out.
 export function renderChanges(
   base: ReactEvidence,
   candidate: ReactEvidence,
@@ -100,8 +104,13 @@ export function renderChanges(
     );
   const before = totals(base);
   const after = totals(candidate);
+  const known =
+    (counts: Map<string, number>, value: ReactEvidence) => (name: string) =>
+      counts.has(name) || !value.truncated.components;
 
   return [...new Set([...before.keys(), ...after.keys()])]
+    .filter(known(before, base))
+    .filter(known(after, candidate))
     .map((name) => ({
       name,
       base: before.get(name) ?? 0,

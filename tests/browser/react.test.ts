@@ -46,6 +46,16 @@ const recorderSchema = Schema.fromJsonString(
   }),
 );
 
+const consoleSchema = Schema.fromJsonString(
+  Schema.Struct({
+    data: Schema.Struct({
+      messages: Schema.Array(Schema.Struct({ text: Schema.String })),
+    }),
+  }),
+);
+
+const commitMessage = 'observed-test App commit';
+
 const harSchema = Schema.fromJsonString(
   Schema.Struct({
     log: Schema.Struct({
@@ -62,12 +72,18 @@ async function raw(directory: string) {
   const recorder = Schema.decodeUnknownSync(recorderSchema)(
     await readFile(path.join(directory, 'react-renders.json'), 'utf8'),
   );
+  const messages = Schema.decodeUnknownSync(consoleSchema)(
+    await readFile(path.join(directory, 'console.json'), 'utf8'),
+  );
   const har = Schema.decodeUnknownSync(harSchema)(
     await readFile(path.join(directory, 'requests.har'), 'utf8'),
   );
 
   return {
     app: recorder.data.result.components.find((item) => item.name === 'App'),
+    commits: messages.data.messages.filter(
+      (message) => message.text === commitMessage,
+    ).length,
     requests: har.log.entries.map((entry) => entry.request.url.pathname),
   };
 }
@@ -88,6 +104,21 @@ test('an added App render fails the react-renders check as a regression', async 
       "build: { outDir: 'dist' },",
       "build: { outDir: 'dist' },\n  esbuild: { keepNames: true },",
     ),
+  );
+  // An independent count: the main journey's browser, which has no DevTools
+  // hook, logs one message per committed App render, including the mount.
+  const app = path.join(project, 'App.tsx');
+  await writeFile(
+    app,
+    (await readFile(app, 'utf8'))
+      .replace(
+        "import { useRef, useState } from 'react';",
+        "import { useLayoutEffect, useRef, useState } from 'react';",
+      )
+      .replace(
+        '  const inFlight = useRef(false);',
+        `  const inFlight = useRef(false);\n  useLayoutEffect(() => {\n    console.info('${commitMessage}');\n  });`,
+      ),
   );
   const config = path.join(project, 'observed.json');
   const fields = Schema.Record(Schema.String, Schema.Unknown);
@@ -136,7 +167,6 @@ test('an added App render fails the react-renders check as a regression', async 
 
   // Loading and loaded are two commits. The seeded timer commits a third
   // with an equal but new state object, so App renders once more.
-  const app = path.join(project, 'App.tsx');
   await writeFile(
     app,
     (await readFile(app, 'utf8')).replace(
@@ -181,6 +211,8 @@ test('an added App render fails the react-renders check as a regression', async 
   );
   expect(before.app).toEqual({ name: 'App', mounts: 0, updates: 2 });
   expect(after.app).toEqual({ name: 'App', mounts: 0, updates: 3 });
+  expect(before.commits).toBe(1 + 2);
+  expect(after.commits).toBe(1 + 3);
   // The React run is separate: the journey's own HAR holds only its request.
   expect(before.requests).toEqual(['/api/items']);
   expect(after.requests).toEqual(['/api/items']);

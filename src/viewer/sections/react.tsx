@@ -4,11 +4,8 @@ import { fonts, geometry, media } from '../constants.stylex';
 import { colors } from '../tokens.stylex';
 import type { SectionSide, ViewerSection } from './define';
 
-export type EvidenceView<T> =
-  { status: 'recorded'; value: T } | { status: 'unavailable'; reason: string };
-
 const styles = stylex.create({
-  stack: { display: 'grid', gap: 16, minWidth: 0 },
+  stack: { display: 'grid', gap: 12, minWidth: 0 },
   sides: {
     display: 'grid',
     gap: 24,
@@ -147,7 +144,7 @@ function Changes({
             change.name,
             change.base,
             change.candidate,
-            delta > 0 ? `+${delta} added` : `${delta}`,
+            delta > 0 ? `+${delta} added` : `${-delta} removed`,
           ];
         })}
       />

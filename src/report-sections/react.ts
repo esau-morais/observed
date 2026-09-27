@@ -77,7 +77,7 @@ function changes(base: ReactEvidence, candidate: ReactEvidence): string {
             escapeText(row.name),
             row.base,
             row.candidate,
-            delta > 0 ? `\\+${delta} added` : `${delta}`,
+            delta > 0 ? `\\+${delta} added` : `${-delta} removed`,
           ];
         }),
       );

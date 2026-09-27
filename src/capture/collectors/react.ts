@@ -1,4 +1,4 @@
-import { Effect, Schema, Struct } from 'effect';
+import { Effect, Option, Schema, Struct } from 'effect';
 import {
   reactLimits,
   reactValueSchema,
@@ -25,7 +25,7 @@ const nameOf = (fiber) => {
   const raw = type == null ? null : fiber.tag === 11
     ? type.displayName || (type.render && (type.render.displayName || type.render.name))
     : type.displayName || type.name;
-  const name = typeof raw === 'string' ? raw.trim().slice(0, 200) : '';
+  const name = typeof raw === 'string' ? raw.slice(0, 200).trim() : '';
   return name === '' ? 'Anonymous' : name;
 };
 const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -121,6 +121,28 @@ return {
 };
 })()`;
 
+// Commits that land after the last step, such as a timer or a passive
+// effect, still belong to the journey. Stopping waits for React to stay
+// quiet for a moment and gives up on a page that keeps committing.
+const settleRecorder = `new Promise((resolve) => {
+  const state = window.__observedReact;
+  if (state === undefined) { resolve({ settled: true }); return; }
+  const started = performance.now();
+  let commits = state.commits;
+  let quietSince = started;
+  const tick = () => {
+    const now = performance.now();
+    if (state.commits !== commits) { commits = state.commits; quietSince = now; }
+    if (now - quietSince >= 500) resolve({ settled: true });
+    else if (now - started >= 5000) resolve({ settled: false });
+    else setTimeout(tick, 50);
+  };
+  tick();
+})`;
+
+const viewportScript =
+  '({ width: innerWidth, height: innerHeight, scale: devicePixelRatio })';
+
 const evalResult = <S extends Schema.Constraint>(result: S) =>
   Schema.fromJsonString(
     Schema.Struct({
@@ -148,6 +170,16 @@ const stopSchema = evalResult(
       ...Struct.omit(reactValueSchema.fields, ['sources']),
     }),
   ]),
+);
+
+const settleSchema = evalResult(Schema.Struct({ settled: Schema.Boolean }));
+
+const viewportSchema = evalResult(
+  Schema.Struct({
+    width: Schema.Number,
+    height: Schema.Number,
+    scale: Schema.Number,
+  }),
 );
 
 const treeSchema = Schema.fromJsonString(
@@ -237,6 +269,27 @@ const collectReact = Effect.fnUntraced(function* (
     String(recipe.viewport.scale),
   ]);
   yield* context.browser(['set', 'media', 'light', 'reduced-motion']);
+
+  const viewport = yield* decode(
+    viewportSchema,
+    yield* context.saveOutput('react-environment', 'react-environment.json', [
+      'eval',
+      '-b',
+      base64(viewportScript),
+    ]),
+    'The React run did not report its viewport',
+  );
+
+  if (
+    viewport.data.result.width !== recipe.viewport.width ||
+    viewport.data.result.height !== recipe.viewport.height ||
+    viewport.data.result.scale !== recipe.viewport.scale
+  ) {
+    return yield* new EvidenceUnavailable({
+      reason: "The React run's viewport does not match the saved recipe",
+    });
+  }
+
   yield* context.runSteps(recipe.ready);
 
   const started = yield* decode(
@@ -256,6 +309,23 @@ const collectReact = Effect.fnUntraced(function* (
   }
 
   yield* context.runSteps(recipe.steps);
+
+  const settled = yield* decode(
+    settleSchema,
+    yield* context.saveOutput('react-settle', 'react-settle.json', [
+      'eval',
+      '-b',
+      base64(settleRecorder),
+    ]),
+    'The React recorder did not report whether React settled',
+  );
+
+  if (!settled.data.result.settled) {
+    return yield* new EvidenceUnavailable({
+      reason:
+        'React kept committing for 5 seconds after the last step, so render counts would depend on timing',
+    });
+  }
 
   const stopped = yield* decode(
     stopSchema,
@@ -292,23 +362,35 @@ const collectReact = Effect.fnUntraced(function* (
   const ids = treeIds(tree.data.tree);
   const sources: ReactEvidence['sources'][number][] = [];
 
-  for (const component of recording.components.slice(0, reactLimits.sources)) {
+  const byRenders = recording.components
+    .filter((component) => component.name !== 'Anonymous')
+    .toSorted(
+      (left, right) =>
+        right.mounts + right.updates - (left.mounts + left.updates),
+    )
+    .slice(0, reactLimits.sources);
+
+  for (const component of byRenders) {
     const id = ids.get(component.name);
 
     if (id === undefined) {
       continue;
     }
 
-    const inspected = yield* decode(
-      inspectSchema,
-      yield* context.saveOutput(
-        `react-inspect-${sources.length + 1}`,
-        `react-inspect-${id}.json`,
-        ['react', 'inspect', id],
-      ),
-      `agent-browser returned React details for ${component.name} that Observed cannot read`,
-    );
-    const source = inspected.data.source;
+    // Sources are optional: a failed lookup leaves this component without one.
+    const inspected = yield* context
+      .saveOutput(`react-inspect-${id}`, `react-inspect-${id}.json`, [
+        'react',
+        'inspect',
+        id,
+      ])
+      .pipe(
+        Effect.map(Schema.decodeUnknownOption(inspectSchema)),
+        Effect.orElseSucceed(() => Option.none()),
+      );
+    const source = Option.isSome(inspected)
+      ? inspected.value.data.source
+      : undefined;
 
     if (source !== undefined && source !== null && source[0] !== '') {
       sources.push({

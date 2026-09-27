@@ -1,6 +1,9 @@
 import { expect, test } from 'vitest';
 import { treeIds } from '../src/capture/collectors/react';
-import { evaluateReactRenders } from '../src/checks/react-renders';
+import {
+  evaluateReactRenders,
+  reactRenders,
+} from '../src/checks/react-renders';
 import { renderChanges, type ReactEvidence } from '../src/evidence-kinds/react';
 
 const evidence = (
@@ -36,6 +39,9 @@ test('an absent component name stays unknown instead of passing with zero render
   expect(evaluateReactRenders(check, evidence([], ['App'], true)).outcome).toBe(
     'unknown',
   );
+  expect(
+    evaluateReactRenders(check, evidence([], ['Shelf'], true)).outcome,
+  ).toBe('unknown');
   expect(evaluateReactRenders(check, evidence([], ['Shelf']))).toMatchObject({
     outcome: 'passed',
     actual: 0,
@@ -95,4 +101,51 @@ test('tree IDs come from the first node with each name, ignoring keys', () => {
       ['button', '6'],
     ]),
   );
+});
+
+test('a failure under a different React build is not attributed as a regression', () => {
+  const side = (version: string, updates: number) => {
+    const value = {
+      ...evidence([{ name: 'Shelf', mounts: 0, updates }], ['Shelf']),
+      renderers: [{ version, build: 'production' as const }],
+    };
+
+    return {
+      observations: {
+        schemaVersion: 3 as const,
+        requests: [],
+        browserErrors: [],
+        window: {
+          startedAt: '2026-09-27T00:00:00.000Z',
+          finishedAt: '2026-09-27T00:00:01.000Z',
+        },
+      },
+      evidence: { react: value },
+    };
+  };
+
+  const pair = (baseVersion: string) => {
+    const base = side(baseVersion, 2);
+    const candidate = side('19.1.0', 3);
+    const evaluated = reactRenders.evaluate({
+      definition: check,
+      base,
+      candidate,
+    });
+
+    return {
+      detail: evaluated.candidate.detail,
+      regression: reactRenders.regression?.({
+        definition: check,
+        base: { ...base, evaluation: evaluated.base ?? evaluated.candidate },
+        candidate: { ...candidate, evaluation: evaluated.candidate },
+      }),
+    };
+  };
+
+  expect(pair('19.1.0').regression).not.toBeNull();
+  const upgraded = pair('18.3.1');
+
+  expect(upgraded.regression).toBeNull();
+  expect(upgraded.detail).toContain('not attributed to the code change');
 });

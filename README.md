@@ -121,13 +121,17 @@ The [project schema](src/project.ts) and
   collector, which you can also list in `collectors` without a check. After the
   journey, the collector opens the app in a second browser with React DevTools
   enabled, runs `ready` and `steps` again and counts each render that commits
-  work. Renders React discards after bailing out don't count, and components
-  with the same name are summed. Nothing from this second browser reaches
-  request checks. Production builds usually minify component names, so a check
+  work. Observed doesn't count renders React discards after bailing out, and it
+  sums components that share a name. Counting stops once React has committed
+  nothing for half a second after the last step; a page that keeps committing
+  for 5 seconds leaves the evidence unavailable. Nothing from this second
+  browser reaches request checks. A failed check counts as a regression only
+  when both versions ran the same React version and build.
+- Production builds usually minify component names, so a `react-renders` check
   can name a component only when the build keeps names, for example with Vite's
   `esbuild: { keepNames: true }`. The check reports unknown when no mounted
-  component has that name, and when the page has no React root or loads a new
-  document during `steps`.
+  component has that name, when the recording reached its component limit, and
+  when the page has no React root or loads a new document during `steps`.
 - Put the expected result in the check, not in a step. A step that waits for the
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,
