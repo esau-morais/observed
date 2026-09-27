@@ -1,11 +1,14 @@
 import { Effect } from 'effect';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
+  diffCrop,
   readSlackState,
   slackAction,
   slackMessage,
+  uploadSlackImage,
   writeSlackState,
 } from '../scripts/slack-delivery';
+import { decodePng, encodeRgbPng } from '../src/png';
 import { slackSkipReason } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 
@@ -89,11 +92,10 @@ test('captured names cannot mention anyone in Slack, and captured values stay ou
   );
 
   expect(message).not.toMatch(/<!channel>|<@U123>/);
-  expect(message).toContain('&lt;!channel&gt;');
-  expect(message).toContain('1 of 2 checks passed');
   expect(message).toContain(
-    'Unknown · Order total &lt;!channel&gt; &lt;@U123&gt;. Scope: One checkout',
+    'Unavailable: Order total &lt;!channel&gt; &lt;@U123&gt;',
   );
+  expect(message).toContain('1 of 2 checks unknown');
   expect(message).not.toContain('Captured page text');
   expect(message).not.toContain('Captured item text');
 });
@@ -124,4 +126,109 @@ test('Slack is skipped with a reason instead of posting duplicates or to a guess
   expect(reason({ channel: '#observed-test' })).toContain('channel ID');
   expect(reason({ pullRequest: null })).toContain('only for pull requests');
   expect(reason({ lookupFailed: true })).toContain('could not be looked up');
+});
+
+test('a failing Slack message leads with the measured values and links out, without captured text', async () => {
+  const result = await unavailable();
+  const [journey] = result.journeys;
+  const check = {
+    scope: 'Open the page',
+    expectation: 'Median LCP at most 250 ms.',
+  };
+  const message = slackMessage(
+    {
+      ...result,
+      journeys: [
+        {
+          ...journey,
+          checks: [
+            {
+              ...check,
+              id: 'lcp',
+              name: 'Largest contentful paint stays fast',
+              verdict: 'regression',
+              detail: 'Captured page text',
+              measure: {
+                label: 'Median LCP',
+                base: '52 ms',
+                candidate: '452 ms',
+                limit: 'at most 250 ms',
+              },
+            },
+            {
+              ...check,
+              id: 'books',
+              name: 'One books request',
+              verdict: 'passed',
+              detail: 'Captured item text',
+            },
+          ],
+        },
+      ],
+      summary: { passed: 1, total: 2 },
+      conclusion: { kind: 'regression', text: 'Captured page text' },
+    },
+    links,
+  );
+  const text = JSON.stringify(message);
+
+  expect(message.blocks[0]).toMatchObject({
+    text: {
+      text: ':red_circle: *Regression: Median LCP 52 ms → 452 ms, at most 250 ms* · <https://github.com/o/r/pull/7|o/r#7>',
+    },
+  });
+  expect(text).toContain('1 of 2 checks failed');
+  expect(message.blocks[2]).toMatchObject({
+    type: 'actions',
+    elements: [
+      { text: { text: 'Open report' }, url: links.report },
+      { text: { text: 'View on PR' }, url: links.pullRequest },
+    ],
+  });
+  expect(text).not.toContain('Captured');
+});
+
+test('the Slack image is cut from the recorded changed regions with a margin, clamped to the screenshot', () => {
+  const width = 100;
+  const rgb = new Uint8Array(width * width * 3).map((_, index) => index % 251);
+  const crop = diffCrop(encodeRgbPng(width, width, rgb), [
+    { x: 40, y: 50, width: 10, height: 10, changedPixels: 100 },
+    { x: 90, y: 90, width: 10, height: 10, changedPixels: 100 },
+  ]);
+  const decoded = crop === null ? null : decodePng(crop);
+
+  if (decoded?.kind !== 'decoded') {
+    throw new Error('The crop is not a readable PNG');
+  }
+
+  expect([decoded.image.width, decoded.image.height]).toEqual([76, 66]);
+  expect(Array.from(decoded.image.rgba.subarray(0, 3))).toEqual(
+    Array.from(rgb.subarray((34 * width + 24) * 3, (34 * width + 24) * 3 + 3)),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// Slack answers a token without the scope with ok: false and missing_scope,
+// per https://docs.slack.dev/reference/methods/files.getUploadURLExternal
+test('without files:write the image is skipped and nothing else is sent', async () => {
+  const fetch = vi.fn(() =>
+    Promise.resolve(Response.json({ ok: false, error: 'missing_scope' })),
+  );
+
+  vi.stubGlobal('fetch', fetch);
+
+  await expect(
+    uploadSlackImage('xoxb-test', {
+      channel: 'C1',
+      threadTs: '1.1',
+      filename: 'observed-changed-pixels.png',
+      title: 'Changed pixels',
+      altText: 'Changed pixels',
+      bytes: new Uint8Array([1]),
+    }),
+  ).resolves.toBe('missing-scope');
+  expect(fetch).toHaveBeenCalledTimes(1);
 });

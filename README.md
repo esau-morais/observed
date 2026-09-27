@@ -735,16 +735,25 @@ runs the workflow with credentials.
 
 The action can also post to one Slack channel. It sends a message when a pull
 request's result starts failing: a regression, a failed check, or unavailable
-evidence. Later runs of that pull request edit the same message, including a
-recovery to no regression, so retries don't notify anyone again. A pull request
-that never fails posts nothing, and runs outside pull requests post nothing.
+evidence. Later runs of that pull request edit the same message, so retries
+don't notify anyone again. A recovery to no regression also posts one reply in
+the message's thread. A pull request that never fails posts nothing, and runs
+outside pull requests post nothing.
 
-The message has the same headline as the GitHub check, including the deciding
-measured values, each side's revision, capture and check outcome, and links to
-the pull request, report page, check and workflow run. It leaves out captured
-text, such as error messages and page text, because a channel can include people
-who can't read the repository. A workflow that runs
-the action more than once gets one message per `artifact-name`.
+The message has the same headline as the GitHub check, with the values that
+decided it, such as `Regression: Browser errors 0 → 1, none allowed`. Below it,
+one line gives the base and head commits and how many checks failed, and two
+buttons open the report and the pull request. It shows check names, metric
+names, measured numbers and commits, but no captured text such as error
+messages or page text, because a channel can include people who can't read the
+repository. A workflow that runs the action more than once gets one message per
+`artifact-name`.
+
+If you also give the bot the optional `files:write` scope, a failing message
+whose screenshots changed gets the changed region of the pixel diff as an image
+in its thread. That image shows the rendered page around the change, including
+any text there, so leave the scope out when the channel should not see page
+content. Without the scope, the message goes out without the image.
 
 Editing the earlier message needs the GitHub App above, because its comment
 remembers which Slack message belongs to the pull request. Without the App,

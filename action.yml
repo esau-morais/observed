@@ -32,7 +32,7 @@ inputs:
     description: Private key of that GitHub App. Pass it from a repository secret.
     default: ''
   slack-bot-token:
-    description: Bot token of a Slack app with the chat:write scope. With slack-channel, failing results are posted to Slack. Pass it from a repository secret.
+    description: Bot token of a Slack app with the chat:write scope. With slack-channel, failing results are posted to Slack. With the optional files:write scope, changed screenshots add the changed region as an image in the message's thread. Pass it from a repository secret.
     default: ''
   slack-channel:
     description: ID of the Slack channel to post to, such as C0123456789. Invite the bot to it first.

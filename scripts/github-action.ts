@@ -16,6 +16,7 @@ import type { Capture, Source } from '../src/capture/model';
 import { loadProject } from '../src/project';
 import { packageName, packaged } from '../src/installation';
 import { renderReportPage } from '../src/report-page';
+import { sha256 } from '../src/encoding';
 import {
   checkConclusion,
   checkName,
@@ -27,10 +28,13 @@ import {
 } from './github-delivery';
 import {
   callSlack,
+  diffCrop,
   readSlackState,
   slackAction,
   slackMessage,
+  slackRecovery,
   SlackError,
+  uploadSlackImage,
   writeSlackState,
 } from './slack-delivery';
 import { describeRevision, shortSource } from '../src/provenance-text';
@@ -761,6 +765,37 @@ function captureStart(result: Comparison): string | null {
   return first ?? null;
 }
 
+// The changed region of the first journey whose screenshots changed, cut from
+// the diff image only when its bytes still match the hash in the result.
+async function changedPixels(run: {
+  directory: string;
+  result: Comparison;
+}): Promise<{ bytes: Uint8Array; altText: string } | null> {
+  for (const journey of run.result.journeys) {
+    const visual =
+      journey.comparison.kind === 'available'
+        ? journey.comparison.visual
+        : null;
+
+    if (visual?.kind === 'changed') {
+      const bytes = await readFile(path.join(run.directory, visual.diff.path));
+      const crop =
+        sha256(bytes) === visual.diff.sha256
+          ? diffCrop(bytes, visual.regions)
+          : null;
+
+      return crop === null
+        ? null
+        : {
+            bytes: crop,
+            altText: `Changed pixels in ${visual.regionCount} ${visual.regionCount === 1 ? 'region' : 'regions'}, ${visual.changedPixels} pixels`,
+          };
+    }
+  }
+
+  return null;
+}
+
 function link(label: string, url: string | null): string | null {
   return url !== null && Schema.is(httpsUrlSchema)(url)
     ? `[${label}](${url})`
@@ -1053,12 +1088,63 @@ if (import.meta.main) {
         );
 
         if (sent !== null) {
+          const previous = slackState;
+
           slackState = { channel: sent.channel, ts: sent.ts, failing };
           notes.push(
             action === 'post'
               ? 'Slack: posted a message'
               : 'Slack: updated the earlier message',
           );
+
+          if (
+            action === 'update' &&
+            previous?.failing === true &&
+            !failing &&
+            previous.ts === sent.ts
+          ) {
+            const replied = await attempt('Slack recovery reply', () =>
+              callSlack('chat.postMessage', slackToken, {
+                channel: sent.channel,
+                thread_ts: sent.ts,
+                ...slackRecovery(
+                  summary.trusted && Option.isSome(decoded)
+                    ? decoded.value.result
+                    : null,
+                ),
+              }),
+            );
+
+            if (replied !== null) {
+              notes.push('Slack: replied in the thread that it recovered');
+            }
+          }
+
+          if (action === 'post' && Option.isSome(decoded)) {
+            const run = decoded.value;
+            const uploaded = await attempt('Slack image', async () => {
+              const image = await changedPixels(run);
+
+              return image === null
+                ? 'none'
+                : uploadSlackImage(slackToken, {
+                    channel: sent.channel,
+                    threadTs: sent.ts,
+                    filename: 'observed-changed-pixels.png',
+                    title: 'Changed pixels',
+                    altText: image.altText,
+                    bytes: image.bytes,
+                  });
+            });
+
+            if (uploaded === 'uploaded') {
+              notes.push('Slack: added the changed pixels to the thread');
+            } else if (uploaded === 'missing-scope') {
+              notes.push(
+                'Slack: no image, because the Slack app lacks files:write',
+              );
+            }
+          }
         }
       }
     }

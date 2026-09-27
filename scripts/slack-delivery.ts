@@ -1,17 +1,17 @@
 import { Option, Schema } from 'effect';
-import type { Comparison, Side } from '../src/comparison-model';
+import type {
+  CheckVerdict,
+  Comparison,
+  Side,
+  VisualRegion,
+} from '../src/comparison-model';
+import { decodePng, encodeRgbPng } from '../src/png';
 import { shortSource } from '../src/provenance-text';
-import {
-  checkSummary,
-  conclusionTones,
-  executionLabels,
-  headline,
-  verdictLabels,
-  type Tone,
-} from '../src/result-text';
+import { conclusionTones, headline, type Tone } from '../src/result-text';
 
 export class SlackError extends Schema.TaggedError<SlackError>()('SlackError', {
   message: Schema.String,
+  code: Schema.String,
   gone: Schema.Boolean,
 }) {}
 
@@ -29,17 +29,6 @@ const icons = {
   checked: ':white_check_mark:',
   neutral: ':white_circle:',
 } satisfies Record<Tone, string>;
-
-// Slack channels can reach people who can't read the repository, so the
-// message carries outcomes and links, never captured values.
-const consequences = {
-  regression: 'The job fails.',
-  'check-failed': 'The job fails.',
-  unavailable: 'Missing evidence is not a pass. The job fails.',
-  'no-regression': 'The job passes.',
-  'not-checked': 'No named check ran. The job passes.',
-  preview: 'A preview compares no revisions. The job passes.',
-} satisfies Record<Comparison['conclusion']['kind'], string>;
 
 // Slack reads <...> as links and mentions, so captured text must not keep them.
 export function slackText(value: string): string {
@@ -70,15 +59,53 @@ export type SlackLinks = {
   run: string | null;
 };
 
-function sideLine(label: string, side: Side): string {
-  const revision =
-    side.capture === null
-      ? 'unavailable'
-      : `\`${slackText(shortSource(side.capture.manifest.source))}\``;
-
-  return `${label} ${revision} ${executionLabels[side.execution].toLowerCase()}`;
+function revision(side: Side | undefined): string {
+  return side?.capture === null || side?.capture === undefined
+    ? 'unavailable'
+    : `\`${slackText(shortSource(side.capture.manifest.source))}\``;
 }
 
+// "N of M" names the checks that decided the verdict.
+function checkCount(result: Comparison): string {
+  const verdicts = result.journeys.flatMap((journey) => journey.checks);
+  const total = verdicts.length;
+  const count = (kinds: readonly CheckVerdict['verdict'][]) =>
+    verdicts.filter((check) => kinds.includes(check.verdict)).length;
+  const noun = total === 1 ? 'check' : 'checks';
+
+  if (total === 0) {
+    return 'no named checks';
+  }
+
+  switch (result.conclusion.kind) {
+    case 'regression':
+    case 'check-failed':
+      return `${count(['regression', 'failed'])} of ${total} ${noun} failed`;
+    case 'unavailable':
+      return `${count(['unknown', 'not-run'])} of ${total} ${noun} unknown`;
+    case 'no-regression':
+    case 'not-checked':
+    case 'preview':
+      return `${count(['passed'])} of ${total} ${noun} passed`;
+  }
+}
+
+function button(text: string, url: string | null, id: string) {
+  return url !== null && Schema.is(httpsUrl)(url)
+    ? [
+        {
+          type: 'button',
+          action_id: id,
+          text: { type: 'plain_text', text },
+          url,
+        },
+      ]
+    : [];
+}
+
+// Channels can reach people who can't read the repository, so a message shows
+// verdicts, check and metric names, measured numbers and revisions, never
+// captured page text or error messages.
 export function slackMessage(result: Comparison | null, links: SlackLinks) {
   const title = clip(
     result === null
@@ -90,72 +117,28 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
     result === null
       ? icons.unknown
       : icons[conclusionTones[result.conclusion.kind]];
-  const lines = (result?.journeys ?? []).flatMap((journey) =>
-    journey.checks.map((check) =>
-      slackText(
-        clip(
-          `• ${verdictLabels[check.verdict]} · ${result !== null && result.journeys.length > 1 ? `${journey.title}: ` : ''}${check.name}. Scope: ${check.scope}`,
-          300,
-        ),
-      ),
-    ),
-  );
-  const checks: string[] = [];
-
-  // Names and scopes come from observed.json, or from the app's test titles
-  // for imported checks; details and measured values stay out. The list
-  // stops at the first check that doesn't fit, so none is skipped silently.
-  for (const line of lines) {
-    if ([...checks, line].join('\n').length > 2000) {
-      checks.push(`• ${lines.length - checks.length} more in the report`);
-      break;
-    }
-
-    checks.push(line);
-  }
-
-  const detail =
-    result === null
-      ? 'Observed wrote no readable result. The job fails.'
-      : [
-          `${slackText(checkSummary(result))}. ${consequences[result.conclusion.kind]}`,
-          ...checks,
-        ].join('\n');
   const where =
     slackLink(links.pullRequestLabel, links.pullRequest) ??
     slackText(links.pullRequestLabel);
-  const run =
-    links.name === 'Observed' ? '' : ` · ${slackText(clip(links.name, 200))}`;
-  const labelled: [string, Side][] = [];
-
-  for (const journey of result?.journeys ?? []) {
-    const prefix =
-      result === null || result.journeys.length === 1
-        ? ''
-        : `${slackText(clip(journey.title, 100))}: `;
-
-    if (result?.mode === 'preview') {
-      labelled.push([`${prefix}Current`, journey.candidate]);
-    } else {
-      labelled.push(
-        [`${prefix}Base`, journey.base],
-        [`${prefix}Candidate`, journey.candidate],
-      );
-    }
-  }
-
-  const context: string[] = [];
-
-  for (const item of [
-    ...labelled.map(([label, side]) => sideLine(label, side)),
-    slackLink('Open the report', links.report),
-    slackLink('GitHub check', links.check),
-    slackLink('Workflow run', links.run),
-  ]) {
-    if (item !== null && [...context, item].join(' · ').length <= 2900) {
-      context.push(item);
-    }
-  }
+  const [journey] = result?.journeys ?? [];
+  const buttons = [
+    ...(links.report === null
+      ? button('Open run', links.run, 'open_run')
+      : button('Open report', links.report, 'open_report')),
+    ...button('View on PR', links.pullRequest, 'view_pull_request'),
+  ];
+  const context =
+    result === null
+      ? ['Observed wrote no readable result']
+      : [
+          result.mode === 'preview'
+            ? revision(journey?.candidate)
+            : `${revision(journey?.base)} → ${revision(journey?.candidate)}`,
+          checkCount(result),
+          ...(links.name === 'Observed'
+            ? []
+            : [slackText(clip(links.name, 200))]),
+        ];
 
   return {
     text: slackText(`${title} · ${links.pullRequestLabel}`),
@@ -164,14 +147,33 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `${icon} *${slackText(title)}* · ${where}${run}\n${detail}`,
+          text: `${icon} *${slackText(title)}* · ${where}`,
         },
       },
       {
         type: 'context',
         elements: [{ type: 'mrkdwn', text: context.join(' · ') }],
       },
+      ...(buttons.length === 0 ? [] : [{ type: 'actions', elements: buttons }]),
     ],
+  };
+}
+
+// Posted in the thread of the failing message, so the people following it
+// hear about the recovery; the edited parent shows the current state.
+export function slackRecovery(result: Comparison | null) {
+  const head = result?.journeys[0]?.candidate;
+  const title =
+    result === null
+      ? 'No result: treat this run as unavailable'
+      : headline(result);
+  const icon =
+    result === null
+      ? icons.unknown
+      : icons[conclusionTones[result.conclusion.kind]];
+
+  return {
+    text: `${icon} *${slackText(clip(title, 300))}* at ${revision(head)}${result === null ? '' : ` · ${checkCount(result)}`}`,
   };
 }
 
@@ -211,20 +213,31 @@ export function slackAction(
   return known === null ? 'none' : 'update';
 }
 
-const slackResponse = Schema.Struct({
+const answerSchema = Schema.Struct({
   ok: Schema.Boolean,
-  ts: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^\d+\.\d+$/))),
-  channel: Schema.optionalKey(
-    Schema.String.check(Schema.isPattern(/^[A-Z0-9]+$/)),
-  ),
   error: Schema.optionalKey(Schema.String),
 });
 
-export async function callSlack(
-  method: 'chat.postMessage' | 'chat.update',
+const messageSchema = Schema.Struct({
+  ts: Schema.String.check(Schema.isPattern(/^\d+\.\d+$/)),
+  channel: Schema.String.check(Schema.isPattern(/^[A-Z0-9]+$/)),
+});
+
+const uploadSchema = Schema.Struct({
+  upload_url: Schema.String.check(Schema.isPattern(/^https:\/\/[^\s]+$/)),
+  file_id: Schema.String.check(Schema.isPattern(/^[A-Z0-9]+$/)),
+});
+
+type Body =
+  | { kind: 'json'; value: Record<string, unknown> }
+  | { kind: 'form'; value: Record<string, string> };
+
+async function slackApi<A>(
+  method: string,
   token: string,
-  body: Record<string, unknown>,
-): Promise<{ channel: string; ts: string }> {
+  body: Body,
+  schema: Schema.Codec<A>,
+): Promise<A> {
   let response: Response;
 
   try {
@@ -232,38 +245,177 @@ export async function callSlack(
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Type':
+          body.kind === 'json'
+            ? 'application/json; charset=utf-8'
+            : 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify(body),
+      body:
+        body.kind === 'json'
+          ? JSON.stringify(body.value)
+          : new URLSearchParams(body.value).toString(),
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    throw new SlackError({ message: `${method} did not answer`, gone: false });
-  }
-
-  const decoded = Schema.decodeUnknownOption(slackResponse)(
-    await response.json().catch(() => null),
-  );
-
-  if (Option.isNone(decoded)) {
     throw new SlackError({
-      message: `${method} answered HTTP ${String(response.status)} unexpectedly`,
+      message: `${method} did not answer`,
+      code: 'no_answer',
       gone: false,
     });
   }
 
-  const answer = decoded.value;
+  const json: unknown = await response.json().catch(() => null);
+  const answer = Schema.decodeUnknownOption(answerSchema)(json);
 
-  if (!answer.ok || answer.ts === undefined || answer.channel === undefined) {
-    const error = /^[a-z_]+$/.test(answer.error ?? '')
-      ? (answer.error ?? '')
+  if (Option.isNone(answer)) {
+    throw new SlackError({
+      message: `${method} answered HTTP ${String(response.status)} unexpectedly`,
+      code: 'unexpected',
+      gone: false,
+    });
+  }
+
+  const decoded = answer.value.ok
+    ? Schema.decodeUnknownOption(schema)(json)
+    : Option.none();
+
+  if (Option.isNone(decoded)) {
+    const error = /^[a-z_]+$/.test(answer.value.error ?? '')
+      ? (answer.value.error ?? '')
       : 'unknown_error';
 
     throw new SlackError({
       message: `${method} answered ${error}`,
+      code: error,
       gone: goneErrors.includes(error),
     });
   }
 
-  return { channel: answer.channel, ts: answer.ts };
+  return decoded.value;
+}
+
+export function callSlack(
+  method: 'chat.postMessage' | 'chat.update',
+  token: string,
+  body: Record<string, unknown>,
+): Promise<{ channel: string; ts: string }> {
+  return slackApi(method, token, { kind: 'json', value: body }, messageSchema);
+}
+
+// The crop covers every recorded changed region with a margin, from the diff
+// image whose hash the result recorded.
+export function diffCrop(
+  bytes: Uint8Array,
+  regions: readonly VisualRegion[],
+): Uint8Array | null {
+  const decoded = decodePng(bytes);
+  const margin = 16;
+
+  if (decoded.kind !== 'decoded' || regions.length === 0) {
+    return null;
+  }
+
+  const { width, height, rgba } = decoded.image;
+  const left = Math.max(0, Math.min(...regions.map((area) => area.x)) - margin);
+  const top = Math.max(0, Math.min(...regions.map((area) => area.y)) - margin);
+  const right = Math.min(
+    width,
+    Math.max(...regions.map((area) => area.x + area.width)) + margin,
+  );
+  const bottom = Math.min(
+    height,
+    Math.max(...regions.map((area) => area.y + area.height)) + margin,
+  );
+  const cropWidth = right - left;
+  const cropHeight = bottom - top;
+  const rgb = new Uint8Array(cropWidth * cropHeight * 3);
+
+  for (let y = 0; y < cropHeight; y += 1) {
+    for (let x = 0; x < cropWidth; x += 1) {
+      const from = ((top + y) * width + left + x) * 4;
+      const to = (y * cropWidth + x) * 3;
+
+      rgb.set(rgba.subarray(from, from + 3), to);
+    }
+  }
+
+  return encodeRgbPng(cropWidth, cropHeight, rgb);
+}
+
+// Needs the optional files:write scope. Without it Slack answers
+// missing_scope, and the message goes out without the image.
+export async function uploadSlackImage(
+  token: string,
+  image: {
+    channel: string;
+    threadTs: string;
+    filename: string;
+    title: string;
+    altText: string;
+    bytes: Uint8Array;
+  },
+): Promise<'uploaded' | 'missing-scope'> {
+  let upload: typeof uploadSchema.Type;
+
+  try {
+    upload = await slackApi(
+      'files.getUploadURLExternal',
+      token,
+      {
+        kind: 'form',
+        value: {
+          filename: image.filename,
+          length: String(image.bytes.length),
+          alt_txt: image.altText,
+        },
+      },
+      uploadSchema,
+    );
+  } catch (error) {
+    if (error instanceof SlackError && error.code === 'missing_scope') {
+      return 'missing-scope';
+    }
+
+    throw error;
+  }
+
+  let stored: Response;
+
+  try {
+    stored = await fetch(upload.upload_url, {
+      method: 'POST',
+      body: new Blob([Buffer.from(image.bytes)]),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new SlackError({
+      message: 'the file upload did not answer',
+      code: 'no_answer',
+      gone: false,
+    });
+  }
+
+  if (!stored.ok) {
+    throw new SlackError({
+      message: `the file upload answered HTTP ${String(stored.status)}`,
+      code: 'upload_failed',
+      gone: false,
+    });
+  }
+
+  await slackApi(
+    'files.completeUploadExternal',
+    token,
+    {
+      kind: 'form',
+      value: {
+        files: JSON.stringify([{ id: upload.file_id, title: image.title }]),
+        channel_id: image.channel,
+        thread_ts: image.threadTs,
+      },
+    },
+    Schema.Struct({}),
+  );
+
+  return 'uploaded';
 }
