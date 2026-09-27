@@ -177,10 +177,19 @@ function resolveScript(
 
   const path = snapshotPath(position.source, new Set(source.files.keys()));
 
-  return path === null
+  if (path === null) {
+    return {
+      kind: 'failed',
+      reason: `${script}:${line}:${column} maps to ${position.source}, outside the captured source`,
+    };
+  }
+
+  // A map built from other code would place the line wrongly.
+  return position.content !== null &&
+    position.content !== source.files.get(path)
     ? {
         kind: 'failed',
-        reason: `${script}:${line}:${column} maps to ${position.source}, outside the captured source`,
+        reason: `The source map's copy of ${path} differs from the snapshot`,
       }
     : {
         kind: 'resolved',

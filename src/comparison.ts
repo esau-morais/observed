@@ -1533,7 +1533,7 @@ const loadSideSource = Effect.fnUntraced(
           kind: 'unavailable',
           reason:
             indexArtifact === undefined
-              ? 'The capture recorded no source maps'
+              ? 'The capture has no source map index; it predates source maps or fetching them failed'
               : 'The source map index is unreadable',
         },
       } satisfies SideSource;

@@ -29,7 +29,7 @@ afterEach(async () => {
   );
 });
 
-test('fetches hidden and linked source maps from the application origin only', async () => {
+test('fetches hidden and linked source maps, never from another host', async () => {
   const server = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',
@@ -46,7 +46,10 @@ test('fetches hidden and linked source maps from the application origin only', a
   const origin = `http://127.0.0.1:${server.port}`;
   const frames = ['hidden', 'linked', 'external', 'plain']
     .map((name) => `    at ${name} (${origin}/assets/${name}.js:1:1)`)
-    .concat('    at other (https://cdn.example.com/lib.js:1:1)')
+    .concat(
+      '    at other (https://cdn.example.com/lib.js:1:1)',
+      `    at relative (${origin}//cdn.example.com/lib.js:1:1)`,
+    )
     .join('\n');
 
   await mkdir(path.join(directory, 'evidence'));
@@ -117,9 +120,16 @@ test('fetches hidden and linked source maps from the application origin only', a
             'No source map: /assets/plain.js.map: HTTP 404, and the script names no sourceMappingURL',
         },
       },
+      {
+        script: '//cdn.example.com/lib.js',
+        map: {
+          kind: 'unavailable',
+          reason:
+            "No source map: /lib.js.map: outside the application's origin; the script itself: outside the application's origin",
+        },
+      },
     ],
   });
-  expect(index.scripts).toHaveLength(4);
   expect(artifacts).toEqual([
     'source-map-1 source-maps/1-hidden.js.map',
     'source-map-2 source-maps/2-linked.js.map',

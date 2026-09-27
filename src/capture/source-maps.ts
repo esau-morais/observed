@@ -2,7 +2,7 @@ import { Effect, FileSystem, Option, Schema } from 'effect';
 import path from 'node:path';
 import { json } from '../encoding';
 import { evidenceKinds } from '../evidence-kinds';
-import { redactText } from '../redact';
+import { conceal } from '../redact';
 import {
   applicationScript,
   parseSourceMap,
@@ -13,47 +13,68 @@ import {
 
 const maxScripts = 20;
 const maxBytes = 32 * 1024 * 1024;
-const timeoutMs = 10_000;
+const timeoutMs = 5_000;
+// Map fetching runs inside the capture's own timeout, so it stops starting
+// new fetches after this long.
+const deadlineMs = 20_000;
 
 type Fetched =
   { kind: 'body'; text: string } | { kind: 'failed'; reason: string };
 
+async function readLimited(response: Response): Promise<Fetched> {
+  const reader = response.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+
+  for (;;) {
+    const read = await reader?.read();
+
+    if (read === undefined || read.done) {
+      return { kind: 'body', text: Buffer.concat(chunks).toString('utf8') };
+    }
+
+    size += read.value.byteLength;
+
+    if (size > maxBytes) {
+      await reader?.cancel();
+
+      return { kind: 'failed', reason: 'larger than 32 MB' };
+    }
+
+    chunks.push(read.value);
+  }
+}
+
 // Same origin only and no redirects: the capture must not reach beyond the
-// application it started.
-const download = (url: URL) =>
-  Effect.tryPromise({
-    try: async (signal): Promise<Fetched> => {
-      const response = await fetch(url, {
-        redirect: 'manual',
-        signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+// application it started. A script path such as `//host/x.js` resolves to
+// another host, so the origin is checked on the final URL.
+const download = (url: URL, origin: string) =>
+  url.origin === origin
+    ? Effect.tryPromise({
+        try: async (signal): Promise<Fetched> => {
+          const response = await fetch(url, {
+            redirect: 'manual',
+            signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+          });
+
+          if (response.status !== 200) {
+            await response.body?.cancel();
+
+            return { kind: 'failed', reason: `HTTP ${response.status}` };
+          }
+
+          return await readLimited(response);
+        },
+        catch: () => 'request failed',
+      }).pipe(
+        Effect.catch((reason) =>
+          Effect.succeed<Fetched>({ kind: 'failed', reason }),
+        ),
+      )
+    : Effect.succeed<Fetched>({
+        kind: 'failed',
+        reason: "outside the application's origin",
       });
-
-      if (response.status !== 200) {
-        await response.body?.cancel();
-
-        return { kind: 'failed', reason: `HTTP ${response.status}` };
-      }
-
-      const declared = Number(response.headers.get('content-length'));
-
-      if (declared > maxBytes) {
-        await response.body?.cancel();
-
-        return { kind: 'failed', reason: 'larger than 32 MB' };
-      }
-
-      const bytes = new Uint8Array(await response.arrayBuffer());
-
-      return bytes.byteLength > maxBytes
-        ? { kind: 'failed', reason: 'larger than 32 MB' }
-        : { kind: 'body', text: new TextDecoder().decode(bytes) };
-    },
-    catch: () => 'request failed',
-  }).pipe(
-    Effect.catch((reason) =>
-      Effect.succeed<Fetched>({ kind: 'failed', reason }),
-    ),
-  );
 
 const sourceMappingUrl = /\/\/[#@] sourceMappingURL=(\S+)\s*$/;
 
@@ -106,8 +127,11 @@ const mapIn = (
 
 // A hidden map sits next to its script without a sourceMappingURL comment,
 // so the adjacent `.map` is tried first.
-const findMap = Effect.fnUntraced(function* (script: URL) {
-  const adjacent = yield* download(new URL(`${script.pathname}.map`, script));
+const findMap = Effect.fnUntraced(function* (script: URL, origin: string) {
+  const adjacent = yield* download(
+    new URL(`${script.pathname}.map`, script),
+    origin,
+  );
 
   if (adjacent.kind === 'body' && parseSourceMap(adjacent.text) !== null) {
     return found(adjacent.text, 'adjacent');
@@ -117,7 +141,7 @@ const findMap = Effect.fnUntraced(function* (script: URL) {
     adjacent.kind === 'failed'
       ? `${script.pathname}.map: ${adjacent.reason}`
       : `${script.pathname}.map is not a version 3 source map`;
-  const body = yield* download(script);
+  const body = yield* download(script, origin);
 
   if (body.kind === 'failed') {
     return missing(`${adjacentReason}; the script itself: ${body.reason}`);
@@ -145,7 +169,7 @@ const findMap = Effect.fnUntraced(function* (script: URL) {
     );
   }
 
-  const linked = yield* download(target);
+  const linked = yield* download(target, origin);
 
   return linked.kind === 'failed'
     ? missing(`${adjacentReason}; ${target.pathname}: ${linked.reason}`)
@@ -171,7 +195,6 @@ const readEvidence = Effect.fnUntraced(function* <T>(
   );
 });
 
-// Scripts named by error frames and React sources, in the order found.
 const scriptsToMap = Effect.fnUntraced(function* (
   directory: string,
   origin: string,
@@ -200,6 +223,16 @@ const scriptsToMap = Effect.fnUntraced(function* (
   return [...new Set(scripts)];
 });
 
+function skipReason(index: number, elapsedMs: number): string | null {
+  if (index >= maxScripts) {
+    return `Only the first ${maxScripts} scripts are mapped`;
+  }
+
+  return elapsedMs > deadlineMs
+    ? `Map fetching stopped after ${deadlineMs / 1000} seconds`
+    : null;
+}
+
 // Fetches the source map of every application script that evidence points
 // into, while the application still runs. Anchors are resolved later, when
 // the captures are compared.
@@ -215,19 +248,20 @@ export const recordSourceMaps = Effect.fn('recordSourceMaps')(
     const scripts = yield* scriptsToMap(options.directory, origin);
     const entries: SourceMapIndex['scripts'][number][] = [];
 
+    const started = Date.now();
+
     for (const [index, script] of scripts.entries()) {
-      if (index >= maxScripts) {
+      const skipped = skipReason(index, Date.now() - started);
+
+      if (skipped !== null) {
         entries.push({
           script,
-          map: {
-            kind: 'unavailable',
-            reason: `Only the first ${maxScripts} scripts are mapped`,
-          },
+          map: { kind: 'unavailable', reason: skipped },
         });
         continue;
       }
 
-      const found = yield* findMap(new URL(script, origin));
+      const found = yield* findMap(new URL(script, origin), origin);
 
       if (found.kind === 'missing') {
         entries.push({
@@ -247,13 +281,13 @@ export const recordSourceMaps = Effect.fn('recordSourceMaps')(
       });
       yield* fs.writeFileString(
         path.join(options.directory, filename),
-        redactText(found.text, options.concealed),
+        conceal(found.text, options.concealed),
         { flag: 'wx' },
       );
       options.addArtifact(
         `source-map-${index + 1}`,
         filename,
-        `Source map for ${script}; credentials redacted`,
+        `Source map for ${script}; concealed values removed`,
       );
       entries.push({
         script,

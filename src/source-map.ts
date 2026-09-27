@@ -8,6 +8,9 @@ const sourceMapSchema = Schema.Struct({
   sourceRoot: Schema.optionalKey(Schema.NullOr(Schema.String)),
   sources: Schema.Array(Schema.NullOr(Schema.String)),
   names: Schema.optionalKey(Schema.Array(Schema.String)),
+  sourcesContent: Schema.optionalKey(
+    Schema.Array(Schema.NullOr(Schema.String)),
+  ),
   mappings: Schema.String,
 });
 
@@ -50,8 +53,18 @@ function decodeSegment(segment: string): number[] | null {
   return shift === 0 ? values : null;
 }
 
+// The spec prepends sourceRoot as a string; a path join would collapse the
+// `//` of a scheme such as `webpack://`.
+function withRoot(root: string, file: string): string {
+  return root === '' || root.endsWith('/')
+    ? `${root}${file}`
+    : `${root}/${file}`;
+}
+
 export type OriginalPosition = {
   source: string;
+  // The map's own copy of the source, when it carries one.
+  content: string | null;
   line: number;
   column: number;
   name: string | null;
@@ -117,7 +130,8 @@ export function originalPosition(
           file === undefined || file === null
             ? null
             : {
-                source: path.posix.join(map.sourceRoot ?? '', file),
+                source: withRoot(map.sourceRoot ?? '', file),
+                content: map.sourcesContent?.[source] ?? null,
                 line: sourceLine + 1,
                 column: sourceColumn + 1,
                 name:
@@ -152,7 +166,8 @@ export function snapshotPath(
     return null;
   }
 
-  for (let start = 0; start < parts.length; start++) {
+  // A bare file name alone would match an unrelated file of that name.
+  for (let start = 0; start < Math.max(parts.length - 1, 1); start++) {
     const suffix = parts.slice(start).join('/');
 
     if (files.has(suffix)) {

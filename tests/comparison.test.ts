@@ -2361,12 +2361,13 @@ const appAfter = [
 
 // Generated line 1: column 0 maps to src/app.js line 2 and column 10 to line
 // 6, both 1-based. The node_modules source must never become an anchor.
-const appMap = json({
+const appMapFields = {
   version: 3,
   sources: ['../../src/app.js', '../../node_modules/lib/index.js'],
   names: [],
   mappings: 'AACA,UAIA,UCAA',
-});
+};
+const appMap = json(appMapFields);
 
 function thrown(frames: string): EvidenceValue<'browser-errors'> {
   return {
@@ -2384,7 +2385,7 @@ function thrown(frames: string): EvidenceValue<'browser-errors'> {
   };
 }
 
-async function errorFindings(frames: string, maps: boolean) {
+async function errorFindings(frames: string, maps: boolean, map = appMap) {
   const artifacts = maps
     ? [
         {
@@ -2405,7 +2406,7 @@ async function errorFindings(frames: string, maps: boolean) {
             ],
           }),
         },
-        { id: 'source-map-1', path: 'source-maps/1-app.js.map', text: appMap },
+        { id: 'source-map-1', path: 'source-maps/1-app.js.map', text: map },
       ]
     : [];
   const bundle = (
@@ -2470,10 +2471,7 @@ test('resolves stack frames through the recorded source map to 1-based lines of 
       },
     },
   ]);
-  expect(
-    findings[0]?.location.kind === 'anchored' &&
-      findings[0].location.anchors.length,
-  ).toBe(2);
+  expect(findings[0]?.location).toHaveProperty('anchors.length', 2);
 });
 
 test('without a source map, minified frame names give no line, and a readable name matches only its added definition', async () => {
@@ -2485,7 +2483,7 @@ test('without a source map, minified frame names give no line, and a readable na
   expect(minified[0]?.location).toEqual({
     kind: 'unanchored',
     reason:
-      'The capture recorded no source maps; no frame function is defined on an added line',
+      'The capture has no source map index; it predates source maps or fetching them failed; no frame function is defined on an added line',
   });
 
   const named = await errorFindings(
@@ -2498,5 +2496,23 @@ test('without a source map, minified frame names give no line, and a readable na
     anchors: [
       { path: 'src/app.js', line: 1, basis: 'diff-name-match', diff: 'added' },
     ],
+  });
+});
+
+test('a source map built from other code than the snapshot gives no line', async () => {
+  const stale = json({
+    ...appMapFields,
+    sourcesContent: [appBefore, null],
+  });
+  const findings = await errorFindings(
+    '    at hh (http://127.0.0.1:4173/assets/app.js:1:10)',
+    true,
+    stale,
+  );
+
+  expect(findings[0]?.location).toEqual({
+    kind: 'unanchored',
+    reason:
+      "The source map's copy of src/app.js differs from the snapshot; no frame function is defined on an added line",
   });
 });
