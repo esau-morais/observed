@@ -1295,12 +1295,7 @@ function Verdict({ result }: { result: Comparison }) {
 
   return (
     <section {...stylex.props(styles.stack)} aria-labelledby="report-title">
-      <p {...stylex.props(styles.verdictWord, toneInk[tone])}>
-        <span aria-hidden="true" {...stylex.props(styles.symbol)}>
-          {toneSymbols[tone]}
-        </span>
-        {conclusionLabels[result.conclusion.kind]}
-      </p>
+      {null}
       <h1 id="report-title" {...stylex.props(styles.title)}>
         {result.title}
       </h1>
