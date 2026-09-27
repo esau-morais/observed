@@ -285,7 +285,7 @@ function renderJourney(
       heading(level, 'Comparison availability'),
       renderAvailability(journey),
       heading(level, 'Named checks'),
-      "Executed by Observed against each capture's evidence. Each result covers its stated expectation and scope; comparison availability is separate.",
+      'Observed executed its own checks against each capture\'s evidence. A check whose scope starts with "Imported from" reports another tool\'s result. Each result covers its stated expectation and scope; comparison availability is separate.',
       journey.checks.length === 0
         ? 'No named check configured.'
         : journey.checks.map(renderVerdict).join('\n'),

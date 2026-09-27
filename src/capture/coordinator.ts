@@ -247,6 +247,8 @@ export const captureApplication = Effect.fn('captureApplication')(
         ),
         dependenciesHash:
           dependencies.length === 0 ? null : sha256(json(dependencies)),
+        workspace,
+        timeoutMs: options.timeoutMs ?? 120_000,
       });
 
       conditions = { kind: 'recorded', value: browserConditions };

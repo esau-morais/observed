@@ -63,6 +63,20 @@ export type DirectContext = {
   readonly environment: ReadonlyMap<string, string>;
 };
 
+// For a collector that runs a project command instead of a browser.
+export type CommandContext = {
+  readonly directory: string;
+  // The copy of the app the capture set up and started, with its
+  // dependencies installed.
+  readonly workspace: string;
+  readonly url: string;
+  readonly concealed: readonly string[];
+  readonly timeoutMs: number;
+  readonly addArtifact: CollectorContext['addArtifact'];
+  // Values of the variables the collector's `environment` names.
+  readonly environment: ReadonlyMap<string, string>;
+};
+
 // Fails the capture as a configuration problem.
 export class EnvironmentValueFailure extends Schema.TaggedError<EnvironmentValueFailure>()(
   'EnvironmentValueFailure',
@@ -127,4 +141,14 @@ export type Collector<K extends EvidenceKind> =
   | (Common<K> & {
       readonly phase: 'no-browser';
       readonly collect: Collect<K, DirectContext>;
+    })
+  // Runs last, with the app still running, and opens no browser. The
+  // command's own tool names its version, so the producer is read from the
+  // collected value.
+  | (Common<K> & {
+      readonly phase: 'command';
+      readonly producerFor: (
+        value: EvidenceValue<K> | null,
+      ) => EvidenceProducer;
+      readonly collect: Collect<K, CommandContext>;
     });

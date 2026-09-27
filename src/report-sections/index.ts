@@ -4,6 +4,7 @@ import type { MarkdownSection, SectionInput, SectionSide } from './define';
 import { accessibility } from './accessibility';
 import { api } from './api';
 import { performance } from './performance';
+import { playwright } from './playwright';
 import { react } from './react';
 import { browserErrors } from './browser-errors';
 import { text } from './text';
@@ -19,6 +20,7 @@ export const markdownSections: {
   timeline,
   'browser-errors': browserErrors,
   api,
+  playwright,
 };
 
 function sectionSide<K extends EvidenceKind>(

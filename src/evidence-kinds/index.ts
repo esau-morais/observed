@@ -3,6 +3,7 @@ import { text as nonEmpty } from '../capture/model';
 import { accessibility } from './accessibility';
 import { api } from './api';
 import { performance } from './performance';
+import { playwright } from './playwright';
 import { react } from './react';
 import { browserErrors } from './browser-errors';
 import { text } from './text';
@@ -16,6 +17,7 @@ export const evidenceKinds = {
   timeline,
   'browser-errors': browserErrors,
   api,
+  playwright,
 } as const;
 
 const kinds = Object.values(evidenceKinds);

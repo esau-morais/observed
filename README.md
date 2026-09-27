@@ -183,6 +183,84 @@ The [project schema](src/project.ts) and
   tree's `observed.json`. A start script that exists only in the working tree
   makes the base capture fail, so commit it before comparing.
 
+### Run the app's Playwright tests
+
+If the app already has Playwright tests, Observed can run them against each
+captured revision and report every test as a named check. Add a `playwright`
+collector to the journey that should run them:
+
+```json
+{ "kind": "playwright", "command": ["npx", "playwright", "test", "--reporter=line,json"] }
+```
+
+After the journey's browser work, with the app still running, Observed runs
+`command` in the same copy of the app. The command sees `PATH`, `HOME`, `LANG`,
+`TZ`, `BASE_URL` (the app's origin, such as `http://127.0.0.1:41234`), `PORT`
+and `PLAYWRIGHT_JSON_OUTPUT_FILE`, plus any variables the collector's optional
+`environment` list names, such as `["E2E_PASSWORD"]`. A named variable that is
+missing or empty fails the capture, and Observed conceals its value in text
+evidence. Point `use.baseURL` in the Playwright config
+at `process.env.BASE_URL`, and skip `webServer` when `BASE_URL` is set, so the
+tests reach the app Observed started. The command must turn on Playwright's
+JSON reporter without an `outputFile`; `--reporter=line,json` does that. List
+the test files and the Playwright config in `source.paths`, and install
+`@playwright/test` and its browsers in `setup`. The suite counts toward
+`--timeout`.
+
+Each test becomes a check whose scope starts with "Imported from Playwright".
+Observed didn't run the assertions itself. It reads Playwright's report:
+
+- A test Playwright reports as passed passes, including one marked with
+  `test.fail()` that failed.
+- A test that failed on every attempt fails.
+- A flaky test, one that failed and then passed on a retry, is unknown.
+- A skipped or interrupted test is unknown.
+- A report with no tests, an error outside any test, or a nonzero exit without
+  a failed test adds an unknown "Playwright tests" check. So does a command
+  that writes no JSON report.
+
+When comparing, Observed matches tests by project, file and title. A test that
+passed on base and fails on the candidate is a regression only when its test
+file has the same bytes on both sides. When the file changed, the check fails
+without a regression, because the expectation itself changed. Other files the
+test imports aren't compared. A test only the candidate has fails or passes
+with no base result. A different Playwright version on each side makes the
+journey's captures not comparable.
+
+Observed copies each test's attachments, such as `trace.zip`, screenshots,
+videos and `error-context.md`, into the evidence and links them from the
+report. It reads each trace's first event to record the browser, channel,
+viewport and Playwright version, and shows the command that opens the trace in
+Playwright's own viewer, such as `npx playwright show-trace
+journey-1/candidate/playwright/3/0/4-trace.zip`, run from the report's
+directory. Observed redacts known secret patterns in the JSON report and error
+messages. It copies attachments byte for byte, so a trace keeps every request,
+cookie and page the test saw. Don't sign tests in with real credentials.
+
+### Import Playwright results
+
+To read results from a Playwright run Observed didn't start, such as a report a
+CI job uploaded:
+
+```bash
+observed import playwright playwright-report/     # HTML report directory
+observed import playwright results.json           # JSON reporter output
+```
+
+Observed writes a new directory under `.observed/` with `report.md`,
+`import.json`, `evidence/playwright.json` and copies of the attachments, and
+prints where. Tests map to checks as above. Exit codes: `0` every test passed,
+`1` a check is unknown, `2` a test failed. An import shows one run; it doesn't
+capture the app or compare revisions.
+
+An HTML report's attachments are under its directory. A JSON report lists
+absolute paths, and Observed copies only files under the report's directory, or
+under `--root`. It never follows a path or symlink outside it. A JSON report
+from another machine names paths that don't exist here, so its attachments show
+as unavailable; import that run's HTML report instead. The HTML report's data
+format is internal to Playwright, and Observed rejects one it can't read rather
+than guess.
+
 ### Measure browser performance
 
 Add `{ "kind": "performance" }` to a journey's `collectors` to record timing

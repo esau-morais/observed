@@ -154,6 +154,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   collectorValues: ReadonlyMap<string, string>;
   inputsHash: string;
   dependenciesHash: string | null;
+  workspace: string;
+  timeoutMs: number;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: 'obs-' });
@@ -373,10 +375,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     kind: EvidenceKind,
     collected: Effect.Effect<unknown, CollectorError, CollectorServices>,
     conditions: EvidenceConditions,
-    producer?: EvidenceProducer,
+    // A function is read after `collected` finishes.
+    producer?: EvidenceProducer | (() => EvidenceProducer),
   ) {
     const definition = evidenceKinds[kind];
-    const source = producer === undefined ? {} : { producer };
     const filename = `evidence/${definition.kind}.json`;
     const value = yield* collected.pipe(
       Effect.map((result) => ({ kind: 'recorded', result }) as const),
@@ -384,6 +386,12 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
         Effect.succeed({ kind: 'unavailable', reason } as const),
       ),
     );
+    const source =
+      producer === undefined
+        ? {}
+        : {
+            producer: typeof producer === 'function' ? producer() : producer,
+          };
 
     if (value.kind === 'unavailable') {
       options.addEvidence({
@@ -675,6 +683,37 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
           collector.producer,
         );
       }).pipe(Effect.scoped);
+    }
+  }
+
+  for (const config of recipe.collectors) {
+    const collector = collectorFor(config);
+
+    if (collector.phase === 'command') {
+      let producer = collector.producerFor(null);
+
+      yield* collectEvidence(
+        config.kind,
+        collector
+          .collect(config, {
+            directory: options.directory,
+            workspace: options.workspace,
+            url: options.url,
+            concealed,
+            timeoutMs: options.timeoutMs,
+            addArtifact: options.addArtifact,
+            environment: options.collectorValues,
+          })
+          .pipe(
+            Effect.tap((value) =>
+              Effect.sync(() => {
+                producer = collector.producerFor(value);
+              }),
+            ),
+          ),
+        collector.conditions?.(config) ?? {},
+        () => producer,
+      );
     }
   }
 

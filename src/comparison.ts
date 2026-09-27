@@ -11,6 +11,11 @@ import {
 } from './capture/model';
 import { parseRecipe, type Recipe } from './capture/recipe';
 import { checkKinds, type CheckDefinition, type CheckKinds } from './checks';
+import {
+  importedAuthority,
+  playwrightPairs,
+  unknownPlaywrightChecks,
+} from './checks/playwright';
 import type {
   CheckIdentity,
   CheckInput,
@@ -98,16 +103,19 @@ function unknownChecks(
     ];
   }
 
-  return recipe.checks.map((definition) => ({
-    id: definition.id,
-    name: definition.name,
-    authority: 'Executed by Observed',
-    scope: definition.scope,
-    expectation: expectationFor(definition),
-    outcome: 'unknown',
-    actual: null,
-    detail,
-  }));
+  return [
+    ...recipe.checks.map((definition): UnknownCheck => ({
+      id: definition.id,
+      name: definition.name,
+      authority: 'Executed by Observed',
+      scope: definition.scope,
+      expectation: expectationFor(definition),
+      outcome: 'unknown',
+      actual: null,
+      detail,
+    })),
+    ...unknownPlaywrightChecks(recipe, detail),
+  ];
 }
 
 function sideDetail(side: Side): string {
@@ -306,9 +314,12 @@ function evaluatePairs(
   mode: 'preview' | 'comparison',
   comparable: boolean,
 ): CheckPair[] {
-  return candidate.recipe.checks.map((definition) =>
-    evaluateDefinition(definition, { base, candidate, mode, comparable }),
-  );
+  return [
+    ...candidate.recipe.checks.map((definition) =>
+      evaluateDefinition(definition, { base, candidate, mode, comparable }),
+    ),
+    ...playwrightPairs({ base, candidate, mode, comparable }),
+  ];
 }
 
 function comparableConditions(capture: Capture) {
@@ -910,12 +921,14 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
       }
     }
 
-    if (
-      !isDeepStrictEqual(
-        base.checks.map((check) => check.id),
-        candidate.checks.map((check) => check.id),
-      )
-    ) {
+    // Imported tests may be added or removed by the change itself; each is
+    // matched by ID when its checks are evaluated.
+    const configured = (side: Side) =>
+      side.checks
+        .filter((check) => check.authority !== importedAuthority)
+        .map((check) => check.id);
+
+    if (!isDeepStrictEqual(configured(base), configured(candidate))) {
       reasons.push('Named check identities differ');
     }
   }

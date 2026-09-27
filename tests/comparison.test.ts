@@ -98,6 +98,8 @@ async function syntheticBundle(
     text?: EvidenceValue<'text'>;
     performance?: EvidenceValue<'performance'>;
     browserErrors?: EvidenceValue<'browser-errors'>;
+    playwright?: EvidenceValue<'playwright'>;
+    files?: { path: string; content: string }[];
   } = {},
 ) {
   const directory = await mkdtemp(
@@ -106,7 +108,7 @@ async function syntheticBundle(
 
   directories.push(directory);
 
-  const files = [
+  const files = options.files ?? [
     {
       path: 'main.ts',
       content: 'Synthetic source fixture, not an application.\n',
@@ -179,6 +181,19 @@ async function syntheticBundle(
               kind: 'browser-errors',
               schemaVersion: 1,
               value: options.browserErrors,
+            }),
+          },
+        ]),
+    ...(options.playwright === undefined
+      ? []
+      : [
+          {
+            id: 'evidence-playwright',
+            path: 'evidence/playwright.json',
+            text: json({
+              kind: 'playwright',
+              schemaVersion: 1,
+              value: options.playwright,
             }),
           },
         ]),
@@ -2011,4 +2026,156 @@ test('a candidate with browser errors fails without a usable base instead of bec
     candidate: { outcome: 'failed', actual: 1 },
     regression: null,
   });
+});
+
+const withPlaywright: Recipe = {
+  ...recipe,
+  checks: [],
+  collectors: [{ kind: 'playwright', command: ['npx', 'playwright', 'test'] }],
+};
+
+const specFile = (content: string) => [
+  { path: 'e2e/cart.spec.ts', content },
+  {
+    path: 'main.ts',
+    content: 'Synthetic source fixture, not an application.\n',
+  },
+];
+
+function playwrightTest(
+  title: string,
+  outcome: EvidenceValue<'playwright'>['tests'][number]['outcome'],
+): EvidenceValue<'playwright'>['tests'][number] {
+  return {
+    id: `chromium › cart.spec.ts › ${title}`,
+    project: 'chromium',
+    file: 'cart.spec.ts',
+    source: 'e2e/cart.spec.ts',
+    line: 3,
+    titlePath: [title],
+    outcome,
+    expectedStatus: 'passed',
+    annotations: [],
+    results: [
+      {
+        retry: 0,
+        status: outcome === 'expected' ? 'passed' : 'failed',
+        duration: 10,
+        startedAt: '2026-09-23T11:59:57.000Z',
+        error: outcome === 'expected' ? null : 'Error: expected 1 item',
+        attachments: [],
+      },
+    ],
+  };
+}
+
+function playwrightRun(
+  tests: EvidenceValue<'playwright'>['tests'][number][],
+): EvidenceValue<'playwright'> {
+  const count = (outcome: string) =>
+    tests.filter((test) => test.outcome === outcome).length;
+
+  return {
+    report: 'json',
+    version: '1.58.0',
+    exitCode: count('unexpected') === 0 ? 0 : 1,
+    startedAt: '2026-09-23T11:59:57.000Z',
+    duration: 20,
+    projects: ['chromium'],
+    errors: [],
+    stats: {
+      expected: count('expected'),
+      unexpected: count('unexpected'),
+      flaky: count('flaky'),
+      skipped: count('skipped'),
+    },
+    tests,
+  };
+}
+
+async function playwrightJourney(options: {
+  base: EvidenceValue<'playwright'>['tests'][number][];
+  candidate: EvidenceValue<'playwright'>['tests'][number][];
+  candidateSpec?: string;
+}) {
+  const base = await syntheticBundle({
+    contract: withPlaywright,
+    playwright: playwrightRun(options.base),
+    files: specFile('test("adds an item")\n'),
+  });
+  const candidate = await syntheticBundle({
+    contract: withPlaywright,
+    playwright: playwrightRun(options.candidate),
+    files: specFile(options.candidateSpec ?? 'test("adds an item")\n'),
+  });
+
+  return compareJourney({
+    visual: pixelsNotInspected,
+    base: await inspect(base.directory),
+    candidate: await inspect(candidate.directory),
+    evaluatedAt,
+  });
+}
+
+test('an imported test that passed on base and fails with the same test file is a regression', async () => {
+  const result = await playwrightJourney({
+    base: [playwrightTest('adds an item', 'expected')],
+    candidate: [playwrightTest('adds an item', 'unexpected')],
+  });
+
+  expect(result.comparison.kind).toBe('available');
+  expect(result.checks).toEqual([
+    expect.objectContaining({
+      id: 'playwright: chromium › cart.spec.ts › adds an item',
+      verdict: 'regression',
+      scope: 'Imported from Playwright: cart.spec.ts:3, project chromium.',
+    }),
+  ]);
+  expect(result.conclusion.kind).toBe('regression');
+});
+
+test('a failing imported test whose file changed is failed, not a regression', async () => {
+  const result = await playwrightJourney({
+    base: [playwrightTest('adds an item', 'expected')],
+    candidate: [playwrightTest('adds an item', 'unexpected')],
+    candidateSpec: 'test("adds two items")\n',
+  });
+
+  expect(result.comparison.kind).toBe('available');
+  expect(result.checks.map((check) => check.verdict)).toEqual(['failed']);
+  expect(result.checks[0]?.detail).toMatch(
+    /e2e\/cart\.spec\.ts changed between base and candidate, so a regression is not established\.$/,
+  );
+});
+
+test('a test the candidate adds keeps the captures comparable, and a flaky one is unknown', async () => {
+  const result = await playwrightJourney({
+    base: [playwrightTest('adds an item', 'expected')],
+    candidate: [
+      playwrightTest('adds an item', 'expected'),
+      playwrightTest('removes an item', 'flaky'),
+    ],
+  });
+
+  expect(result.comparison.kind).toBe('available');
+  expect(result.checks.map((check) => [check.name, check.verdict])).toEqual([
+    ['adds an item', 'passed'],
+    ['removes an item', 'unknown'],
+  ]);
+  expect(result.conclusion.kind).toBe('unavailable');
+});
+
+test('missing Playwright evidence is one unknown imported check, never a pass', async () => {
+  const bundle = await syntheticBundle({ contract: withPlaywright });
+  const side = await inspect(bundle.directory);
+
+  expect(side.checks).toEqual([
+    expect.objectContaining({
+      id: 'playwright-run',
+      authority: 'Imported from Playwright',
+      outcome: 'unknown',
+      detail:
+        'Playwright tests evidence unavailable: The capture recorded no evidence of this kind',
+    }),
+  ]);
 });

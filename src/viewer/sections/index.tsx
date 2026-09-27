@@ -4,6 +4,7 @@ import type { ViewerSection } from './define';
 import { AccessibilitySection } from './accessibility';
 import { ApiSection } from './api';
 import { PerformanceSection } from './performance';
+import { PlaywrightSection } from './playwright';
 import { ReactSection } from './react';
 import { BrowserErrorsSection } from './browser-errors';
 import { TextSection } from './text';
@@ -19,6 +20,7 @@ export const viewerSections: {
   timeline: TimelineSection,
   'browser-errors': BrowserErrorsSection,
   api: ApiSection,
+  playwright: PlaywrightSection,
 };
 
 export function EvidenceSection<K extends EvidenceKind>({

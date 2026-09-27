@@ -28,7 +28,10 @@ const artifact = Schema.Union([
 const checkIdentity = {
   id: text,
   name: text,
-  authority: Schema.Literal('Executed by Observed'),
+  authority: Schema.Literals([
+    'Executed by Observed',
+    'Imported from Playwright',
+  ]),
   scope: text,
   expectation: text,
   detail: text,

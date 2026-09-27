@@ -9,6 +9,7 @@ import { conclusionExitCodes as exitCodes } from './comparison-model';
 import { json } from './encoding';
 import { exportComparison } from './export';
 import { agentBrowserPath, unsupportedBun } from './installation';
+import { importExitCodes, importPlaywright } from './playwright/import';
 import { loadProject } from './project';
 import { serveReport, ViewFailure } from './view';
 import { buildViewer, runProject } from './workflow';
@@ -335,6 +336,62 @@ const view = Command.make(
   }),
 ).pipe(Command.withDescription('View a saved comparison'));
 
+const importPlaywrightCommand = Command.make(
+  'playwright',
+  {
+    report: Argument.String('report').pipe(
+      Argument.withDescription(
+        'Playwright HTML report directory, or a JSON report file',
+      ),
+    ),
+    root: Flag.String('root').pipe(
+      Flag.withDescription(
+        "For a JSON report, the directory its attachments must be under; default the report's directory",
+      ),
+      Flag.optional,
+    ),
+    output: outputFlag,
+    machine: machineFlag,
+  },
+  Effect.fn('importPlaywrightCommand')(function* ({
+    report,
+    root,
+    output,
+    machine,
+  }) {
+    const directory = yield* chooseDirectory(output, 'import', process.cwd());
+    const imported = yield* importPlaywright({
+      input: path.resolve(report),
+      root: Option.match(root, {
+        onNone: () => null,
+        onSome: (value) => path.resolve(value),
+      }),
+      directory,
+      observedVersion: yield* observedVersion(toolRoot),
+    });
+
+    if (machine) {
+      yield* printJson(imported);
+    } else {
+      yield* Console.log(
+        `${imported.manifest.conclusion.text}
+Report: ${imported.report}`,
+      );
+    }
+
+    process.exitCode = importExitCodes[imported.manifest.conclusion.kind];
+  }),
+).pipe(
+  Command.withDescription(
+    "Import a Playwright run's results as evidence, one check per test",
+  ),
+);
+
+const importCommand = Command.make('import').pipe(
+  Command.withDescription("Import another tool's results as evidence"),
+  Command.withSubcommands([importPlaywrightCommand]),
+);
+
 const setup = Command.make(
   'setup',
   {
@@ -388,7 +445,14 @@ if (unsupported !== null) {
 observedVersion(toolRoot).pipe(
   Effect.flatMap((version) =>
     Command.make('observed').pipe(
-      Command.withSubcommands([observe, setup, capture, compare, view]),
+      Command.withSubcommands([
+        observe,
+        setup,
+        capture,
+        compare,
+        view,
+        importCommand,
+      ]),
       Command.run({ version }),
     ),
   ),
