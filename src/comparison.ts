@@ -1072,7 +1072,8 @@ function journeyConclusion(
       kind: 'regression',
       text: sentences(
         regressions.map((item) => item.detail),
-        (count) => `${count} more checks regressed.`,
+        (count) =>
+          `${count} more ${count === 1 ? 'check' : 'checks'} regressed.`,
       ),
     };
   }
@@ -1111,7 +1112,7 @@ function journeyConclusion(
 
           return `${item.name} failed. ${reading} Base: ${describeActual(before)}; candidate: ${describeActual(after)}. ${item.expectation}`;
         }),
-        (count) => `${count} more checks failed.`,
+        (count) => `${count} more ${count === 1 ? 'check' : 'checks'} failed.`,
       ),
     };
   }
@@ -1138,7 +1139,8 @@ function journeyConclusion(
       kind: 'unavailable',
       text: sentences(
         unknown.map((item) => `${item.name}: unknown. ${item.detail}`),
-        (count) => `${count} more checks are unknown.`,
+        (count) =>
+          `${count} more ${count === 1 ? 'check is' : 'checks are'} unknown.`,
       ).concat(notRunText),
     };
   }
@@ -1165,7 +1167,7 @@ function journeyConclusion(
       kind: 'preview',
       text: `${sentences(
         passed.map((item) => `${item.name}: passed.`),
-        (count) => `${count} more checks passed.`,
+        (count) => `${count} more ${count === 1 ? 'check' : 'checks'} passed.`,
       )}${notRunText}`,
     };
   }
@@ -1178,7 +1180,8 @@ function journeyConclusion(
           ? `${item.name} passed on base and candidate.`
           : `${item.name} ${baseOutcome(item.id)} on base and passed on candidate.`,
       ),
-      (count) => `${count} more checks passed on the candidate.`,
+      (count) =>
+        `${count} more ${count === 1 ? 'check' : 'checks'} passed on the candidate.`,
     ).concat(notRunText),
   };
 }
