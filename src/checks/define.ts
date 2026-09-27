@@ -35,8 +35,14 @@ export type CheckKind<D extends CheckIdentity, K extends EvidenceKind> = {
   readonly evidence: readonly K[];
   // Collectors the checks of this kind need, added when the journey does not
   // already list a collector of the same kind.
-  readonly collectors: (definitions: readonly D[]) => readonly CollectorConfig[];
+  readonly collectors: (
+    definitions: readonly D[],
+  ) => readonly CollectorConfig[];
   readonly expectation: (definition: D) => string;
+  // Set when the rule compares the candidate with the base. In a comparison
+  // with an unusable base, or base evidence missing, the candidate is then
+  // unknown and `evaluate` is not called; a preview still calls it.
+  readonly needsBase?: true;
   // `base` is null in a preview or when the base side is unusable.
   readonly evaluate: (input: {
     definition: D;

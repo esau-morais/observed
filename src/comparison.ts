@@ -173,6 +173,7 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
   definition: Extract<CheckDefinition, { kind: K }>,
   base: CompleteSide | null,
   candidate: CompleteSide,
+  mode: 'preview' | 'comparison',
 ): CheckPair {
   const kind: CheckKinds[K] = checkKinds[definition.kind];
   const baseInput = base === null ? null : checkInput(base, kind.evidence);
@@ -183,8 +184,15 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
     detail,
   });
 
+  const baseMissing =
+    mode === 'comparison' &&
+    kind.needsBase === true &&
+    (baseInput === null || baseInput.kind === 'missing')
+      ? `Base: ${baseInput?.kind === 'missing' ? baseInput.detail : 'capture unavailable'}`
+      : null;
+
   const evaluated =
-    candidateInput.kind === 'ready'
+    candidateInput.kind === 'ready' && baseMissing === null
       ? kind.evaluate({
           definition,
           base: baseInput?.kind === 'ready' ? baseInput.input : null,
@@ -192,10 +200,16 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
         })
       : null;
 
-  const candidateEvaluation =
-    candidateInput.kind === 'missing'
-      ? missing(candidateInput.detail)
-      : (evaluated?.candidate ?? missing('Candidate evaluation unavailable'));
+  let candidateEvaluation: Evaluation;
+
+  if (candidateInput.kind === 'missing') {
+    candidateEvaluation = missing(candidateInput.detail);
+  } else if (baseMissing !== null) {
+    candidateEvaluation = missing(baseMissing);
+  } else {
+    candidateEvaluation =
+      evaluated?.candidate ?? missing('Candidate evaluation unavailable');
+  }
 
   let baseEvaluation: Evaluation | null = null;
 
@@ -204,7 +218,7 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
       baseInput.kind === 'missing'
         ? missing(baseInput.detail)
         : (evaluated?.base ??
-          (candidateInput.kind === 'missing'
+          (candidateInput.kind === 'missing' || baseMissing !== null
             ? kind.evaluate({
                 definition,
                 base: null,
@@ -232,9 +246,10 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
 function evaluatePairs(
   base: CompleteSide | null,
   candidate: CompleteSide,
+  mode: 'preview' | 'comparison',
 ): CheckPair[] {
   return candidate.recipe.checks.map((definition) =>
-    evaluateDefinition(definition, base, candidate),
+    evaluateDefinition(definition, base, candidate, mode),
   );
 }
 
@@ -718,7 +733,9 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
 
       return {
         ...side,
-        checks: evaluatePairs(null, side).map((pair) => pair.candidate.check),
+        checks: evaluatePairs(null, side, 'preview').map(
+          (pair) => pair.candidate.check,
+        ),
       } satisfies Side;
     }
 
@@ -1145,6 +1162,7 @@ export function compareJourney({
       ? evaluatePairs(
           mode === 'comparison' && base.execution === 'complete' ? base : null,
           candidate,
+          mode,
         )
       : null;
   const verdicts = verdictsFor(
