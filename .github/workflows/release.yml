@@ -118,6 +118,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       # Trusted publishing (OIDC) needs npm 11.5.1 or later and attaches
       # provenance. NPM_TOKEN exists only to create the package the first time.
       # Skips a version npm already has, so a failed later step can be re-run.
