@@ -128,8 +128,9 @@ The [project schema](src/project.ts) and
   browser reaches request checks. A failed check counts as a regression only
   when both versions ran the same React version and build.
 - Production builds usually minify component names, so a `react-renders` check
-  can name a component only when the build keeps names, for example with Vite's
-  `esbuild: { keepNames: true }`. The check reports unknown when no mounted
+  can name a component only when the build keeps names. Vite 8 keeps them with
+  `build: { rolldownOptions: { output: { keepNames: true } } }`, and Vite 7
+  with `esbuild: { keepNames: true }`. The check reports unknown when no mounted
   component has that name, when the recording reached its component limit, and
   when the page has no React root or loads a new document during `steps`.
 - Put the expected result in the check, not in a step. A step that waits for the

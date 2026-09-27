@@ -53,7 +53,11 @@ const styles = stylex.create({
     textAlign: 'start',
   },
   number: { textAlign: 'end', fontVariantNumeric: 'tabular-nums' },
-  column: { backgroundColor: colors.surfaceMuted, fontWeight: 500 },
+  column: {
+    backgroundColor: colors.surfaceMuted,
+    fontWeight: 500,
+    whiteSpace: 'nowrap',
+  },
   tree: { display: 'grid', gap: 4, margin: 0, padding: 0, listStyle: 'none' },
   depth: (depth: number) => ({ paddingInlineStart: `${depth * 16}px` }),
 });

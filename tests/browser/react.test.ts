@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { beforeAll, expect, test } from 'vitest';
 import { comparisonSchema } from '../../src/comparison-model';
@@ -10,6 +10,7 @@ let evidence: string;
 let sequence = 0;
 
 beforeAll(async () => {
+  await mkdir(path.join(root, 'evidence'), { recursive: true });
   evidence = await mkdtemp(path.join(root, 'evidence', 'react-browser-'));
 });
 
@@ -102,7 +103,7 @@ test('an added App render fails the react-renders check as a regression', async 
     build,
     (await readFile(build, 'utf8')).replace(
       "build: { outDir: 'dist' },",
-      "build: { outDir: 'dist' },\n  esbuild: { keepNames: true },",
+      "build: { outDir: 'dist', rolldownOptions: { output: { keepNames: true } } },",
     ),
   );
   // An independent count: the main journey's browser, which has no DevTools
@@ -165,14 +166,19 @@ test('an added App render fails the react-renders check as a regression', async 
     project,
   );
 
-  // Loading and loaded are two commits. The seeded timer commits a third
-  // with an equal but new state object, so App renders once more.
+  // Loading and loaded are two commits. The seeded effect derives state from
+  // the loaded list, which commits App a third time.
   await writeFile(
     app,
-    (await readFile(app, 'utf8')).replace(
-      "setState({ kind: 'loaded', items });",
-      "setState({ kind: 'loaded', items });\n        setTimeout(() => setState({ kind: 'loaded', items }), 0);",
-    ),
+    (await readFile(app, 'utf8'))
+      .replace(
+        "import { useLayoutEffect, useRef, useState } from 'react';",
+        "import { useEffect, useLayoutEffect, useRef, useState } from 'react';",
+      )
+      .replace(
+        '  useLayoutEffect(() => {',
+        "  const [, setLoadedCount] = useState(0);\n  useEffect(() => {\n    if (state.kind === 'loaded') {\n      setLoadedCount(state.items.length);\n    }\n  }, [state]);\n  useLayoutEffect(() => {",
+      ),
   );
 
   const output = path.join(evidence, 'react-regression');
