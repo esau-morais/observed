@@ -1095,7 +1095,6 @@ test('bun start opens the example from a fresh checkout without an app path', as
     '.gitignore',
     'vite.config.ts',
     'tsconfig.json',
-    'tsconfig.build.json',
   ]) {
     await cp(path.join(root, entry), path.join(checkout, entry), {
       recursive: true,

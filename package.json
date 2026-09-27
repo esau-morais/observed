@@ -1,16 +1,47 @@
 {
-  "name": "observed",
+  "name": "@esau-morais/observed",
   "version": "0.1.0",
-  "private": true,
+  "description": "See what a code change does in the running app: capture it, compare it with another revision, and check named expectations.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esau-morais/observed.git"
+  },
+  "homepage": "https://github.com/esau-morais/observed#readme",
+  "bugs": {
+    "url": "https://github.com/esau-morais/observed/issues"
+  },
+  "keywords": [
+    "browser",
+    "capture",
+    "visual-regression",
+    "pull-request",
+    "agent",
+    "cli"
+  ],
   "type": "module",
+  "bin": {
+    "observed": "dist/observed.js"
+  },
+  "files": [
+    "dist/observed.js",
+    "dist/github-action.js",
+    "dist/viewer/",
+    "dist/THIRD-PARTY-NOTICES.txt",
+    "CHANGELOG.md"
+  ],
   "packageManager": "bun@1.4.2",
   "engines": {
-    "bun": "1.4.2"
+    "bun": ">=1.4.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "start": "bun scripts/start.ts",
-    "setup": "bun node_modules/agent-browser/bin/agent-browser.js install",
-    "observe": "bun src/workflow-cli.ts run",
+    "setup": "bun src/workflow-cli.ts setup",
+    "observe": "bun src/workflow-cli.ts observe",
     "capture": "bun src/workflow-cli.ts capture",
     "compare": "bun src/workflow-cli.ts compare",
     "view": "bun src/workflow-cli.ts view",
@@ -22,20 +53,18 @@
     "lint:fix": "bun run --bun eslint --fix",
     "format": "bun run --bun prettier --write .",
     "test": "bun run --bun vitest run",
-    "build": "bun run --bun tsc -p tsconfig.build.json && bun run --bun vite build"
+    "build": "bun scripts/build.ts"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.0-rc.117",
-    "@fontsource/geist": "5.3.0",
-    "@fontsource/geist-mono": "5.3.0",
-    "@stylexjs/stylex": "0.19.1",
-    "effect": "4.0.0-rc.117",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "agent-browser": "0.38.1"
   },
   "devDependencies": {
+    "@effect/platform-bun": "4.0.0-rc.117",
     "@eslint/js": "10.0.1",
+    "@fontsource/geist": "5.3.0",
+    "@fontsource/geist-mono": "5.3.0",
     "@stylexjs/eslint-plugin": "0.19.1",
+    "@stylexjs/stylex": "0.19.1",
     "@stylexjs/unplugin": "0.19.1",
     "@stylistic/eslint-plugin": "5.10.0",
     "@types/bun": "1.4.2",
@@ -43,10 +72,12 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
-    "agent-browser": "0.38.1",
+    "effect": "4.0.0-rc.117",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.70.1",
     "unplugin": "2.3.11",

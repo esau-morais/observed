@@ -8,14 +8,22 @@ import { observedVersion } from './capture/provenance';
 import { conclusionExitCodes as exitCodes } from './comparison-model';
 import { json } from './encoding';
 import { exportComparison } from './export';
+import { agentBrowserPath, unsupportedBun } from './installation';
 import { loadProject } from './project';
 import { serveReport } from './view';
 import { buildViewer, runProject } from './workflow';
 
 const toolRoot = path.resolve(import.meta.dirname, '..');
-const outputFlag = Flag.String('output').pipe(Flag.optional);
-const machineFlag = Flag.Boolean('json').pipe(Flag.withDefault(false));
+const outputFlag = Flag.String('output').pipe(
+  Flag.withDescription('New directory for the evidence; default .observed/'),
+  Flag.optional,
+);
+const machineFlag = Flag.Boolean('json').pipe(
+  Flag.withDescription('Print the result as JSON on stdout and exit'),
+  Flag.withDefault(false),
+);
 const timeoutFlag = Flag.Int('timeout').pipe(
+  Flag.withDescription('Milliseconds allowed for each capture, from setup on'),
   Flag.withSchema(Schema.Int.check(Schema.isGreaterThan(0))),
   Flag.withDefault(120_000),
 );
@@ -23,26 +31,51 @@ const timeoutFlag = Flag.Int('timeout').pipe(
 const printJson = (value: unknown) =>
   Effect.sync(() => process.stdout.write(json(value)));
 
+const evidenceRoot = (base: string) => path.join(base, '.observed');
+
+// The directory ignores itself so evidence never shows up in the
+// application's Git status.
+const makeEvidenceRoot = Effect.fnUntraced(function* (base: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const root = evidenceRoot(base);
+  yield* fs.makeDirectory(root, { recursive: true });
+  yield* fs
+    .writeFileString(path.join(root, '.gitignore'), '*\n', { flag: 'wx' })
+    .pipe(
+      Effect.catchTag('PlatformError', (error) =>
+        error.reason._tag === 'AlreadyExists'
+          ? Effect.void
+          : Effect.fail(error),
+      ),
+    );
+
+  return root;
+});
+
 const chooseDirectory = Effect.fnUntraced(function* (
   output: Option.Option<string>,
   prefix: string,
+  base: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const directory = path.resolve(
-    Option.getOrElse(output, () =>
-      path.join(toolRoot, 'evidence', `${prefix}-${randomUUID()}`),
-    ),
-  );
-  yield* fs.makeDirectory(path.dirname(directory), { recursive: true });
 
-  return directory;
+  if (Option.isSome(output)) {
+    const directory = path.resolve(output.value);
+    yield* fs.makeDirectory(path.dirname(directory), { recursive: true });
+
+    return directory;
+  }
+
+  return path.join(yield* makeEvidenceRoot(base), `${prefix}-${randomUUID()}`);
 });
 
-const saveLatest = Effect.fnUntraced(function* (directory: string) {
+const saveLatest = Effect.fnUntraced(function* (
+  directory: string,
+  base: string,
+) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(path.join(toolRoot, 'evidence'), { recursive: true });
   yield* fs.writeFileString(
-    path.join(toolRoot, 'evidence/latest.json'),
+    path.join(yield* makeEvidenceRoot(base), 'latest.json'),
     json({ directory }),
   );
 });
@@ -58,18 +91,32 @@ const openViewer = Effect.fnUntraced(function* (
   yield* Effect.never;
 });
 
-const run = Command.make(
-  'run',
+const observe = Command.make(
+  'observe',
   {
-    project: Argument.String('project').pipe(Argument.withDefault('.')),
-    base: Flag.String('base').pipe(Flag.optional),
-    candidate: Flag.String('candidate').pipe(Flag.optional),
+    project: Argument.String('project').pipe(
+      Argument.withDescription('Directory containing observed.json'),
+      Argument.withDefault('.'),
+    ),
+    base: Flag.String('base').pipe(
+      Flag.withDescription('Revision to compare against, such as HEAD'),
+      Flag.optional,
+    ),
+    candidate: Flag.String('candidate').pipe(
+      Flag.withDescription('Revision to capture instead of the working tree'),
+      Flag.optional,
+    ),
     output: outputFlag,
     machine: machineFlag,
-    headless: Flag.Boolean('headless').pipe(Flag.withDefault(false)),
+    headless: Flag.Boolean('headless').pipe(
+      Flag.withDescription(
+        'Exit after writing the report instead of opening it',
+      ),
+      Flag.withDefault(false),
+    ),
     timeout: timeoutFlag,
   },
-  Effect.fn('runCommand')(function* ({
+  Effect.fn('observeCommand')(function* ({
     project,
     base,
     candidate,
@@ -78,10 +125,11 @@ const run = Command.make(
     headless,
     timeout,
   }) {
-    const directory = yield* chooseDirectory(output, 'run');
+    const projectRoot = path.resolve(project);
+    const directory = yield* chooseDirectory(output, 'run', projectRoot);
     const requestedBase = Option.getOrNull(base);
     const exported = yield* runProject({
-      projectRoot: path.resolve(project),
+      projectRoot,
       toolRoot,
       directory,
       baseRevision: requestedBase === 'none' ? null : requestedBase,
@@ -89,7 +137,7 @@ const run = Command.make(
       timeoutMs: timeout,
       quiet: machine,
     });
-    yield* saveLatest(exported.directory);
+    yield* saveLatest(exported.directory, projectRoot);
 
     if (machine) {
       yield* printJson(exported);
@@ -116,8 +164,13 @@ const run = Command.make(
 const capture = Command.make(
   'capture',
   {
-    project: Argument.String('project'),
-    revision: Flag.String('revision').pipe(Flag.optional),
+    project: Argument.String('project').pipe(
+      Argument.withDescription('Directory containing observed.json'),
+    ),
+    revision: Flag.String('revision').pipe(
+      Flag.withDescription('Revision to capture instead of the working tree'),
+      Flag.optional,
+    ),
     output: outputFlag,
     machine: machineFlag,
     timeout: timeoutFlag,
@@ -132,7 +185,7 @@ const capture = Command.make(
     const { root, project, recipe } = yield* loadProject(
       path.resolve(directory),
     );
-    const destination = yield* chooseDirectory(output, 'capture');
+    const destination = yield* chooseDirectory(output, 'capture', root);
     const captured = yield* captureApplication({
       projectRoot: root,
       toolRoot,
@@ -162,13 +215,21 @@ const capture = Command.make(
 const compare = Command.make(
   'compare',
   {
-    base: Argument.String('base-directory-or-none'),
-    candidate: Argument.String('candidate-directory'),
+    base: Argument.String('base-directory-or-none').pipe(
+      Argument.withDescription('Base capture directory, or none for a preview'),
+    ),
+    candidate: Argument.String('candidate-directory').pipe(
+      Argument.withDescription('Candidate capture directory'),
+    ),
     output: outputFlag,
     machine: machineFlag,
   },
   Effect.fn('compareCommand')(function* ({ base, candidate, output, machine }) {
-    const directory = yield* chooseDirectory(output, 'comparison');
+    const directory = yield* chooseDirectory(
+      output,
+      'comparison',
+      process.cwd(),
+    );
     const exported = yield* Effect.scoped(
       Effect.gen(function* () {
         return yield* exportComparison({
@@ -180,7 +241,7 @@ const compare = Command.make(
         });
       }),
     );
-    yield* saveLatest(exported.directory);
+    yield* saveLatest(exported.directory, process.cwd());
     if (machine) {
       yield* printJson(exported);
     } else {
@@ -198,8 +259,14 @@ const compare = Command.make(
 const view = Command.make(
   'view',
   {
-    directory: Argument.String('report-directory').pipe(Argument.optional),
+    directory: Argument.String('report-directory').pipe(
+      Argument.withDescription(
+        'Report to open; default the latest run in ./.observed',
+      ),
+      Argument.optional,
+    ),
     port: Flag.Int('port').pipe(
+      Flag.withDescription('Local port for the viewer'),
       Flag.withSchema(
         Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
       ),
@@ -211,11 +278,21 @@ const view = Command.make(
     let selected = Option.getOrNull(directory);
 
     if (selected === null) {
+      const latestFile = path.join(evidenceRoot(process.cwd()), 'latest.json');
+
+      if (!(yield* fs.exists(latestFile))) {
+        return yield* Effect.fail(
+          new Error(
+            `No saved run in ${evidenceRoot(process.cwd())}. Run view from the application's directory, or pass the report directory that observe printed.`,
+          ),
+        );
+      }
+
       const latest = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(
           Schema.Struct({ directory: Schema.NonEmptyString }),
         ),
-      )(yield* fs.readFileString(path.join(toolRoot, 'evidence/latest.json')));
+      )(yield* fs.readFileString(latestFile));
       selected = latest.directory;
     }
 
@@ -223,10 +300,45 @@ const view = Command.make(
   }),
 ).pipe(Command.withDescription('View a saved comparison'));
 
+const setup = Command.make(
+  'setup',
+  {
+    withDeps: Flag.Boolean('with-deps').pipe(
+      Flag.withDescription(
+        "Also install Chrome's Linux system packages with sudo apt",
+      ),
+      Flag.withDefault(false),
+    ),
+  },
+  Effect.fn('setupCommand')(function* ({ withDeps }) {
+    const code = yield* Effect.promise(
+      () =>
+        Bun.spawn(
+          [
+            process.execPath,
+            agentBrowserPath(toolRoot),
+            'install',
+            ...(withDeps ? ['--with-deps'] : []),
+          ],
+          { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' },
+        ).exited,
+    );
+
+    process.exitCode = code;
+  }),
+).pipe(Command.withDescription('Download the Chrome build that capture uses'));
+
+const unsupported = unsupportedBun();
+
+if (unsupported !== null) {
+  console.error(unsupported);
+  process.exit(1);
+}
+
 observedVersion(toolRoot).pipe(
   Effect.flatMap((version) =>
     Command.make('observed').pipe(
-      Command.withSubcommands([run, capture, compare, view]),
+      Command.withSubcommands([observe, setup, capture, compare, view]),
       Command.run({ version }),
     ),
   ),
@@ -240,6 +352,15 @@ observedVersion(toolRoot).pipe(
   ),
   Effect.scoped,
   Effect.provide(BunServices.layer),
-  Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
+  // Expected failures explain themselves; only defects need a stack trace.
+  Effect.tapCause((cause) =>
+    Console.error(
+      Cause.hasDies(cause)
+        ? Cause.pretty(cause)
+        : Cause.prettyErrors(cause)
+            .map((error) => error.message)
+            .join('\n'),
+    ),
+  ),
   BunRuntime.runMain({ disableErrorReporting: true }),
 );

@@ -1,5 +1,10 @@
-name: Observed
-description: Capture a project's saved journey on two revisions, compare them, upload the report, and optionally post the result to the pull request.
+name: Run Observed
+description: Capture your app's saved journey on the pull request's base and head, compare them, and post the result to the pull request.
+author: esau-morais
+
+branding:
+  icon: eye
+  color: blue
 
 inputs:
   project:
@@ -40,18 +45,36 @@ runs:
       with:
         bun-version-file: ${{ github.action_path }}/package.json
 
+    # Installs the CLI release matching this action's package.json by exact
+    # version. Observed's own workflows set OBSERVED_FROM_SOURCE to pack and
+    # install the checked-out source the same way instead.
     - name: Install Observed and its browser
+      id: install
       shell: bash
-      working-directory: ${{ github.action_path }}
       run: |
-        bun install --frozen-lockfile
-        bun run setup --with-deps
+        cli="$(mktemp -d "$RUNNER_TEMP/observed-cli-XXXXXX")"
+        version="$(bun --print "(await Bun.file(process.env.GITHUB_ACTION_PATH + '/package.json').json()).version")"
+        if [ "${OBSERVED_FROM_SOURCE:-}" = true ]; then
+          (cd "$GITHUB_ACTION_PATH" && bun install --frozen-lockfile && bun run build && bun pm pack --destination "$cli" --quiet >/dev/null)
+          package="$(ls "$cli"/*.tgz)"
+        else
+          package="@esau-morais/observed@$version"
+        fi
+        cd "$cli"
+        echo '{"private":true}' > package.json
+        bun add --exact --ignore-scripts "$package"
+        root="$cli/node_modules/@esau-morais/observed"
+        echo "cli=$root/dist/observed.js" >> "$GITHUB_OUTPUT"
+        echo "script=$root/dist/github-action.js" >> "$GITHUB_OUTPUT"
+        bun "$root/dist/observed.js" --version
+        bun "$root/dist/observed.js" setup --with-deps
 
     - name: Check observed.json
       shell: bash
       env:
         OBSERVED_PROJECT: ${{ inputs.project }}
-      run: bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" preflight "$OBSERVED_PROJECT"
+        OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
+      run: bun "$OBSERVED_SCRIPT" preflight "$OBSERVED_PROJECT"
 
     - name: Run Observed
       id: observe
@@ -61,6 +84,7 @@ runs:
         OBSERVED_BASE: ${{ inputs.base }}
         OBSERVED_CANDIDATE: ${{ inputs.candidate }}
         OBSERVED_TIMEOUT: ${{ inputs.timeout }}
+        OBSERVED_CLI: ${{ steps.install.outputs.cli }}
       run: |
         bundle="$(mktemp -d "$RUNNER_TEMP/observed-XXXXXX")"
         echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
@@ -68,7 +92,7 @@ runs:
         token="$(openssl rand -hex 16)"
         echo "::stop-commands::$token"
         code=0
-        bun "$GITHUB_ACTION_PATH/src/workflow-cli.ts" run "$OBSERVED_PROJECT" \
+        bun "$OBSERVED_CLI" observe "$OBSERVED_PROJECT" \
           --base "$OBSERVED_BASE" \
           --candidate "$OBSERVED_CANDIDATE" \
           --timeout "$OBSERVED_TIMEOUT" \
@@ -84,9 +108,10 @@ runs:
       env:
         OBSERVED_BUNDLE: ${{ steps.observe.outputs.bundle }}
         OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
+        OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: |
         page="$(mktemp -d "$RUNNER_TEMP/observed-page-XXXXXX")/$OBSERVED_ARTIFACT.html"
-        if bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" page "$OBSERVED_BUNDLE/run/report" "$OBSERVED_BUNDLE/result.json" "$page"; then
+        if bun "$OBSERVED_SCRIPT" page "$OBSERVED_BUNDLE/run/report" "$OBSERVED_BUNDLE/result.json" "$page"; then
           echo "path=$page" >> "$GITHUB_OUTPUT"
         else
           echo "::warning title=Observed::No report page was written. The job summary and the evidence bundle still hold the result."
@@ -140,7 +165,8 @@ runs:
         OBSERVED_PULL_REQUEST: ${{ github.event.pull_request.number }}
         OBSERVED_SLACK_BOT_TOKEN: ${{ inputs.slack-bot-token }}
         OBSERVED_SLACK_CHANNEL: ${{ inputs.slack-channel }}
-      run: bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" deliver "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
+        OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
+      run: bun "$OBSERVED_SCRIPT" deliver "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 
     - name: Summarize the result
       if: always() && steps.observe.outcome != 'skipped'
@@ -154,7 +180,8 @@ runs:
         OBSERVED_APP_CONFIGURED: ${{ inputs.github-app-client-id != '' || inputs.github-app-private-key != '' || inputs.slack-channel != '' }}
         OBSERVED_UNTRUSTED_SOURCE: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
         OBSERVED_APP_TOKEN_OUTCOME: ${{ steps.app-token.outcome }}
-      run: bun "$GITHUB_ACTION_PATH/scripts/github-action.ts" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
+        OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
+      run: bun "$OBSERVED_SCRIPT" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 
     - name: Fail unless Observed found no failure
       if: steps.observe.outputs.exit-code != '0'

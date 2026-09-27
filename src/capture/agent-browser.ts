@@ -1,5 +1,6 @@
 import { DateTime, Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
+import { agentBrowserPath } from '../installation';
 import {
   observationsSchema,
   type Conditions,
@@ -178,10 +179,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     return yield* processOutput({
       command: process.execPath,
       args: [
-        path.join(
-          options.projectRoot,
-          'node_modules/agent-browser/bin/agent-browser.js',
-        ),
+        agentBrowserPath(options.projectRoot),
         '--config',
         config,
         '--session',

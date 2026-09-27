@@ -22,6 +22,7 @@ Observed compares software changes using runtime evidence. Its core must work wi
 | Tests | Vitest for runtime contracts. Existing browser journeys and agent-browser for real application checks |
 | Evidence | Versioned JSON manifests and artifact files. Add SQLite when history or queue requirements justify it |
 | Capture | A thin agent-browser adapter first. Keep producer-specific details outside the comparator |
+| Distribution | One npm package, `@esau-morais/observed`, holding the bundled CLI, action script, and built viewer. No install scripts; runtime dependencies stay limited to agent-browser. The tag-driven release workflow runs the npm CLI only for `npm publish`, because Bun cannot publish with provenance or trusted publishing. Contributors never install with npm |
 
 Pin compatible versions during application setup. Stack changes need an explicit request or a documented decision accepted by the maintainer. Routine dependency fixes within this stack need no new approval.
 
@@ -38,7 +39,7 @@ The Phase 0 CLI generates Markdown reports from imported evidence. Check package
 | `bun run typecheck` | Check application and tooling types |
 | `bun run lint` | Run TypeScript-aware ESLint and formatting; add Hooks and official StyleX rules with the viewer |
 | `bun run test` | Run Vitest once, without watch mode |
-| `bun run build` | Compile the Bun CLI; add production assets and extracted StyleX CSS with the viewer |
+| `bun run build` | Bundle the CLI and action script, build the viewer with extracted StyleX CSS, and write third-party notices to `dist/` |
 
 Use `bun run test`, not `bun test`. Invoke declared local tools through scripts. Pin exceptional bunx invocations. Do not use floating versions in CI or saved recipes.
 

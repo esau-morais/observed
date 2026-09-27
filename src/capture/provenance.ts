@@ -1,10 +1,11 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
+import { packageName, packaged } from '../installation';
 import { commitSchema, text, type Observed } from './model';
 import { gitEnvironment, processOutput } from './process';
 
 const packageSchema = Schema.fromJsonString(
-  Schema.Struct({ name: Schema.Literal('observed'), version: text }),
+  Schema.Struct({ name: Schema.Literal(packageName), version: text }),
 );
 
 class SourceUnavailable extends Schema.TaggedError<SourceUnavailable>()(
@@ -15,6 +16,10 @@ class SourceUnavailable extends Schema.TaggedError<SourceUnavailable>()(
 export const observedVersion = Effect.fn('observedVersion')(function* (
   toolRoot: string,
 ) {
+  if (packaged !== null) {
+    return packaged.version;
+  }
+
   const fs = yield* FileSystem.FileSystem;
   const { version } = yield* Schema.decodeUnknownEffect(packageSchema)(
     yield* fs.readFileString(path.join(toolRoot, 'package.json')),
@@ -29,6 +34,25 @@ export const observedProvenance = Effect.fn('observedProvenance')(
     projectRoot: string;
     transcript: string;
   }) {
+    if (packaged !== null) {
+      return {
+        version: packaged.version,
+        source:
+          packaged.commit === null
+            ? {
+                kind: 'unavailable',
+                reason: 'This build of Observed recorded no source commit',
+              }
+            : {
+                kind: 'git',
+                commit: yield* Schema.decodeUnknownEffect(commitSchema)(
+                  packaged.commit,
+                ),
+                trackedChanges: packaged.trackedChanges,
+              },
+      } satisfies Observed;
+    }
+
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.realPath(options.toolRoot);
     const version = yield* observedVersion(root);

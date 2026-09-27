@@ -62,7 +62,7 @@ export const loadProject = Effect.fn('loadProject')(function* (
 
   if (!(yield* fs.exists(filename))) {
     return yield* new ProjectFailure({
-      message: `No observed.json in ${root}. Ask your agent to configure this application's startup and the page to capture. See src/project.ts for the configuration contract.`,
+      message: `No observed.json in ${root}. Ask your agent to configure this application's startup and the page to capture. See https://github.com/esau-morais/observed#write-observedjson for the fields.`,
     });
   }
 
@@ -86,7 +86,14 @@ export const loadProject = Effect.fn('loadProject')(function* (
 
   const project = yield* Schema.decodeUnknownEffect(projectSchema, {
     onExcessProperty: 'error',
-  })(input);
+  })(input).pipe(
+    Effect.mapError(
+      (error) =>
+        new ProjectFailure({
+          message: `${filename} does not match the project contract:\n${error.message}`,
+        }),
+    ),
+  );
 
   const recipe = yield* Schema.decodeUnknownEffect(recipeSchema)({
     schemaVersion: 1,

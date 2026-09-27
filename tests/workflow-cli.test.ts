@@ -9,7 +9,7 @@ test.each(['--json', '--json=true'])(
         [
           process.execPath,
           'src/workflow-cli.ts',
-          'run',
+          'observe',
           'examples/shop',
           jsonFlag,
           ...args,

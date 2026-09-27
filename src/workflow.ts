@@ -4,12 +4,17 @@ import { captureApplication } from './capture/coordinator';
 import { processOutput } from './capture/process';
 import { json } from './encoding';
 import { exportComparison } from './export';
+import { packaged } from './installation';
 import { loadProject } from './project';
 
 export const buildViewer = Effect.fnUntraced(function* (
   toolRoot: string,
   transcript?: string,
 ) {
+  if (packaged !== null) {
+    return path.join(toolRoot, 'dist/viewer');
+  }
+
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({
     prefix: 'observed-viewer-',

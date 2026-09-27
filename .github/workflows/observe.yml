@@ -20,6 +20,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./
+        env:
+          OBSERVED_FROM_SOURCE: true
         with:
           project: examples/request-lab
           base: ${{ github.event.pull_request.base.sha }}

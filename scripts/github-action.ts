@@ -12,6 +12,7 @@ import {
 import type { Capture, Source } from '../src/capture/model';
 import { escapeText } from '../src/comparison-report';
 import { loadProject } from '../src/project';
+import { packageName, packaged } from '../src/installation';
 import { renderReportPage } from '../src/report-page';
 import {
   checkConclusion,
@@ -177,7 +178,7 @@ export function summarize(options: {
   const repository = Option.getOrNull(
     Schema.decodeUnknownOption(httpsUrlSchema)(options.repository ?? null),
   );
-  const bundle = `Raw evidence: workflow artifact \`${options.artifact.replaceAll('`', '')}\`. Download it and run \`bun run view <download>/run/report\` from an Observed checkout.`;
+  const bundle = `Raw evidence: workflow artifact \`${options.artifact.replaceAll('`', '')}\`. Download it and run \`bunx ${packageName}${packaged === null ? '' : `@${packaged.version}`} view <download>/run/report\`.`;
   const exit = `Observed exited with code ${formatExit(options.exitCode)}.`;
   const untrusted = (reason: string) => ({
     markdown: [

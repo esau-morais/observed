@@ -20,7 +20,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 for (const command of [
   [process.execPath, 'install', '--frozen-lockfile'],
   [process.execPath, 'run', 'setup'],
-  [process.execPath, 'src/workflow-cli.ts', 'run', ...project],
+  [process.execPath, 'src/workflow-cli.ts', 'observe', ...project],
 ]) {
   if (interrupted) {
     process.exit(130);
