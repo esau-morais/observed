@@ -4,7 +4,8 @@ import type { SectionInput } from '../../report-sections/define';
 
 export type { SectionInput, SectionSide } from '../../report-sections/define';
 
-// Rendered inside one disclosure titled with the kind's title.
+// Rendered inside one disclosure titled with the kind's title. Use
+// SubHeading from ../heading for headings so they follow the page's order.
 export type ViewerSection<K extends EvidenceKind> = (
   props: SectionInput<K>,
 ) => ReactNode;

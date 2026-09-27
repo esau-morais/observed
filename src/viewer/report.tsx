@@ -32,6 +32,7 @@ import {
 } from '../result-text';
 import { describeRegion, describeVisual, diffLegend } from '../visual-text';
 import { EvidenceSection } from './sections';
+import { HeadingLevel, SubHeading } from './heading';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -261,7 +262,7 @@ function CheckPanel({ check, label }: { check: Check; label: string }) {
       <p {...stylex.props(styles.small)}>
         {label} · {check.authority}
       </p>
-      <h3 {...stylex.props(styles.subheading)}>{check.name}</h3>
+      <SubHeading xstyle={styles.subheading}>{check.name}</SubHeading>
       <span {...stylex.props(styles.badge, styles[checkTones[check.outcome]])}>
         <span aria-hidden="true">{toneSymbols[checkTones[check.outcome]]}</span>
         {checkLabels[check.outcome]}
@@ -448,7 +449,7 @@ function Identity({ side, label }: { side: Side; label: string }) {
       {...stylex.props(styles.panel)}
       aria-label={`${label} selected capture`}
     >
-      <h3 {...stylex.props(styles.subheading)}>{label}</h3>
+      <SubHeading xstyle={styles.subheading}>{label}</SubHeading>
       <p>{capture?.label ?? 'Capture unavailable'}</p>
       <p {...stylex.props(styles.small)}>
         Capture: {executionLabels[side.execution]}
@@ -486,9 +487,9 @@ function Availability({
 
   return (
     <section {...stylex.props(styles.stack)} aria-labelledby={headingId}>
-      <h3 id={headingId} {...stylex.props(styles.subheading)}>
+      <SubHeading id={headingId} xstyle={styles.subheading}>
         Comparison
-      </h3>
+      </SubHeading>
       {comparison.kind === 'unavailable' ? (
         <>
           <span {...stylex.props(styles.badge, styles.unknown)}>
@@ -543,7 +544,7 @@ function Disclosure({
         <Heading {...stylex.props(styles.disclosureTitle)}>{title}</Heading>
       </summary>
       <div {...stylex.props(styles.section, styles.disclosureBody)}>
-        {children}
+        <HeadingLevel value={level === 2 ? 3 : 4}>{children}</HeadingLevel>
       </div>
     </details>
   );

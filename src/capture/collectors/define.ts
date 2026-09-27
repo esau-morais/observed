@@ -65,20 +65,32 @@ type Collect<K extends EvidenceKind, C> = (
   context: C,
 ) => Effect.Effect<EvidenceValue<K>, CollectorError, CollectorServices>;
 
+// Conditions record what the evidence was measured under beyond the recipe,
+// which both sides already share. Evidence recorded under different
+// conditions is not compared.
+export type EvidenceConditions = Readonly<
+  Record<string, string | number | boolean | null>
+>;
+
+type Common<K extends EvidenceKind> = {
+  readonly conditions?: (config: CollectorConfig<K>) => EvidenceConditions;
+};
+
 export type Collector<K extends EvidenceKind> =
   // Runs in the journey's browser session after `steps` and the snapshot,
   // before the screenshot, while requests are still recorded. It must not
   // navigate or send requests: anything it causes counts in the journey.
-  | {
+  | (Common<K> & {
       readonly phase: 'journey';
       readonly collect: Collect<K, CollectorContext>;
-    }
+    })
   // Runs after the journey's screenshot and request recording, with the app
   // still running, in a fresh agent-browser session of its own. That session
   // launches on the collector's first browser() call, so the collector can
-  // pass launch flags such as --init-script there. Observed closes it.
-  | {
+  // pass launch flags such as --init-script there. Observed closes it and
+  // records launchArguments among the conditions.
+  | (Common<K> & {
       readonly phase: 'separate-session';
       readonly launchArguments?: readonly string[];
       readonly collect: Collect<K, SeparateSessionContext>;
-    };
+    });

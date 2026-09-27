@@ -5,6 +5,7 @@ import { describeRevision, shortSource } from '../provenance-text';
 import { describeStatus } from '../request-text';
 import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
+import { SubHeading } from './heading';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -248,7 +249,7 @@ export function RequestLedger({ side, label }: { side: Side; label: string }) {
       {...stylex.props(styles.stack)}
       aria-label={`${label} request ledger`}
     >
-      <h3 {...stylex.props(styles.heading)}>{label}</h3>
+      <SubHeading xstyle={styles.heading}>{label}</SubHeading>
       {observations === null ? (
         <p {...stylex.props(styles.missing)}>Request evidence unavailable.</p>
       ) : (
@@ -349,7 +350,7 @@ export function Artifacts({ side, label }: { side: Side; label: string }) {
       {...stylex.props(styles.stack)}
       aria-label={`${label} original artifacts`}
     >
-      <h3 {...stylex.props(styles.heading)}>{label}</h3>
+      <SubHeading xstyle={styles.heading}>{label}</SubHeading>
       {side.artifacts.length === 0 ? (
         <p {...stylex.props(styles.text)}>No artifacts available.</p>
       ) : (

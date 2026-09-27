@@ -321,7 +321,15 @@ export const captureApplication = Effect.fn('captureApplication')(
               const record = records.find((item) => item.path === entry.path);
 
               return record === undefined
-                ? []
+                ? [
+                    {
+                      kind: entry.kind,
+                      schemaVersion: entry.schemaVersion,
+                      status: 'unavailable',
+                      reason: `Evidence file ${entry.path} was not written`,
+                      producer,
+                    },
+                  ]
                 : [{ ...entry, sha256: record.sha256, producer }];
             },
           );

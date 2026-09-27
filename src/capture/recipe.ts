@@ -12,10 +12,6 @@ import {
 } from '../evidence-kinds';
 import { httpOriginSchema, routeSchema, text } from './model';
 
-export { routeSchema };
-
-export { checkSchema };
-
 const positive = Schema.Int.check(Schema.isGreaterThan(0));
 
 export const stepSchema = Schema.Union([
@@ -132,7 +128,6 @@ function collectorsFor<K extends CheckDefinition['kind']>(
 
 export type Recipe = typeof recipeSchema.Type;
 export type Step = typeof stepSchema.Type;
-export type { CheckDefinition };
 
 export const parseRecipe = Schema.decodeUnknownEffect(
   Schema.fromJsonString(recipeSchema),

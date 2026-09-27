@@ -11,7 +11,7 @@ import {
   type Side,
 } from '../src/comparison-model';
 import type { Capture, Source } from '../src/capture/model';
-import { escapeText } from '../src/comparison-report';
+import { escapeText } from '../src/markdown';
 import { loadProject } from '../src/project';
 import { packageName, packaged } from '../src/installation';
 import { renderReportPage } from '../src/report-page';
@@ -128,7 +128,6 @@ export function journeySides(
       ];
 }
 
-// One line per configured check, with the verdict Observed recorded.
 export function checkList(result: Comparison): string {
   const lines = result.journeys.flatMap((journey) =>
     journey.checks.map((check) => {

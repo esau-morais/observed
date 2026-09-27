@@ -1,15 +1,14 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { redact } from './redact';
-import { text } from './capture/model';
+import { routeSchema, text } from './capture/model';
 import {
-  checkSchema,
   journeyCollectors,
   recipeSchema,
   recipeSchemaVersion,
-  routeSchema,
   stepSchema,
 } from './capture/recipe';
+import { checkSchema } from './checks';
 import { collectorSchema } from './evidence-kinds';
 
 export const relativePathSchema = text.check(

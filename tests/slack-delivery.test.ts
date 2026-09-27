@@ -91,6 +91,7 @@ test('captured names cannot mention anyone in Slack, and captured values stay ou
   expect(message).not.toMatch(/<!channel>|<@U123>/);
   expect(message).toContain('&lt;!channel&gt;');
   expect(message).toContain('1 of 2 checks passed');
+  expect(message).toContain('Unknown · Order total. Scope: One checkout');
   expect(message).not.toContain('Captured page text');
   expect(message).not.toContain('Captured item text');
 });

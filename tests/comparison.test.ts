@@ -26,8 +26,10 @@ import {
   producer,
   recipe,
 } from './support/request-recipe';
+import { defineCheck, perSide, type CheckInput } from '../src/checks/define';
 import {
   compareJourney,
+  evaluateCheck,
   inspectJourney,
   inspectSide,
   summarizeJourneys,
@@ -1729,4 +1731,152 @@ test('evidence whose file changed after capture leaves its check unknown, not pa
     'unknown',
     'unknown',
   ]);
+});
+
+const sameText = defineCheck({
+  definition: Schema.Struct({
+    kind: Schema.Literal('same-text'),
+    id: Schema.String,
+    name: Schema.String,
+    scope: Schema.String,
+  }),
+  evidence: ['text'],
+  collectors: () => [],
+  expectation: () => 'The candidate shows the base text.',
+  needsBase: true,
+  evaluate: ({ base, candidate }) => {
+    const value = (input: CheckInput<'text'>) =>
+      input.evidence.text.elements[0]?.value ?? null;
+
+    if (base === null) {
+      return {
+        base: null,
+        candidate: { outcome: 'not-run', actual: null, detail: 'No base.' },
+      };
+    }
+
+    return {
+      base: { outcome: 'passed', actual: value(base), detail: 'Reference.' },
+      candidate: {
+        outcome: value(base) === value(candidate) ? 'passed' : 'failed',
+        actual: value(candidate),
+        detail: 'Compared with the base.',
+      },
+    };
+  },
+});
+
+const newValues = defineCheck({
+  definition: sameText.definition,
+  evidence: sameText.evidence,
+  collectors: sameText.collectors,
+  expectation: sameText.expectation,
+  evaluate: perSide((_, side: CheckInput<'text'>) => ({
+    outcome: 'failed',
+    actual: side.evidence.text.elements.length,
+    detail: 'Some values are wrong.',
+  })),
+  regression: ({ base, candidate }) =>
+    candidate.evidence.text.elements.length > base.evidence.text.elements.length
+      ? { detail: 'The candidate shows a value the base did not.' }
+      : null,
+});
+
+const probe = {
+  kind: 'same-text',
+  id: 'same',
+  name: 'Same text',
+  scope: 'After saving',
+} as const;
+
+async function completeSide(text?: EvidenceValue<'text'>) {
+  const side = await inspect(
+    (
+      await syntheticBundle({
+        contract: twoChecks,
+        ...(text === undefined ? {} : { text }),
+      })
+    ).directory,
+  );
+
+  if (side.execution !== 'complete') {
+    throw new Error('A complete synthetic side is expected');
+  }
+
+  return side;
+}
+
+test('a check that compares sides is unknown without a usable, comparable base', async () => {
+  const candidate = await completeSide(statusText('Saved'));
+  const cases = [
+    {
+      base: await completeSide(),
+      comparable: true,
+      detail: 'Base: Element text evidence unavailable',
+    },
+    {
+      base: await completeSide(statusText('Saved')),
+      comparable: false,
+      detail: 'Base: not comparable with the candidate',
+    },
+    { base: null, comparable: false, detail: 'Base: capture unavailable' },
+  ];
+
+  for (const { base, comparable, detail } of cases) {
+    const pair = evaluateCheck(sameText, probe, {
+      base,
+      candidate,
+      mode: 'comparison',
+      comparable,
+    });
+
+    expect(pair.candidate.outcome).toBe('unknown');
+    expect(pair.candidate.detail).toContain(detail);
+    expect(pair.regression).toBeNull();
+  }
+
+  expect(
+    evaluateCheck(sameText, probe, {
+      base: null,
+      candidate,
+      mode: 'preview',
+      comparable: false,
+    }).candidate.outcome,
+  ).toBe('not-run');
+  expect(
+    evaluateCheck(sameText, probe, {
+      base: await completeSide(statusText('Pending')),
+      candidate,
+      mode: 'comparison',
+      comparable: true,
+    }).candidate,
+  ).toMatchObject({ outcome: 'failed', actual: 'Saved' });
+});
+
+test('a regression hook decides failed-to-failed pairs and never runs without base evidence', async () => {
+  const two = {
+    elements: [
+      { selector: '#status', count: 1, value: 'Saved' },
+      { selector: '#total', count: 1, value: '3' },
+    ],
+  };
+  const pair = (base: Awaited<ReturnType<typeof completeSide>>) =>
+    evaluateCheck(newValues, probe, {
+      base,
+      candidate,
+      mode: 'comparison',
+      comparable: true,
+    });
+  const candidate = await completeSide(two);
+
+  expect(pair(await completeSide(statusText('Saved')))).toMatchObject({
+    base: { outcome: 'failed' },
+    candidate: { outcome: 'failed' },
+    regression: 'The candidate shows a value the base did not.',
+  });
+  expect(pair(await completeSide(two)).regression).toBeNull();
+  expect(pair(await completeSide())).toMatchObject({
+    candidate: { outcome: 'unknown' },
+    regression: null,
+  });
 });

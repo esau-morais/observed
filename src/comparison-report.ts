@@ -20,8 +20,6 @@ import { describeObserved, describeRevision } from './provenance-text';
 import { describeStatus } from './request-text';
 import { describeRegion, describeVisual, diffLegend } from './visual-text';
 
-export { escapeText };
-
 function link(label: string, path: string): string {
   const destination = path.replace(/[<>\s\\]/g, (character) =>
     encodeURIComponent(character),

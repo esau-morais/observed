@@ -7,7 +7,7 @@ import { expect, test } from 'vitest';
 import requestLab from '../examples/request-lab/observed.json';
 import shop from '../examples/shop/observed.json';
 import { loadProject } from '../src/project';
-import { checkSchema } from '../src/capture/recipe';
+import { checkSchema } from '../src/checks';
 import { json } from '../src/encoding';
 
 test.each(['/orders?category=books', '/orders#submitted'])(

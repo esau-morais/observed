@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
 import { fonts, media } from '../constants.stylex';
 import { colors } from '../tokens.stylex';
+import { SubHeading } from '../heading';
 import type { SectionSide, ViewerSection } from './define';
 
 const styles = stylex.create({
@@ -29,7 +30,7 @@ function Elements({
 }) {
   return (
     <section {...stylex.props(styles.stack)} aria-label={`${label} text`}>
-      <h3 {...stylex.props(styles.heading)}>{label}</h3>
+      <SubHeading xstyle={styles.heading}>{label}</SubHeading>
       {side.evidence.status === 'unavailable' ? (
         <p {...stylex.props(styles.muted)}>
           Unavailable: {side.evidence.reason}

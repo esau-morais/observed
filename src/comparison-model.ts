@@ -183,7 +183,8 @@ export type Visual = typeof visualSchema.Type;
 
 export type VisualRegion = typeof visualRegion.Type;
 
-const conclusionKinds = [
+// Ordered by precedence: the first kind any journey reaches decides the run.
+export const conclusionKinds = [
   'regression',
   'check-failed',
   'unavailable',

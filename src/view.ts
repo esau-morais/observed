@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parseCapture, type CaptureArtifact } from './capture/model';
 import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
-import { selectionSchema } from './comparison-model';
+import { selectionSchema, type JourneySelection } from './comparison-model';
 import { readVerifiedArtifact } from './evidence';
 import { viewerIntegritySchema } from './export';
 
@@ -62,7 +62,7 @@ const stageCapture = Effect.fnUntraced(function* (
   root: string,
   staging: string,
   prefix: string,
-  expected: { manifestHash: string; sourceHash: string },
+  expected: NonNullable<JourneySelection['base']>,
   assets: Map<string, Asset>,
 ) {
   const fs = yield* FileSystem.FileSystem;

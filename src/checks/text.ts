@@ -34,7 +34,7 @@ export const text = defineCheck({
       return {
         outcome: 'unknown',
         actual: null,
-        detail: 'Required check observation unavailable',
+        detail: `The text collector recorded no ${check.selector} element; list it in the journey's text collector`,
       };
     }
 

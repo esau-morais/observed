@@ -11,7 +11,12 @@ import {
 } from './capture/model';
 import { parseRecipe, type Recipe } from './capture/recipe';
 import { checkKinds, type CheckDefinition, type CheckKinds } from './checks';
-import type { CheckInput, Evaluation } from './checks/define';
+import type {
+  CheckIdentity,
+  CheckInput,
+  CheckKind,
+  Evaluation,
+} from './checks/define';
 import {
   evidenceKinds,
   evidenceViewSchema,
@@ -34,6 +39,7 @@ import type {
   UnknownCheck,
   Visual,
 } from './comparison-model';
+import { conclusionKinds, resultSchemaVersion } from './comparison-model';
 import {
   inspectArtifact,
   readVerifiedArtifact,
@@ -147,7 +153,8 @@ function checkInput(
 }
 
 function checkResult(
-  definition: CheckDefinition,
+  definition: CheckIdentity,
+  expectation: string,
   evaluation: Evaluation,
 ): Check {
   const identity = {
@@ -155,7 +162,7 @@ function checkResult(
     name: definition.name,
     authority: 'Executed by Observed',
     scope: definition.scope,
-    expectation: expectationFor(definition),
+    expectation,
     detail: evaluation.detail,
   } as const;
 
@@ -164,92 +171,131 @@ function checkResult(
     : { ...identity, outcome: evaluation.outcome, actual: null };
 }
 
-type CheckPair = {
-  definition: CheckDefinition;
-  base: { check: Check; input: CheckInput<EvidenceKind> | null } | null;
-  candidate: { check: Check; input: CheckInput<EvidenceKind> | null };
+export type CheckPair = {
+  base: Check | null;
+  candidate: Check;
+  // Set when a comparable, known pair establishes a regression.
+  regression: string | null;
 };
 
-function evaluateDefinition<K extends CheckDefinition['kind']>(
-  definition: Extract<CheckDefinition, { kind: K }>,
-  base: CompleteSide | null,
-  candidate: CompleteSide,
-  mode: 'preview' | 'comparison',
-  comparable: boolean,
+const unknownEvaluation = (detail: string): Evaluation => ({
+  outcome: 'unknown',
+  actual: null,
+  detail,
+});
+
+function describeActual(check: Check | undefined): string {
+  return check === undefined || check.actual === null
+    ? 'unknown'
+    : String(check.actual);
+}
+
+// Evaluates one configured check on both sides through its kind. Missing
+// declared evidence makes that side unknown before the kind sees it, and a
+// kind that compares the sides gets no verdict from an unusable base.
+export function evaluateCheck<D extends CheckIdentity>(
+  kind: CheckKind<D, EvidenceKind>,
+  definition: D,
+  {
+    base,
+    candidate,
+    mode,
+    comparable,
+  }: {
+    base: CompleteSide | null;
+    candidate: CompleteSide;
+    mode: 'preview' | 'comparison';
+    comparable: boolean;
+  },
 ): CheckPair {
-  const kind: CheckKinds[K] = checkKinds[definition.kind];
+  const expectation = kind.expectation(definition);
   const baseInput = base === null ? null : checkInput(base, kind.evidence);
   const candidateInput = checkInput(candidate, kind.evidence);
-  const missing = (detail: string): Evaluation => ({
-    outcome: 'unknown',
-    actual: null,
-    detail,
-  });
+  const readBase = baseInput?.kind === 'ready' ? baseInput.input : null;
+  const comparesSides =
+    kind.needsBase === true || kind.regression !== undefined;
+  let blocked: string | null = null;
 
-  let baseMissing: string | null = null;
-
-  if (mode === 'comparison' && kind.needsBase === true) {
+  if (mode === 'comparison' && comparesSides) {
     if (baseInput === null) {
-      baseMissing = 'Base: capture unavailable';
+      blocked = 'Base: capture unavailable';
     } else if (baseInput.kind === 'missing') {
-      baseMissing = `Base: ${baseInput.detail}`;
+      blocked = `Base: ${baseInput.detail}`;
     } else if (!comparable) {
-      baseMissing = 'Base: not comparable with the candidate';
+      blocked = 'Base: not comparable with the candidate';
     }
   }
 
-  const evaluated =
-    candidateInput.kind === 'ready' && baseMissing === null
-      ? kind.evaluate({
-          definition,
-          base: baseInput?.kind === 'ready' ? baseInput.input : null,
-          candidate: candidateInput.input,
-          comparable,
-        })
-      : null;
-
   let candidateEvaluation: Evaluation;
-
-  if (candidateInput.kind === 'missing') {
-    candidateEvaluation = missing(candidateInput.detail);
-  } else if (baseMissing !== null) {
-    candidateEvaluation = missing(baseMissing);
-  } else {
-    candidateEvaluation =
-      evaluated?.candidate ?? missing('Candidate evaluation unavailable');
-  }
-
   let baseEvaluation: Evaluation | null = null;
 
-  if (baseInput !== null) {
-    baseEvaluation =
-      baseInput.kind === 'missing'
-        ? missing(baseInput.detail)
-        : (evaluated?.base ??
-          (candidateInput.kind === 'missing' || baseMissing !== null
-            ? kind.evaluate({
-                definition,
-                base: null,
-                candidate: baseInput.input,
-                comparable: false,
-              }).candidate
-            : missing('Base evaluation unavailable')));
+  if (candidateInput.kind === 'missing') {
+    candidateEvaluation = unknownEvaluation(candidateInput.detail);
+  } else if (blocked !== null) {
+    candidateEvaluation = unknownEvaluation(blocked);
+  } else {
+    const evaluated = kind.evaluate({
+      definition,
+      base: readBase,
+      candidate: candidateInput.input,
+      comparable,
+    });
+    candidateEvaluation = evaluated.candidate;
+    baseEvaluation = evaluated.base;
   }
 
-  return {
-    definition,
-    base:
-      baseEvaluation === null
-        ? null
-        : {
-            check: checkResult(definition, baseEvaluation),
-            input: baseInput?.kind === 'ready' ? baseInput.input : null,
+  if (baseInput?.kind === 'missing') {
+    baseEvaluation = unknownEvaluation(baseInput.detail);
+  } else if (readBase !== null && baseEvaluation === null) {
+    baseEvaluation = kind.evaluate({
+      definition,
+      base: null,
+      candidate: readBase,
+      comparable: false,
+    }).candidate;
+  }
+
+  const before =
+    baseEvaluation === null
+      ? null
+      : checkResult(definition, expectation, baseEvaluation);
+  const after = checkResult(definition, expectation, candidateEvaluation);
+  let regression: string | null = null;
+
+  if (
+    mode === 'comparison' &&
+    comparable &&
+    before !== null &&
+    readBase !== null &&
+    candidateInput.kind === 'ready' &&
+    (before.outcome === 'passed' || before.outcome === 'failed') &&
+    (after.outcome === 'passed' || after.outcome === 'failed')
+  ) {
+    if (kind.regression !== undefined && baseEvaluation !== null) {
+      regression =
+        kind.regression({
+          definition,
+          base: { ...readBase, evaluation: baseEvaluation },
+          candidate: {
+            ...candidateInput.input,
+            evaluation: candidateEvaluation,
           },
-    candidate: {
-      check: checkResult(definition, candidateEvaluation),
-      input: candidateInput.kind === 'ready' ? candidateInput.input : null,
-    },
-  };
+        })?.detail ?? null;
+    } else if (before.outcome === 'passed' && after.outcome === 'failed') {
+      regression = `${after.name} passed on base and failed on candidate. Base: ${describeActual(before)}; candidate: ${describeActual(after)}. ${expectation}`;
+    }
+  }
+
+  return { base: before, candidate: after, regression };
+}
+
+function evaluateDefinition<K extends CheckDefinition['kind']>(
+  definition: Extract<CheckDefinition, { kind: K }>,
+  sides: Parameters<typeof evaluateCheck>[2],
+): CheckPair {
+  const kind: CheckKinds[K] = checkKinds[definition.kind];
+
+  return evaluateCheck(kind, definition, sides);
 }
 
 function evaluatePairs(
@@ -259,7 +305,7 @@ function evaluatePairs(
   comparable: boolean,
 ): CheckPair[] {
   return candidate.recipe.checks.map((definition) =>
-    evaluateDefinition(definition, base, candidate, mode, comparable),
+    evaluateDefinition(definition, { base, candidate, mode, comparable }),
   );
 }
 
@@ -744,7 +790,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       return {
         ...side,
         checks: evaluatePairs(null, side, 'preview', false).map(
-          (pair) => pair.candidate.check,
+          (pair) => pair.candidate,
         ),
       } satisfies Side;
     }
@@ -926,17 +972,9 @@ function observedSourceNotes(base: Side, candidate: Side): string[] {
   return notes;
 }
 
-function describeActual(check: Check | undefined): string {
-  return check === undefined || check.actual === null
-    ? 'unknown'
-    : String(check.actual);
-}
-
 function verdictsFor(
   pairs: readonly CheckPair[] | null,
   candidate: Side,
-  mode: 'preview' | 'comparison',
-  comparable: boolean,
 ): CheckVerdict[] {
   const identity = (check: Check) => ({
     id: check.id,
@@ -953,66 +991,15 @@ function verdictsFor(
     }));
   }
 
-  return pairs.map(({ definition, base: before, candidate: after }) => {
-    const check = after.check;
+  return pairs.map(({ candidate: check, regression }) => {
     const common = identity(check);
 
-    if (check.outcome === 'unknown' || check.outcome === 'not-run') {
-      return {
-        ...common,
-        verdict: check.outcome,
-        detail: check.detail,
-      };
-    }
-
-    if (
-      mode === 'comparison' &&
-      comparable &&
-      before !== null &&
-      before.input !== null &&
-      after.input !== null &&
-      (before.check.outcome === 'passed' || before.check.outcome === 'failed')
-    ) {
-      const regression = regressionOf(definition, before, after);
-
-      if (regression !== null) {
-        return { ...common, verdict: 'regression', detail: regression };
-      }
+    if (regression !== null) {
+      return { ...common, verdict: 'regression', detail: regression };
     }
 
     return { ...common, verdict: check.outcome, detail: check.detail };
   });
-}
-
-function regressionOf<K extends CheckDefinition['kind']>(
-  definition: Extract<CheckDefinition, { kind: K }>,
-  before: { check: Check; input: CheckInput<EvidenceKind> | null },
-  after: { check: Check; input: CheckInput<EvidenceKind> | null },
-): string | null {
-  const kind: CheckKinds[K] = checkKinds[definition.kind];
-  const evaluation = (check: Check): Evaluation => ({
-    outcome: check.outcome,
-    actual: check.actual,
-    detail: check.detail,
-  });
-
-  if (before.input === null || after.input === null) {
-    return null;
-  }
-
-  if (kind.regression !== undefined) {
-    return (
-      kind.regression({
-        definition,
-        base: { ...before.input, evaluation: evaluation(before.check) },
-        candidate: { ...after.input, evaluation: evaluation(after.check) },
-      })?.detail ?? null
-    );
-  }
-
-  return before.check.outcome === 'passed' && after.check.outcome === 'failed'
-    ? `${after.check.name} passed on base and failed on candidate. Base: ${describeActual(before.check)}; candidate: ${describeActual(after.check)}. ${after.check.expectation}`
-    : null;
 }
 
 function names(verdicts: readonly CheckVerdict[]): string {
@@ -1030,6 +1017,8 @@ function journeyConclusion(
   const failed = verdicts.filter((item) => item.verdict === 'failed');
   const unknown = verdicts.filter((item) => item.verdict === 'unknown');
   const passed = verdicts.filter((item) => item.verdict === 'passed');
+  const notRun = verdicts.filter((item) => item.verdict === 'not-run');
+  const notRunText = notRun.length === 0 ? '' : ` Not run: ${names(notRun)}.`;
   const baseCheck = (id: string) =>
     base.checks.find((check) => check.id === id);
   const candidateCheck = (id: string) =>
@@ -1060,9 +1049,17 @@ function journeyConclusion(
             return `${item.name}: failed.`;
           }
 
-          return comparison.kind === 'available'
-            ? `${item.name} failed. Base ${baseOutcome(item.id) === 'failed' ? 'also failed' : baseOutcome(item.id)}, so this is not a regression. Base: ${describeActual(baseCheck(item.id))}; candidate: ${describeActual(after)}. ${item.expectation}`
-            : `${item.name} failed. The revisions were not compared, so a regression cannot be established. Candidate: ${describeActual(after)}. ${item.expectation}`;
+          if (comparison.kind !== 'available') {
+            return `${item.name} failed. The revisions were not compared, so a regression cannot be established. Candidate: ${describeActual(after)}. ${item.expectation}`;
+          }
+
+          const outcome = baseCheck(item.id)?.outcome;
+          const reading =
+            outcome === 'failed' || outcome === 'passed'
+              ? `Base ${outcome === 'failed' ? 'also failed' : 'passed'}, so this is not a regression.`
+              : `Base ${baseOutcome(item.id)}, so a regression cannot be established.`;
+
+          return `${item.name} failed. ${reading} Base: ${describeActual(baseCheck(item.id))}; candidate: ${describeActual(after)}. ${item.expectation}`;
         })
         .join(' '),
     };
@@ -1081,7 +1078,7 @@ function journeyConclusion(
       text:
         unknown.length > 0
           ? `The revisions were not compared. Unknown: ${names(unknown)}.`
-          : `The revisions were not compared. ${passed.length} of ${verdicts.length} candidate checks passed.`,
+          : `The revisions were not compared.${verdicts.length === 0 ? '' : ` ${passed.length} of ${verdicts.length} candidate checks passed.`}`,
     };
   }
 
@@ -1095,18 +1092,26 @@ function journeyConclusion(
   }
 
   if (passed.length === 0) {
-    return mode === 'preview'
-      ? { kind: 'preview', text: 'Current application capture.' }
-      : {
-          kind: 'not-checked',
-          text: 'Before and after captured. No named check is configured, so no behavior was verified.',
-        };
+    if (mode === 'preview') {
+      return {
+        kind: 'preview',
+        text: `Current application capture.${notRunText}`,
+      };
+    }
+
+    return {
+      kind: 'not-checked',
+      text:
+        notRun.length === 0
+          ? 'Before and after captured. No named check is configured, so no behavior was verified.'
+          : `Before and after captured. No named check ran, so no behavior was verified.${notRunText}`,
+    };
   }
 
   if (mode === 'preview') {
     return {
       kind: 'preview',
-      text: passed.map((item) => `${item.name}: passed.`).join(' '),
+      text: `${passed.map((item) => `${item.name}: passed.`).join(' ')}${notRunText}`,
     };
   }
 
@@ -1118,7 +1123,8 @@ function journeyConclusion(
           ? `${item.name} passed on base and candidate.`
           : `${item.name} ${baseOutcome(item.id)} on base and passed on candidate.`,
       )
-      .join(' '),
+      .join(' ')
+      .concat(notRunText),
   };
 }
 
@@ -1183,12 +1189,7 @@ export function compareJourney({
           comparison.kind === 'available',
         )
       : null;
-  const verdicts = verdictsFor(
-    pairs,
-    candidate,
-    mode,
-    comparison.kind === 'available',
-  );
+  const verdicts = verdictsFor(pairs, candidate);
   const withChecks = (side: Side, checks: Check[] | undefined): Side =>
     checks === undefined || side.execution !== 'complete'
       ? side
@@ -1197,12 +1198,12 @@ export function compareJourney({
   const evaluatedBase = withChecks(
     base,
     pairs?.every((pair) => pair.base !== null) === true
-      ? pairs.flatMap((pair) => (pair.base === null ? [] : [pair.base.check]))
+      ? pairs.flatMap((pair) => (pair.base === null ? [] : [pair.base]))
       : undefined,
   );
   const evaluatedCandidate = withChecks(
     candidate,
-    pairs?.map((pair) => pair.candidate.check),
+    pairs?.map((pair) => pair.candidate),
   );
 
   return {
@@ -1227,15 +1228,6 @@ export function compareJourney({
   };
 }
 
-const conclusionOrder = [
-  'regression',
-  'check-failed',
-  'unavailable',
-  'no-regression',
-  'not-checked',
-  'preview',
-] as const satisfies readonly Conclusion['kind'][];
-
 export function summarizeJourneys({
   journeys,
   evaluatedAt,
@@ -1247,7 +1239,7 @@ export function summarizeJourneys({
 }): Comparison {
   const [first] = journeys;
   const kind =
-    conclusionOrder.find((candidate) =>
+    conclusionKinds.find((candidate) =>
       journeys.some((journey) => journey.conclusion.kind === candidate),
     ) ?? first.conclusion.kind;
   const deciding = journeys.filter(
@@ -1256,7 +1248,7 @@ export function summarizeJourneys({
   const verdicts = journeys.flatMap((journey) => journey.checks);
 
   return {
-    schemaVersion: 6,
+    schemaVersion: resultSchemaVersion,
     mode,
     title:
       journeys.length === 1

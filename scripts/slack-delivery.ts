@@ -6,6 +6,7 @@ import {
   conclusionTones,
   executionLabels,
   headline,
+  verdictLabels,
   type Tone,
 } from '../src/result-text';
 
@@ -89,10 +90,32 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
     result === null
       ? icons.unknown
       : icons[conclusionTones[result.conclusion.kind]];
+  const checks: string[] = [];
+
+  // Names and scopes come from observed.json; details and measured values
+  // stay out.
+  for (const journey of result?.journeys ?? []) {
+    for (const check of journey.checks) {
+      const line = slackText(
+        clip(
+          `• ${verdictLabels[check.verdict]} · ${result !== null && result.journeys.length > 1 ? `${journey.title}: ` : ''}${check.name}. Scope: ${check.scope}`,
+          300,
+        ),
+      );
+
+      if ([...checks, line].join('\n').length <= 2000) {
+        checks.push(line);
+      }
+    }
+  }
+
   const detail =
     result === null
       ? 'Observed wrote no readable result. The job fails.'
-      : `${slackText(checkSummary(result))}. ${consequences[result.conclusion.kind]}`;
+      : [
+          `${slackText(checkSummary(result))}. ${consequences[result.conclusion.kind]}`,
+          ...checks,
+        ].join('\n');
   const where =
     slackLink(links.pullRequestLabel, links.pullRequest) ??
     slackText(links.pullRequestLabel);

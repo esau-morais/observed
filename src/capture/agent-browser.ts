@@ -12,6 +12,7 @@ import {
   type CollectorContext,
   type CollectorError,
   type CollectorServices,
+  type EvidenceConditions,
 } from './collectors/define';
 import { evidenceKinds, type EvidenceKind } from '../evidence-kinds';
 
@@ -370,6 +371,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   const collectEvidence = Effect.fnUntraced(function* (
     kind: EvidenceKind,
     collected: Effect.Effect<unknown, CollectorError, CollectorServices>,
+    conditions: EvidenceConditions,
   ) {
     const definition = evidenceKinds[kind];
     const filename = `evidence/${definition.kind}.json`;
@@ -426,7 +428,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       schemaVersion: definition.schemaVersion,
       status: 'recorded',
       path: filename,
-      conditions: {},
+      conditions,
     });
   });
 
@@ -479,7 +481,11 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     const collector = collectorFor(config);
 
     if (collector.phase === 'journey') {
-      yield* collectEvidence(config.kind, collector.collect(config, context));
+      yield* collectEvidence(
+        config.kind,
+        collector.collect(config, context),
+        collector.conditions?.(config) ?? {},
+      );
     }
   }
 
@@ -617,6 +623,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
             runSteps: (steps) =>
               Effect.forEach(steps, runStep, { discard: true }),
           }),
+          {
+            ...collector.conditions?.(config),
+            launchArguments: (collector.launchArguments ?? []).join(' '),
+          },
         );
       }).pipe(Effect.scoped);
     }
