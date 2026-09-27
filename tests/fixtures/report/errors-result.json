@@ -1,0 +1,1584 @@
+{
+  "schemaVersion": 7,
+  "mode": "comparison",
+  "title": "Open Reading shelf",
+  "evaluatedAt": "2026-09-27T15:34:04.958Z",
+  "journeys": [
+    {
+      "title": "Open Reading shelf",
+      "base": {
+        "execution": "complete",
+        "capture": {
+          "manifest": {
+            "schemaVersion": 5,
+            "kind": "capture",
+            "id": "4b169a81-6928-4dad-8391-6b0b71085215",
+            "label": "Base",
+            "application": "Reading list",
+            "source": {
+              "kind": "snapshot",
+              "sha256": "7163244b16b6a7ea3e58ece004997948aa4bbf659b14f3cf3de8434f181b7b09",
+              "entry": "src/App.jsx",
+              "revision": {
+                "kind": "commit",
+                "commit": "9122c511113761f2bb7664d971b372b7010d25aa"
+              },
+              "files": [
+                {
+                  "path": "api/books.json",
+                  "sha256": "7df01b98598aa652559b8feed3efb734c87806051c88f2865504a82e55dc7319",
+                  "executable": false
+                },
+                {
+                  "path": "api/server.js",
+                  "sha256": "07f8e968689daa4eb43af38864da94bc5c0e6bbc661251903e5293b8d9d2c674",
+                  "executable": false
+                },
+                {
+                  "path": "index.html",
+                  "sha256": "eccecec60894f696349b8bbcc21aca9beaf86df7db2debd107edc1ec3e36c228",
+                  "executable": false
+                },
+                {
+                  "path": "observed-server.mjs",
+                  "sha256": "eea9e1e8a3a10da4eec76f8e638e9e70bda6e4de1f0dd61c3f71f08db19d3d01",
+                  "executable": false
+                },
+                {
+                  "path": "package-lock.json",
+                  "sha256": "55b0cdcb01067989bf27722533bc097df70374754715d66524affb71e6a44035",
+                  "executable": false
+                },
+                {
+                  "path": "package.json",
+                  "sha256": "db602ff563575762e6c7d7cabaf79c3126b302015cfd9da39fb52f9157534101",
+                  "executable": false
+                },
+                {
+                  "path": "src/App.jsx",
+                  "sha256": "71ec85ce640dd28177edc4ee654f92494d01f8be9d294ebb532be4032a3cd5de",
+                  "executable": false
+                },
+                {
+                  "path": "src/api.js",
+                  "sha256": "cc06b92cda76bf86101ddbae267b5339b15ad5832af501bc9688259685505eed",
+                  "executable": false
+                },
+                {
+                  "path": "src/app.css",
+                  "sha256": "cce4420de31000cca564c6f998bb5ba57349389122672bf45961c9af1de1bd07",
+                  "executable": false
+                },
+                {
+                  "path": "src/main.jsx",
+                  "sha256": "153982a55eebb067baef8f6a2d55afa2033195b6a6e848178207992da43b169d",
+                  "executable": false
+                },
+                {
+                  "path": "vite.config.js",
+                  "sha256": "dc3dc7a41f4d961860a67d0be5d652d292ff18e121b61ca951fdc39c3cd261de",
+                  "executable": false
+                }
+              ]
+            },
+            "recipe": {
+              "id": "Open Reading shelf",
+              "sha256": "49c407fcc4d7e107ef869d070e13d5a3ffbb892e0dbac19046dc2a6ec6a9f1a4"
+            },
+            "producer": {
+              "name": "agent-browser",
+              "version": "0.38.1"
+            },
+            "observed": {
+              "version": "0.1.0",
+              "source": {
+                "kind": "git",
+                "commit": "b06017fb0737b1099441441c09df989597aae193",
+                "trackedChanges": false
+              }
+            },
+            "conditions": {
+              "kind": "recorded",
+              "value": {
+                "browser": "Chrome 154.0.8037.57",
+                "platform": "linux/x64",
+                "bun": "1.4.2",
+                "viewport": {
+                  "width": 1280,
+                  "height": 800,
+                  "scale": 1
+                },
+                "colorScheme": "light",
+                "locale": "en-US",
+                "timezone": "UTC",
+                "inputsHash": "d2e180f5577b90551fd61278725f4190bfe5e5cbe7403b7a6dda264922577d51",
+                "dependenciesHash": "e39b4b130175f949118a8c180b5e1a1dfcffc7da3661285662d46b0dbc7c5aa0"
+              }
+            },
+            "startedAt": "2026-09-27T15:19:18.763Z",
+            "finishedAt": "2026-09-27T15:19:27.850Z",
+            "execution": {
+              "kind": "complete"
+            },
+            "artifacts": [
+              {
+                "id": "source-0",
+                "path": "source/api/books.json",
+                "description": "Source snapshot: api/books.json",
+                "sha256": "7df01b98598aa652559b8feed3efb734c87806051c88f2865504a82e55dc7319"
+              },
+              {
+                "id": "source-1",
+                "path": "source/api/server.js",
+                "description": "Source snapshot: api/server.js",
+                "sha256": "07f8e968689daa4eb43af38864da94bc5c0e6bbc661251903e5293b8d9d2c674"
+              },
+              {
+                "id": "source-2",
+                "path": "source/index.html",
+                "description": "Source snapshot: index.html",
+                "sha256": "eccecec60894f696349b8bbcc21aca9beaf86df7db2debd107edc1ec3e36c228"
+              },
+              {
+                "id": "source-3",
+                "path": "source/observed-server.mjs",
+                "description": "Source snapshot: observed-server.mjs",
+                "sha256": "eea9e1e8a3a10da4eec76f8e638e9e70bda6e4de1f0dd61c3f71f08db19d3d01"
+              },
+              {
+                "id": "source-4",
+                "path": "source/package-lock.json",
+                "description": "Source snapshot: package-lock.json",
+                "sha256": "55b0cdcb01067989bf27722533bc097df70374754715d66524affb71e6a44035"
+              },
+              {
+                "id": "source-5",
+                "path": "source/package.json",
+                "description": "Source snapshot: package.json",
+                "sha256": "db602ff563575762e6c7d7cabaf79c3126b302015cfd9da39fb52f9157534101"
+              },
+              {
+                "id": "source-6",
+                "path": "source/src/App.jsx",
+                "description": "Source snapshot: src/App.jsx",
+                "sha256": "71ec85ce640dd28177edc4ee654f92494d01f8be9d294ebb532be4032a3cd5de"
+              },
+              {
+                "id": "source-7",
+                "path": "source/src/api.js",
+                "description": "Source snapshot: src/api.js",
+                "sha256": "cc06b92cda76bf86101ddbae267b5339b15ad5832af501bc9688259685505eed"
+              },
+              {
+                "id": "source-8",
+                "path": "source/src/app.css",
+                "description": "Source snapshot: src/app.css",
+                "sha256": "cce4420de31000cca564c6f998bb5ba57349389122672bf45961c9af1de1bd07"
+              },
+              {
+                "id": "source-9",
+                "path": "source/src/main.jsx",
+                "description": "Source snapshot: src/main.jsx",
+                "sha256": "153982a55eebb067baef8f6a2d55afa2033195b6a6e848178207992da43b169d"
+              },
+              {
+                "id": "source-10",
+                "path": "source/vite.config.js",
+                "description": "Source snapshot: vite.config.js",
+                "sha256": "dc3dc7a41f4d961860a67d0be5d652d292ff18e121b61ca951fdc39c3cd261de"
+              },
+              {
+                "id": "recipe",
+                "path": "recipe.json",
+                "description": "Protected saved journey and expectation",
+                "sha256": "49c407fcc4d7e107ef869d070e13d5a3ffbb892e0dbac19046dc2a6ec6a9f1a4"
+              },
+              {
+                "id": "transcript",
+                "path": "transcript.jsonl",
+                "description": "Original producer and build command output",
+                "sha256": "12676b51d6267ce571ee747b8ef4590e4897cb47a1a28c66ad527f05c69da202"
+              },
+              {
+                "id": "project",
+                "path": "project.json",
+                "description": "Project startup and source selection",
+                "sha256": "c2ceafa106983f6e37c8bae1375f77226fddead013b4f701905e8c9c3f4024b5"
+              },
+              {
+                "id": "server-cleanup",
+                "path": "server-cleanup.json",
+                "description": "Owned application shutdown",
+                "sha256": "a0a02cccaaffcacd39d04fabb0f17eee45533ea1504fa094898a92b87cc5bf94"
+              },
+              {
+                "id": "browser-cleanup",
+                "path": "browser-cleanup.json",
+                "description": "Owned browser shutdown",
+                "sha256": "bf5dcc706fa168706c54b731062dd12f7f9977f76dba78c2e4fcd2965b561408"
+              },
+              {
+                "id": "owner",
+                "path": "owner.json",
+                "description": "Run-owned session and process identity",
+                "sha256": "f5f3c330f9c12bf47cb9d50463232827d553c9ae9d437d2655f5af3177427fa6"
+              },
+              {
+                "id": "source-transcript",
+                "path": "source-transcript.jsonl",
+                "description": "Source revision selection",
+                "sha256": "9c4a026fa045e227615d8649755c907d471c6f9a3906da629b0b73dafd06f202"
+              },
+              {
+                "id": "application",
+                "path": "application.json",
+                "description": "Owned application process",
+                "sha256": "04c008437fc19f65c11e49e46f1d837d9e35098b4a5d553e51b7a73fad57ed3a"
+              },
+              {
+                "id": "application-log",
+                "path": "application.log",
+                "description": "Application output",
+                "sha256": "33dc277f8884e3110110417bfb5255f0b012ceacaeb8f89a405de75192100057"
+              },
+              {
+                "id": "browser-config",
+                "path": "browser-config.json",
+                "description": "Explicit producer configuration",
+                "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+              },
+              {
+                "id": "environment",
+                "path": "environment.json",
+                "description": "agent-browser eval -b KHtsb2NhbGU6IG5hdmlnYXRvci5sYW5ndWFnZSwgdGltZXpvbmU6IEludGwuRGF0ZVRpbWVGb3JtYXQoKS5yZXNvbHZlZE9wdGlvbnMoKS50aW1lWm9uZSwgd2lkdGg6IGlubmVyV2lkdGgsIGhlaWdodDogaW5uZXJIZWlnaHQsIHNjYWxlOiBkZXZpY2VQaXhlbFJhdGlvfSk= output; credentials redacted",
+                "sha256": "4d8ef6cc708d0d9e856a4329b0238830b60bedd8b0f422126972cd25b1710843"
+              },
+              {
+                "id": "snapshot",
+                "path": "snapshot.json",
+                "description": "agent-browser snapshot output; credentials redacted",
+                "sha256": "1284497b042b1f39da5d49c6d4698d858419f8adc5e7ea44be4db7b3aa0b65d2"
+              },
+              {
+                "id": "errors",
+                "path": "errors.json",
+                "description": "agent-browser errors output; credentials redacted",
+                "sha256": "2d8538f242b05f5b85b88c8fdc6a8022628d67f7199eaac0eab0146c68a18b8f"
+              },
+              {
+                "id": "console",
+                "path": "console.json",
+                "description": "agent-browser console output; credentials redacted",
+                "sha256": "a30d368029160adc58e6932d98428fc1a3af40a8fd32dea837ab7c80c4a45a09"
+              },
+              {
+                "id": "a11y",
+                "path": "a11y.json",
+                "description": "agent-browser a11y output; credentials redacted",
+                "sha256": "e3fef523c7ccac9966244791c08d4412cd2d3ea6af775c95877cdfa4c5f2434c"
+              },
+              {
+                "id": "evidence-accessibility",
+                "path": "evidence/accessibility.json",
+                "description": "Accessibility evidence, schema version 1; credentials redacted",
+                "sha256": "f05aa024995cc0ab87df3e7ac97a1a0c5da765e59846f7b8c71aabfc9ef3c6c1"
+              },
+              {
+                "id": "evidence-timeline",
+                "path": "evidence/timeline.json",
+                "description": "Steps and resulting state evidence, schema version 1; credentials redacted",
+                "sha256": "26431541423d590eeb30adac2044a4ea5155fe3b6134d4b9217a1de24db33159"
+              },
+              {
+                "id": "evidence-browser-errors",
+                "path": "evidence/browser-errors.json",
+                "description": "Browser errors evidence, schema version 1; credentials redacted",
+                "sha256": "45d0d8d71e2579a12f38ccfad466bc0225ed752a10096447d9872f72a27f0a64"
+              },
+              {
+                "id": "screenshot",
+                "path": "screenshot.png",
+                "description": "Browser screenshot after the configured actions",
+                "sha256": "f2eb6ade0aa9263d4565c9d6bf85149b82012debce9d2a5029c5cf2bdb00599c"
+              },
+              {
+                "id": "request-log",
+                "path": "requests.json",
+                "description": "agent-browser network requests output; credentials redacted",
+                "sha256": "f5579e05fed53c87c061c4085daae2b74231f4ba81ac1102604e7b64a3da82cd"
+              },
+              {
+                "id": "requests",
+                "path": "requests.har",
+                "description": "Browser HAR for the recorded window; credentials redacted",
+                "sha256": "0b19ce61d29408aad2f71963dbb64a650c9df9a60e80d8f806577cbb4eba350b"
+              },
+              {
+                "id": "observations",
+                "path": "observations.json",
+                "description": "Normalized browser measurements; no imported pass/fail claims",
+                "sha256": "d2245f2a210a67239db675a90b0ec5fee48107c5ea8c2c9c62f72354bbf4fb1b"
+              },
+              {
+                "id": "source-maps",
+                "path": "source-maps.json",
+                "description": "Source maps fetched for scripts named by error frames and React sources",
+                "sha256": "5630d5d8a208e7022094ff52b82e315c339f01fcf77d5a5400c2e9e19f11ef7f"
+              }
+            ],
+            "evidence": [
+              {
+                "kind": "accessibility",
+                "schemaVersion": 1,
+                "status": "recorded",
+                "path": "evidence/accessibility.json",
+                "sha256": "f05aa024995cc0ab87df3e7ac97a1a0c5da765e59846f7b8c71aabfc9ef3c6c1",
+                "producer": {
+                  "name": "agent-browser",
+                  "version": "0.38.1"
+                },
+                "conditions": {}
+              },
+              {
+                "kind": "timeline",
+                "schemaVersion": 1,
+                "status": "recorded",
+                "path": "evidence/timeline.json",
+                "sha256": "26431541423d590eeb30adac2044a4ea5155fe3b6134d4b9217a1de24db33159",
+                "producer": {
+                  "name": "agent-browser",
+                  "version": "0.38.1"
+                },
+                "conditions": {}
+              },
+              {
+                "kind": "browser-errors",
+                "schemaVersion": 1,
+                "status": "recorded",
+                "path": "evidence/browser-errors.json",
+                "sha256": "45d0d8d71e2579a12f38ccfad466bc0225ed752a10096447d9872f72a27f0a64",
+                "producer": {
+                  "name": "agent-browser",
+                  "version": "0.38.1"
+                },
+                "conditions": {
+                  "errorReads": "after-each-step"
+                }
+              }
+            ]
+          },
+          "sha256": "055d5ad734016b5405157845051986eab41ac6ee6746aad4b174192995e75fb7"
+        },
+        "recipe": {
+          "schemaVersion": 2,
+          "id": "Open Reading shelf",
+          "name": "Open Reading shelf",
+          "path": "/",
+          "ready": [
+            {
+              "kind": "wait-text",
+              "text": "Pick a shelf"
+            },
+            {
+              "kind": "network-idle"
+            }
+          ],
+          "steps": [
+            {
+              "kind": "click-role",
+              "role": "button",
+              "name": "Reading"
+            },
+            {
+              "kind": "wait-text",
+              "text": "2 books"
+            },
+            {
+              "kind": "wait-text",
+              "text": "The Left Hand of Darkness"
+            },
+            {
+              "kind": "network-idle"
+            }
+          ],
+          "checks": [
+            {
+              "kind": "browser-errors",
+              "id": "no-browser-errors",
+              "name": "No browser errors",
+              "scope": "One Reading click through completion and network idle."
+            }
+          ],
+          "collectors": [
+            {
+              "kind": "accessibility"
+            },
+            {
+              "kind": "timeline"
+            },
+            {
+              "kind": "browser-errors"
+            }
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "scale": 1
+          },
+          "browserArguments": ["--no-sandbox"],
+          "allowedOrigins": ["http://127.0.0.1:4010"],
+          "maxAgeMs": 86400000
+        },
+        "observations": {
+          "schemaVersion": 3,
+          "requests": [
+            {
+              "method": "GET",
+              "origin": "http://127.0.0.1:4010",
+              "path": "/api/books",
+              "status": 200,
+              "startedAt": "2026-09-27T15:19:25.559Z"
+            }
+          ],
+          "browserErrors": [],
+          "window": {
+            "startedAt": "2026-09-27T15:19:25.474Z",
+            "finishedAt": "2026-09-27T15:19:27.468Z"
+          }
+        },
+        "evidence": [
+          {
+            "kind": "accessibility",
+            "status": "recorded",
+            "value": {
+              "engine": {
+                "name": "axe-core",
+                "version": "4.12.1"
+              },
+              "counts": {
+                "violations": 0,
+                "incomplete": 0,
+                "passes": 28,
+                "inapplicable": 61
+              },
+              "violations": [],
+              "incomplete": []
+            }
+          },
+          {
+            "kind": "timeline",
+            "status": "recorded",
+            "value": {
+              "steps": [
+                {
+                  "index": 0,
+                  "action": "click-role",
+                  "target": "button \"Reading\"",
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:25.534Z",
+                  "finishedAt": "2026-09-27T15:19:25.565Z"
+                },
+                {
+                  "index": 1,
+                  "action": "wait-text",
+                  "target": "\"2 books\"",
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:25.606Z",
+                  "finishedAt": "2026-09-27T15:19:25.625Z"
+                },
+                {
+                  "index": 2,
+                  "action": "wait-text",
+                  "target": "\"The Left Hand of Darkness\"",
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:25.666Z",
+                  "finishedAt": "2026-09-27T15:19:25.688Z"
+                },
+                {
+                  "index": 3,
+                  "action": "network-idle",
+                  "target": null,
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:25.727Z",
+                  "finishedAt": "2026-09-27T15:19:26.949Z"
+                }
+              ],
+              "finalState": {
+                "kind": "recorded",
+                "tree": "- generic [ref=e2] clickable [onclick]\n  - main\n    - heading \"Reading list\" [level=1, ref=e3]\n    - navigation \"Shelves\" [ref=e4]\n      - button \"Reading\" [ref=e5]\n      - button \"Finished\" [ref=e6]\n    - status\n      - StaticText \"2 books\"\n    - list\n      - listitem [level=1]\n        - ListMarker \"• \"\n        - strong\n          - StaticText \"The Left Hand of Darkness\"\n        - StaticText \" Ursula K. Le Guin\"\n      - listitem [level=1]\n        - ListMarker \"• \"\n        - strong\n          - StaticText \"A Pattern Language\"\n        - StaticText \" Christopher Alexander\""
+              }
+            }
+          },
+          {
+            "kind": "browser-errors",
+            "status": "recorded",
+            "value": {
+              "steps": 4,
+              "coverage": {
+                "kind": "complete"
+              },
+              "entries": []
+            }
+          }
+        ],
+        "screenshot": "journey-1/base/screenshot.png",
+        "checks": [
+          {
+            "id": "no-browser-errors",
+            "name": "No browser errors",
+            "authority": "Executed by Observed",
+            "scope": "One Reading click through completion and network idle.",
+            "expectation": "No uncaught page errors or console errors during the recorded steps.",
+            "detail": "No page or console errors during 4 step(s).",
+            "outcome": "passed",
+            "actual": 0
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "source-0",
+            "description": "Source snapshot: api/books.json",
+            "integrity": "verified",
+            "path": "journey-1/base/source/api/books.json"
+          },
+          {
+            "id": "source-1",
+            "description": "Source snapshot: api/server.js",
+            "integrity": "verified",
+            "path": "journey-1/base/source/api/server.js"
+          },
+          {
+            "id": "source-2",
+            "description": "Source snapshot: index.html",
+            "integrity": "verified",
+            "path": "journey-1/base/source/index.html"
+          },
+          {
+            "id": "source-3",
+            "description": "Source snapshot: observed-server.mjs",
+            "integrity": "verified",
+            "path": "journey-1/base/source/observed-server.mjs"
+          },
+          {
+            "id": "source-4",
+            "description": "Source snapshot: package-lock.json",
+            "integrity": "verified",
+            "path": "journey-1/base/source/package-lock.json"
+          },
+          {
+            "id": "source-5",
+            "description": "Source snapshot: package.json",
+            "integrity": "verified",
+            "path": "journey-1/base/source/package.json"
+          },
+          {
+            "id": "source-6",
+            "description": "Source snapshot: src/App.jsx",
+            "integrity": "verified",
+            "path": "journey-1/base/source/src/App.jsx"
+          },
+          {
+            "id": "source-7",
+            "description": "Source snapshot: src/api.js",
+            "integrity": "verified",
+            "path": "journey-1/base/source/src/api.js"
+          },
+          {
+            "id": "source-8",
+            "description": "Source snapshot: src/app.css",
+            "integrity": "verified",
+            "path": "journey-1/base/source/src/app.css"
+          },
+          {
+            "id": "source-9",
+            "description": "Source snapshot: src/main.jsx",
+            "integrity": "verified",
+            "path": "journey-1/base/source/src/main.jsx"
+          },
+          {
+            "id": "source-10",
+            "description": "Source snapshot: vite.config.js",
+            "integrity": "verified",
+            "path": "journey-1/base/source/vite.config.js"
+          },
+          {
+            "id": "recipe",
+            "description": "Protected saved journey and expectation",
+            "integrity": "verified",
+            "path": "journey-1/base/recipe.json"
+          },
+          {
+            "id": "transcript",
+            "description": "Original producer and build command output",
+            "integrity": "verified",
+            "path": "journey-1/base/transcript.jsonl"
+          },
+          {
+            "id": "project",
+            "description": "Project startup and source selection",
+            "integrity": "verified",
+            "path": "journey-1/base/project.json"
+          },
+          {
+            "id": "server-cleanup",
+            "description": "Owned application shutdown",
+            "integrity": "verified",
+            "path": "journey-1/base/server-cleanup.json"
+          },
+          {
+            "id": "browser-cleanup",
+            "description": "Owned browser shutdown",
+            "integrity": "verified",
+            "path": "journey-1/base/browser-cleanup.json"
+          },
+          {
+            "id": "owner",
+            "description": "Run-owned session and process identity",
+            "integrity": "verified",
+            "path": "journey-1/base/owner.json"
+          },
+          {
+            "id": "source-transcript",
+            "description": "Source revision selection",
+            "integrity": "verified",
+            "path": "journey-1/base/source-transcript.jsonl"
+          },
+          {
+            "id": "application",
+            "description": "Owned application process",
+            "integrity": "verified",
+            "path": "journey-1/base/application.json"
+          },
+          {
+            "id": "application-log",
+            "description": "Application output",
+            "integrity": "verified",
+            "path": "journey-1/base/application.log"
+          },
+          {
+            "id": "browser-config",
+            "description": "Explicit producer configuration",
+            "integrity": "verified",
+            "path": "journey-1/base/browser-config.json"
+          },
+          {
+            "id": "environment",
+            "description": "agent-browser eval -b KHtsb2NhbGU6IG5hdmlnYXRvci5sYW5ndWFnZSwgdGltZXpvbmU6IEludGwuRGF0ZVRpbWVGb3JtYXQoKS5yZXNvbHZlZE9wdGlvbnMoKS50aW1lWm9uZSwgd2lkdGg6IGlubmVyV2lkdGgsIGhlaWdodDogaW5uZXJIZWlnaHQsIHNjYWxlOiBkZXZpY2VQaXhlbFJhdGlvfSk= output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/environment.json"
+          },
+          {
+            "id": "snapshot",
+            "description": "agent-browser snapshot output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/snapshot.json"
+          },
+          {
+            "id": "errors",
+            "description": "agent-browser errors output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/errors.json"
+          },
+          {
+            "id": "console",
+            "description": "agent-browser console output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/console.json"
+          },
+          {
+            "id": "a11y",
+            "description": "agent-browser a11y output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/a11y.json"
+          },
+          {
+            "id": "evidence-accessibility",
+            "description": "Accessibility evidence, schema version 1; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/evidence/accessibility.json"
+          },
+          {
+            "id": "evidence-timeline",
+            "description": "Steps and resulting state evidence, schema version 1; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/evidence/timeline.json"
+          },
+          {
+            "id": "evidence-browser-errors",
+            "description": "Browser errors evidence, schema version 1; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/evidence/browser-errors.json"
+          },
+          {
+            "id": "screenshot",
+            "description": "Browser screenshot after the configured actions",
+            "integrity": "verified",
+            "path": "journey-1/base/screenshot.png"
+          },
+          {
+            "id": "request-log",
+            "description": "agent-browser network requests output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/requests.json"
+          },
+          {
+            "id": "requests",
+            "description": "Browser HAR for the recorded window; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/base/requests.har"
+          },
+          {
+            "id": "observations",
+            "description": "Normalized browser measurements; no imported pass/fail claims",
+            "integrity": "verified",
+            "path": "journey-1/base/observations.json"
+          },
+          {
+            "id": "source-maps",
+            "description": "Source maps fetched for scripts named by error frames and React sources",
+            "integrity": "verified",
+            "path": "journey-1/base/source-maps.json"
+          }
+        ],
+        "unresolved": []
+      },
+      "candidate": {
+        "execution": "complete",
+        "capture": {
+          "manifest": {
+            "schemaVersion": 5,
+            "kind": "capture",
+            "id": "62c632cf-d9a4-418e-a11f-9a21306efb80",
+            "label": "Candidate",
+            "application": "Reading list",
+            "source": {
+              "kind": "snapshot",
+              "sha256": "4fbab40697c430c7502d29aff9ed46387918d787f89414d2f259ab28838fb65f",
+              "entry": "src/App.jsx",
+              "revision": {
+                "kind": "commit",
+                "commit": "99ee1c6aac63b54ff358cd3f9dd7145825cedf4c"
+              },
+              "files": [
+                {
+                  "path": "api/books.json",
+                  "sha256": "7df01b98598aa652559b8feed3efb734c87806051c88f2865504a82e55dc7319",
+                  "executable": false
+                },
+                {
+                  "path": "api/server.js",
+                  "sha256": "07f8e968689daa4eb43af38864da94bc5c0e6bbc661251903e5293b8d9d2c674",
+                  "executable": false
+                },
+                {
+                  "path": "index.html",
+                  "sha256": "eccecec60894f696349b8bbcc21aca9beaf86df7db2debd107edc1ec3e36c228",
+                  "executable": false
+                },
+                {
+                  "path": "observed-server.mjs",
+                  "sha256": "eea9e1e8a3a10da4eec76f8e638e9e70bda6e4de1f0dd61c3f71f08db19d3d01",
+                  "executable": false
+                },
+                {
+                  "path": "package-lock.json",
+                  "sha256": "55b0cdcb01067989bf27722533bc097df70374754715d66524affb71e6a44035",
+                  "executable": false
+                },
+                {
+                  "path": "package.json",
+                  "sha256": "db602ff563575762e6c7d7cabaf79c3126b302015cfd9da39fb52f9157534101",
+                  "executable": false
+                },
+                {
+                  "path": "src/App.jsx",
+                  "sha256": "036f0acbae4432224ede9f26101def8a45690aa43e1adf9e3655b061887800f8",
+                  "executable": false
+                },
+                {
+                  "path": "src/api.js",
+                  "sha256": "cc06b92cda76bf86101ddbae267b5339b15ad5832af501bc9688259685505eed",
+                  "executable": false
+                },
+                {
+                  "path": "src/app.css",
+                  "sha256": "cce4420de31000cca564c6f998bb5ba57349389122672bf45961c9af1de1bd07",
+                  "executable": false
+                },
+                {
+                  "path": "src/main.jsx",
+                  "sha256": "153982a55eebb067baef8f6a2d55afa2033195b6a6e848178207992da43b169d",
+                  "executable": false
+                },
+                {
+                  "path": "vite.config.js",
+                  "sha256": "dc3dc7a41f4d961860a67d0be5d652d292ff18e121b61ca951fdc39c3cd261de",
+                  "executable": false
+                }
+              ]
+            },
+            "recipe": {
+              "id": "Open Reading shelf",
+              "sha256": "49c407fcc4d7e107ef869d070e13d5a3ffbb892e0dbac19046dc2a6ec6a9f1a4"
+            },
+            "producer": {
+              "name": "agent-browser",
+              "version": "0.38.1"
+            },
+            "observed": {
+              "version": "0.1.0",
+              "source": {
+                "kind": "git",
+                "commit": "b06017fb0737b1099441441c09df989597aae193",
+                "trackedChanges": false
+              }
+            },
+            "conditions": {
+              "kind": "recorded",
+              "value": {
+                "browser": "Chrome 154.0.8037.57",
+                "platform": "linux/x64",
+                "bun": "1.4.2",
+                "viewport": {
+                  "width": 1280,
+                  "height": 800,
+                  "scale": 1
+                },
+                "colorScheme": "light",
+                "locale": "en-US",
+                "timezone": "UTC",
+                "inputsHash": "d2e180f5577b90551fd61278725f4190bfe5e5cbe7403b7a6dda264922577d51",
+                "dependenciesHash": "e39b4b130175f949118a8c180b5e1a1dfcffc7da3661285662d46b0dbc7c5aa0"
+              }
+            },
+            "startedAt": "2026-09-27T15:19:27.858Z",
+            "finishedAt": "2026-09-27T15:19:35.510Z",
+            "execution": {
+              "kind": "complete"
+            },
+            "artifacts": [
+              {
+                "id": "source-0",
+                "path": "source/api/books.json",
+                "description": "Source snapshot: api/books.json",
+                "sha256": "7df01b98598aa652559b8feed3efb734c87806051c88f2865504a82e55dc7319"
+              },
+              {
+                "id": "source-1",
+                "path": "source/api/server.js",
+                "description": "Source snapshot: api/server.js",
+                "sha256": "07f8e968689daa4eb43af38864da94bc5c0e6bbc661251903e5293b8d9d2c674"
+              },
+              {
+                "id": "source-2",
+                "path": "source/index.html",
+                "description": "Source snapshot: index.html",
+                "sha256": "eccecec60894f696349b8bbcc21aca9beaf86df7db2debd107edc1ec3e36c228"
+              },
+              {
+                "id": "source-3",
+                "path": "source/observed-server.mjs",
+                "description": "Source snapshot: observed-server.mjs",
+                "sha256": "eea9e1e8a3a10da4eec76f8e638e9e70bda6e4de1f0dd61c3f71f08db19d3d01"
+              },
+              {
+                "id": "source-4",
+                "path": "source/package-lock.json",
+                "description": "Source snapshot: package-lock.json",
+                "sha256": "55b0cdcb01067989bf27722533bc097df70374754715d66524affb71e6a44035"
+              },
+              {
+                "id": "source-5",
+                "path": "source/package.json",
+                "description": "Source snapshot: package.json",
+                "sha256": "db602ff563575762e6c7d7cabaf79c3126b302015cfd9da39fb52f9157534101"
+              },
+              {
+                "id": "source-6",
+                "path": "source/src/App.jsx",
+                "description": "Source snapshot: src/App.jsx",
+                "sha256": "036f0acbae4432224ede9f26101def8a45690aa43e1adf9e3655b061887800f8"
+              },
+              {
+                "id": "source-7",
+                "path": "source/src/api.js",
+                "description": "Source snapshot: src/api.js",
+                "sha256": "cc06b92cda76bf86101ddbae267b5339b15ad5832af501bc9688259685505eed"
+              },
+              {
+                "id": "source-8",
+                "path": "source/src/app.css",
+                "description": "Source snapshot: src/app.css",
+                "sha256": "cce4420de31000cca564c6f998bb5ba57349389122672bf45961c9af1de1bd07"
+              },
+              {
+                "id": "source-9",
+                "path": "source/src/main.jsx",
+                "description": "Source snapshot: src/main.jsx",
+                "sha256": "153982a55eebb067baef8f6a2d55afa2033195b6a6e848178207992da43b169d"
+              },
+              {
+                "id": "source-10",
+                "path": "source/vite.config.js",
+                "description": "Source snapshot: vite.config.js",
+                "sha256": "dc3dc7a41f4d961860a67d0be5d652d292ff18e121b61ca951fdc39c3cd261de"
+              },
+              {
+                "id": "recipe",
+                "path": "recipe.json",
+                "description": "Protected saved journey and expectation",
+                "sha256": "49c407fcc4d7e107ef869d070e13d5a3ffbb892e0dbac19046dc2a6ec6a9f1a4"
+              },
+              {
+                "id": "transcript",
+                "path": "transcript.jsonl",
+                "description": "Original producer and build command output",
+                "sha256": "10fe9b5243069d8ebce3fd60ef60ac0e11533a9615e9a3e9d8fd90fb4f1f5788"
+              },
+              {
+                "id": "project",
+                "path": "project.json",
+                "description": "Project startup and source selection",
+                "sha256": "c2ceafa106983f6e37c8bae1375f77226fddead013b4f701905e8c9c3f4024b5"
+              },
+              {
+                "id": "server-cleanup",
+                "path": "server-cleanup.json",
+                "description": "Owned application shutdown",
+                "sha256": "0e4d4be26d9b4e7c2e0bd37db23823b716500af46bbb8e381a952838a56ae988"
+              },
+              {
+                "id": "browser-cleanup",
+                "path": "browser-cleanup.json",
+                "description": "Owned browser shutdown",
+                "sha256": "03c031741770f20117678ba35eb672fb30cc6ee59fd7c8b713b71884935218cc"
+              },
+              {
+                "id": "owner",
+                "path": "owner.json",
+                "description": "Run-owned session and process identity",
+                "sha256": "56ad66733fdebbbba0bb161b4042ef71b9c4395677520282e20132845f692adb"
+              },
+              {
+                "id": "source-transcript",
+                "path": "source-transcript.jsonl",
+                "description": "Source revision selection",
+                "sha256": "e15ea9a8b1e6e5045f5d85cff81be1184f3686e6c5fd584bd809fb63c3e1c36b"
+              },
+              {
+                "id": "application",
+                "path": "application.json",
+                "description": "Owned application process",
+                "sha256": "6485bb92f4a2754aa3c7134ac1c8da104278f03a8ccdfa3d505d549e80952305"
+              },
+              {
+                "id": "application-log",
+                "path": "application.log",
+                "description": "Application output",
+                "sha256": "0c57f5832a36d71f4a915452f6a4f2982aaa899f422b7437e6f77b3cb91e962d"
+              },
+              {
+                "id": "browser-config",
+                "path": "browser-config.json",
+                "description": "Explicit producer configuration",
+                "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+              },
+              {
+                "id": "environment",
+                "path": "environment.json",
+                "description": "agent-browser eval -b KHtsb2NhbGU6IG5hdmlnYXRvci5sYW5ndWFnZSwgdGltZXpvbmU6IEludGwuRGF0ZVRpbWVGb3JtYXQoKS5yZXNvbHZlZE9wdGlvbnMoKS50aW1lWm9uZSwgd2lkdGg6IGlubmVyV2lkdGgsIGhlaWdodDogaW5uZXJIZWlnaHQsIHNjYWxlOiBkZXZpY2VQaXhlbFJhdGlvfSk= output; credentials redacted",
+                "sha256": "233d119a55241a464bca63ad7bc01790e9941654c9ade3a84f1b252885b7c227"
+              },
+              {
+                "id": "snapshot",
+                "path": "snapshot.json",
+                "description": "agent-browser snapshot output; credentials redacted",
+                "sha256": "0b01f4606b8196e9c39a1f4a4f7935aeaa93ba7e1b57ff8b34d981f98820e7bb"
+              },
+              {
+                "id": "errors",
+                "path": "errors.json",
+                "description": "agent-browser errors output; credentials redacted",
+                "sha256": "07a3bb503408eb61f4aee1d64a6fc61ac72e0a665f2ee7ce6e0bccfa51f1e20b"
+              },
+              {
+                "id": "console",
+                "path": "console.json",
+                "description": "agent-browser console output; credentials redacted",
+                "sha256": "a30d368029160adc58e6932d98428fc1a3af40a8fd32dea837ab7c80c4a45a09"
+              },
+              {
+                "id": "a11y",
+                "path": "a11y.json",
+                "description": "agent-browser a11y output; credentials redacted",
+                "sha256": "9e54a767e0108fefa4381e787e3eb33b1ac1cb945f52b4d0259c94cfe572b992"
+              },
+              {
+                "id": "evidence-accessibility",
+                "path": "evidence/accessibility.json",
+                "description": "Accessibility evidence, schema version 1; credentials redacted",
+                "sha256": "f05aa024995cc0ab87df3e7ac97a1a0c5da765e59846f7b8c71aabfc9ef3c6c1"
+              },
+              {
+                "id": "evidence-timeline",
+                "path": "evidence/timeline.json",
+                "description": "Steps and resulting state evidence, schema version 1; credentials redacted",
+                "sha256": "fa4f913994eecb7540cb921df4da50497419d19384709a12e13ec1b82c77570d"
+              },
+              {
+                "id": "evidence-browser-errors",
+                "path": "evidence/browser-errors.json",
+                "description": "Browser errors evidence, schema version 1; credentials redacted",
+                "sha256": "3a2185ae81410eb6ea0043bcbf84a8824ac208c821d9aa20faafc928f55f32ae"
+              },
+              {
+                "id": "screenshot",
+                "path": "screenshot.png",
+                "description": "Browser screenshot after the configured actions",
+                "sha256": "f2eb6ade0aa9263d4565c9d6bf85149b82012debce9d2a5029c5cf2bdb00599c"
+              },
+              {
+                "id": "request-log",
+                "path": "requests.json",
+                "description": "agent-browser network requests output; credentials redacted",
+                "sha256": "dc1f1957e749a9080e6ce25441aac972939775709dd22f215adfaa476df9d96e"
+              },
+              {
+                "id": "requests",
+                "path": "requests.har",
+                "description": "Browser HAR for the recorded window; credentials redacted",
+                "sha256": "1be8527c1be4905a97da38ad3f9a45f167572233d5ac775c8a9f5596a0f859b5"
+              },
+              {
+                "id": "observations",
+                "path": "observations.json",
+                "description": "Normalized browser measurements; no imported pass/fail claims",
+                "sha256": "60a0a356ac76c383af0e3bfbcf3913c7c881c5f329c325802ef2cdb9fab1dd97"
+              },
+              {
+                "id": "source-map-1",
+                "path": "source-maps/1-index-C6AMbicW.js.map",
+                "description": "Source map for /assets/index-C6AMbicW.js; concealed values removed",
+                "sha256": "3bea85d91fcf69050083e55e6c3b53e516a83dd81435df53160678800dea9889"
+              },
+              {
+                "id": "source-maps",
+                "path": "source-maps.json",
+                "description": "Source maps fetched for scripts named by error frames and React sources",
+                "sha256": "46fe4047b566e3b4f46e71e60cbe304d448ba88d89beebe721e6d455124e293b"
+              }
+            ],
+            "evidence": [
+              {
+                "kind": "accessibility",
+                "schemaVersion": 1,
+                "status": "recorded",
+                "path": "evidence/accessibility.json",
+                "sha256": "f05aa024995cc0ab87df3e7ac97a1a0c5da765e59846f7b8c71aabfc9ef3c6c1",
+                "producer": {
+                  "name": "agent-browser",
+                  "version": "0.38.1"
+                },
+                "conditions": {}
+              },
+              {
+                "kind": "timeline",
+                "schemaVersion": 1,
+                "status": "recorded",
+                "path": "evidence/timeline.json",
+                "sha256": "fa4f913994eecb7540cb921df4da50497419d19384709a12e13ec1b82c77570d",
+                "producer": {
+                  "name": "agent-browser",
+                  "version": "0.38.1"
+                },
+                "conditions": {}
+              },
+              {
+                "kind": "browser-errors",
+                "schemaVersion": 1,
+                "status": "recorded",
+                "path": "evidence/browser-errors.json",
+                "sha256": "3a2185ae81410eb6ea0043bcbf84a8824ac208c821d9aa20faafc928f55f32ae",
+                "producer": {
+                  "name": "agent-browser",
+                  "version": "0.38.1"
+                },
+                "conditions": {
+                  "errorReads": "after-each-step"
+                }
+              }
+            ]
+          },
+          "sha256": "57fa7d51716194bf7c7b4e6b8175d5f24e8b10495654276dea5c7a1f32b8ad2b"
+        },
+        "recipe": {
+          "schemaVersion": 2,
+          "id": "Open Reading shelf",
+          "name": "Open Reading shelf",
+          "path": "/",
+          "ready": [
+            {
+              "kind": "wait-text",
+              "text": "Pick a shelf"
+            },
+            {
+              "kind": "network-idle"
+            }
+          ],
+          "steps": [
+            {
+              "kind": "click-role",
+              "role": "button",
+              "name": "Reading"
+            },
+            {
+              "kind": "wait-text",
+              "text": "2 books"
+            },
+            {
+              "kind": "wait-text",
+              "text": "The Left Hand of Darkness"
+            },
+            {
+              "kind": "network-idle"
+            }
+          ],
+          "checks": [
+            {
+              "kind": "browser-errors",
+              "id": "no-browser-errors",
+              "name": "No browser errors",
+              "scope": "One Reading click through completion and network idle."
+            }
+          ],
+          "collectors": [
+            {
+              "kind": "accessibility"
+            },
+            {
+              "kind": "timeline"
+            },
+            {
+              "kind": "browser-errors"
+            }
+          ],
+          "viewport": {
+            "width": 1280,
+            "height": 800,
+            "scale": 1
+          },
+          "browserArguments": ["--no-sandbox"],
+          "allowedOrigins": ["http://127.0.0.1:4010"],
+          "maxAgeMs": 86400000
+        },
+        "observations": {
+          "schemaVersion": 3,
+          "requests": [
+            {
+              "method": "GET",
+              "origin": "http://127.0.0.1:4010",
+              "path": "/api/books",
+              "status": 200,
+              "startedAt": "2026-09-27T15:19:33.193Z"
+            }
+          ],
+          "browserErrors": [
+            "TypeError: Cannot read properties of undefined (reading 'reading')\n    at hh (http://127.0.0.1:46429/assets/index-C6AMbicW.js:9:51704)\n    at bl (http://127.0.0.1:46429/assets/index-C6AMbicW.js:9:51983)"
+          ],
+          "window": {
+            "startedAt": "2026-09-27T15:19:33.092Z",
+            "finishedAt": "2026-09-27T15:19:35.116Z"
+          }
+        },
+        "evidence": [
+          {
+            "kind": "accessibility",
+            "status": "recorded",
+            "value": {
+              "engine": {
+                "name": "axe-core",
+                "version": "4.12.1"
+              },
+              "counts": {
+                "violations": 0,
+                "incomplete": 0,
+                "passes": 28,
+                "inapplicable": 61
+              },
+              "violations": [],
+              "incomplete": []
+            }
+          },
+          {
+            "kind": "timeline",
+            "status": "recorded",
+            "value": {
+              "steps": [
+                {
+                  "index": 0,
+                  "action": "click-role",
+                  "target": "button \"Reading\"",
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:33.154Z",
+                  "finishedAt": "2026-09-27T15:19:33.200Z"
+                },
+                {
+                  "index": 1,
+                  "action": "wait-text",
+                  "target": "\"2 books\"",
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:33.248Z",
+                  "finishedAt": "2026-09-27T15:19:33.268Z"
+                },
+                {
+                  "index": 2,
+                  "action": "wait-text",
+                  "target": "\"The Left Hand of Darkness\"",
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:33.310Z",
+                  "finishedAt": "2026-09-27T15:19:33.331Z"
+                },
+                {
+                  "index": 3,
+                  "action": "network-idle",
+                  "target": null,
+                  "outcome": "completed",
+                  "startedAt": "2026-09-27T15:19:33.376Z",
+                  "finishedAt": "2026-09-27T15:19:34.599Z"
+                }
+              ],
+              "finalState": {
+                "kind": "recorded",
+                "tree": "- generic [ref=e2] clickable [onclick]\n  - main\n    - heading \"Reading list\" [level=1, ref=e3]\n    - navigation \"Shelves\" [ref=e4]\n      - button \"Reading\" [ref=e5]\n      - button \"Finished\" [ref=e6]\n    - status\n      - StaticText \"2 books\"\n    - list\n      - listitem [level=1]\n        - ListMarker \"• \"\n        - strong\n          - StaticText \"The Left Hand of Darkness\"\n        - StaticText \" Ursula K. Le Guin\"\n      - listitem [level=1]\n        - ListMarker \"• \"\n        - strong\n          - StaticText \"A Pattern Language\"\n        - StaticText \" Christopher Alexander\""
+              }
+            }
+          },
+          {
+            "kind": "browser-errors",
+            "status": "recorded",
+            "value": {
+              "steps": 4,
+              "coverage": {
+                "kind": "complete"
+              },
+              "entries": [
+                {
+                  "source": "page",
+                  "text": "TypeError: Cannot read properties of undefined (reading 'reading')\n    at hh (http://127.0.0.1:46429/assets/index-C6AMbicW.js:9:51704)\n    at bl (http://127.0.0.1:46429/assets/index-C6AMbicW.js:9:51983)",
+                  "step": 0,
+                  "after": "2026-09-27T15:19:33.114Z",
+                  "seenAt": "2026-09-27T15:19:33.248Z"
+                }
+              ]
+            }
+          }
+        ],
+        "screenshot": "journey-1/candidate/screenshot.png",
+        "checks": [
+          {
+            "id": "no-browser-errors",
+            "name": "No browser errors",
+            "authority": "Executed by Observed",
+            "scope": "One Reading click through completion and network idle.",
+            "expectation": "No uncaught page errors or console errors during the recorded steps.",
+            "detail": "1 error(s) during 4 step(s): step 1 page error: TypeError: Cannot read properties of undefined (reading 'reading').",
+            "outcome": "failed",
+            "actual": 1
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "source-0",
+            "description": "Source snapshot: api/books.json",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/api/books.json"
+          },
+          {
+            "id": "source-1",
+            "description": "Source snapshot: api/server.js",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/api/server.js"
+          },
+          {
+            "id": "source-2",
+            "description": "Source snapshot: index.html",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/index.html"
+          },
+          {
+            "id": "source-3",
+            "description": "Source snapshot: observed-server.mjs",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/observed-server.mjs"
+          },
+          {
+            "id": "source-4",
+            "description": "Source snapshot: package-lock.json",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/package-lock.json"
+          },
+          {
+            "id": "source-5",
+            "description": "Source snapshot: package.json",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/package.json"
+          },
+          {
+            "id": "source-6",
+            "description": "Source snapshot: src/App.jsx",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/src/App.jsx"
+          },
+          {
+            "id": "source-7",
+            "description": "Source snapshot: src/api.js",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/src/api.js"
+          },
+          {
+            "id": "source-8",
+            "description": "Source snapshot: src/app.css",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/src/app.css"
+          },
+          {
+            "id": "source-9",
+            "description": "Source snapshot: src/main.jsx",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/src/main.jsx"
+          },
+          {
+            "id": "source-10",
+            "description": "Source snapshot: vite.config.js",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source/vite.config.js"
+          },
+          {
+            "id": "recipe",
+            "description": "Protected saved journey and expectation",
+            "integrity": "verified",
+            "path": "journey-1/candidate/recipe.json"
+          },
+          {
+            "id": "transcript",
+            "description": "Original producer and build command output",
+            "integrity": "verified",
+            "path": "journey-1/candidate/transcript.jsonl"
+          },
+          {
+            "id": "project",
+            "description": "Project startup and source selection",
+            "integrity": "verified",
+            "path": "journey-1/candidate/project.json"
+          },
+          {
+            "id": "server-cleanup",
+            "description": "Owned application shutdown",
+            "integrity": "verified",
+            "path": "journey-1/candidate/server-cleanup.json"
+          },
+          {
+            "id": "browser-cleanup",
+            "description": "Owned browser shutdown",
+            "integrity": "verified",
+            "path": "journey-1/candidate/browser-cleanup.json"
+          },
+          {
+            "id": "owner",
+            "description": "Run-owned session and process identity",
+            "integrity": "verified",
+            "path": "journey-1/candidate/owner.json"
+          },
+          {
+            "id": "source-transcript",
+            "description": "Source revision selection",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source-transcript.jsonl"
+          },
+          {
+            "id": "application",
+            "description": "Owned application process",
+            "integrity": "verified",
+            "path": "journey-1/candidate/application.json"
+          },
+          {
+            "id": "application-log",
+            "description": "Application output",
+            "integrity": "verified",
+            "path": "journey-1/candidate/application.log"
+          },
+          {
+            "id": "browser-config",
+            "description": "Explicit producer configuration",
+            "integrity": "verified",
+            "path": "journey-1/candidate/browser-config.json"
+          },
+          {
+            "id": "environment",
+            "description": "agent-browser eval -b KHtsb2NhbGU6IG5hdmlnYXRvci5sYW5ndWFnZSwgdGltZXpvbmU6IEludGwuRGF0ZVRpbWVGb3JtYXQoKS5yZXNvbHZlZE9wdGlvbnMoKS50aW1lWm9uZSwgd2lkdGg6IGlubmVyV2lkdGgsIGhlaWdodDogaW5uZXJIZWlnaHQsIHNjYWxlOiBkZXZpY2VQaXhlbFJhdGlvfSk= output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/environment.json"
+          },
+          {
+            "id": "snapshot",
+            "description": "agent-browser snapshot output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/snapshot.json"
+          },
+          {
+            "id": "errors",
+            "description": "agent-browser errors output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/errors.json"
+          },
+          {
+            "id": "console",
+            "description": "agent-browser console output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/console.json"
+          },
+          {
+            "id": "a11y",
+            "description": "agent-browser a11y output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/a11y.json"
+          },
+          {
+            "id": "evidence-accessibility",
+            "description": "Accessibility evidence, schema version 1; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/evidence/accessibility.json"
+          },
+          {
+            "id": "evidence-timeline",
+            "description": "Steps and resulting state evidence, schema version 1; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/evidence/timeline.json"
+          },
+          {
+            "id": "evidence-browser-errors",
+            "description": "Browser errors evidence, schema version 1; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/evidence/browser-errors.json"
+          },
+          {
+            "id": "screenshot",
+            "description": "Browser screenshot after the configured actions",
+            "integrity": "verified",
+            "path": "journey-1/candidate/screenshot.png"
+          },
+          {
+            "id": "request-log",
+            "description": "agent-browser network requests output; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/requests.json"
+          },
+          {
+            "id": "requests",
+            "description": "Browser HAR for the recorded window; credentials redacted",
+            "integrity": "verified",
+            "path": "journey-1/candidate/requests.har"
+          },
+          {
+            "id": "observations",
+            "description": "Normalized browser measurements; no imported pass/fail claims",
+            "integrity": "verified",
+            "path": "journey-1/candidate/observations.json"
+          },
+          {
+            "id": "source-map-1",
+            "description": "Source map for /assets/index-C6AMbicW.js; concealed values removed",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source-maps/1-index-C6AMbicW.js.map"
+          },
+          {
+            "id": "source-maps",
+            "description": "Source maps fetched for scripts named by error frames and React sources",
+            "integrity": "verified",
+            "path": "journey-1/candidate/source-maps.json"
+          }
+        ],
+        "unresolved": []
+      },
+      "comparison": {
+        "kind": "available",
+        "basis": "Complete, intact captures with the same protected recipe, application, producer, Observed version, and recorded conditions.",
+        "requestDifference": 0,
+        "visual": {
+          "kind": "identical",
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "checks": [
+        {
+          "id": "no-browser-errors",
+          "name": "No browser errors",
+          "scope": "One Reading click through completion and network idle.",
+          "expectation": "No uncaught page errors or console errors during the recorded steps.",
+          "measure": {
+            "label": "Browser errors",
+            "base": "0",
+            "candidate": "1",
+            "limit": "none allowed"
+          },
+          "verdict": "regression",
+          "detail": "No browser errors: 1 error(s) on the candidate that the base did not have: step 1 page error: TypeError: Cannot read properties of undefined (reading 'reading'). Base: 0; candidate: 1."
+        }
+      ],
+      "conclusion": {
+        "kind": "regression",
+        "text": "No browser errors: 1 error(s) on the candidate that the base did not have: step 1 page error: TypeError: Cannot read properties of undefined (reading 'reading'). Base: 0; candidate: 1."
+      },
+      "limitations": [
+        "Checks cover only their stated expectations and scopes. Browser errors remain available as evidence.",
+        "Screenshot differences are observations of rendered pixels, not a visual regression.",
+        "Artifact hashes detect changed bytes; they do not establish collector honesty or source causation."
+      ],
+      "findings": [
+        {
+          "id": "browser-errors:8f010383e96d42ba",
+          "evidence": "browser-errors",
+          "checks": ["no-browser-errors"],
+          "subject": "TypeError thrown",
+          "comparison": "new",
+          "location": {
+            "kind": "anchored",
+            "anchors": [
+              {
+                "path": "src/App.jsx",
+                "line": 10,
+                "side": "candidate",
+                "basis": "stack-frame",
+                "evidence": "Stack frame 1 at /assets/index-C6AMbicW.js:9:51704, resolved by its source map.",
+                "artifacts": [
+                  "journey-1/candidate/source-maps/1-index-C6AMbicW.js.map"
+                ],
+                "diff": "added"
+              },
+              {
+                "path": "src/App.jsx",
+                "line": 29,
+                "side": "candidate",
+                "basis": "stack-frame",
+                "evidence": "Stack frame 2 at /assets/index-C6AMbicW.js:9:51983, resolved by its source map.",
+                "artifacts": [
+                  "journey-1/candidate/source-maps/1-index-C6AMbicW.js.map"
+                ],
+                "diff": "added"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "total": 1
+  },
+  "conclusion": {
+    "kind": "regression",
+    "text": "No browser errors: 1 error(s) on the candidate that the base did not have: step 1 page error: TypeError: Cannot read properties of undefined (reading 'reading'). Base: 0; candidate: 1."
+  }
+}

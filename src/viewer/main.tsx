@@ -1,11 +1,16 @@
 import '@fontsource/geist/latin-400.css';
 import '@fontsource/geist/latin-500.css';
 import '@fontsource/geist-mono/latin-400.css';
+import '@fontsource/geist-pixel/latin-400.css';
 import './reset.css';
 import { Schema } from 'effect';
 import { createRoot } from 'react-dom/client';
 import { comparisonSchema } from '../comparison-model';
-import { embeddedEvidenceId, readEmbeddedEvidence } from './embedded';
+import {
+  embeddedEvidenceId,
+  embeddedResultId,
+  readEmbeddedEvidence,
+} from './embedded';
 import { EvidenceUrls } from './evidence';
 import { ComparisonReport, ReportState } from './report';
 
@@ -33,10 +38,11 @@ async function fetchReport() {
 
 async function loadReport() {
   const embedded = document.getElementById(embeddedEvidenceId);
+  const embeddedResult = document.getElementById(embeddedResultId);
   const { result: input, resolve } =
-    embedded === null
+    embedded === null || embeddedResult === null
       ? await fetchReport()
-      : readEmbeddedEvidence(embedded.textContent);
+      : readEmbeddedEvidence(embedded.textContent, embeddedResult.textContent);
   const result = await Schema.decodeUnknownPromise(comparisonSchema, {
     onExcessProperty: 'error',
   })(input);

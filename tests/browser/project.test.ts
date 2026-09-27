@@ -379,7 +379,7 @@ async function viewer(
                 text: Schema.String,
                 detailsOpen: Schema.Boolean,
                 height: Schema.Number,
-                imageTop: Schema.Number,
+                leadTop: Schema.Number,
               }),
             }),
           });
@@ -387,7 +387,7 @@ async function viewer(
             'eval',
             '-b',
             Buffer.from(
-              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, imageTop: document.querySelector("#report img").getBoundingClientRect().top})',
+              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, leadTop: document.querySelector("#report details[open]").getBoundingClientRect().top})',
             ).toString('base64'),
           );
           const viewed = Schema.decodeUnknownSync(
@@ -396,7 +396,7 @@ async function viewer(
           expect(viewed.images).toBe(mode === 'preview' ? 1 : 2);
           expect(viewed.text).toContain(sourceHash.slice(0, 12));
           expect(viewed.detailsOpen).toBe(false);
-          expect(viewed.imageTop).toBeLessThan(viewed.height);
+          expect(viewed.leadTop).toBeLessThan(viewed.height);
 
           if (mode === 'preview') {
             expect(viewed.text).not.toMatch(

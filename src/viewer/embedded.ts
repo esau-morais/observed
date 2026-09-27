@@ -2,6 +2,9 @@ import { Schema } from 'effect';
 
 export const embeddedEvidenceId = 'observed-evidence';
 
+// The result as plain JSON, so an agent reading the page source finds it.
+export const embeddedResultId = 'observed-result';
+
 export const embeddedSchema = Schema.fromJsonString(
   Schema.Record(
     Schema.String,
@@ -9,30 +12,26 @@ export const embeddedSchema = Schema.fromJsonString(
   ),
 );
 
-export function readEmbeddedEvidence(source: string) {
+export function readEmbeddedEvidence(source: string, resultSource: string) {
   const files = Schema.decodeUnknownSync(embeddedSchema)(source);
-  const urls = new Map<string, string>();
-  let result: unknown = undefined;
+  const result = Schema.decodeUnknownSync(
+    Schema.fromJsonString(Schema.Unknown),
+  )(resultSource);
+  const urls = new Map<string, string>([
+    [
+      '/result.json',
+      URL.createObjectURL(
+        new Blob([resultSource], { type: 'application/json; charset=utf-8' }),
+      ),
+    ],
+  ]);
 
   for (const [key, file] of Object.entries(files)) {
     const bytes = Uint8Array.from(atob(file.data), (char) =>
       char.charCodeAt(0),
     );
 
-    if (key === '/result.json') {
-      result = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-        new TextDecoder().decode(bytes),
-      );
-    } else {
-      urls.set(
-        key,
-        URL.createObjectURL(new Blob([bytes], { type: file.type })),
-      );
-    }
-  }
-
-  if (result === undefined) {
-    throw new Error('The report page holds no result.');
+    urls.set(key, URL.createObjectURL(new Blob([bytes], { type: file.type })));
   }
 
   return {

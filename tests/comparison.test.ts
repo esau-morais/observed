@@ -778,6 +778,50 @@ test('keeps browser errors as unresolved evidence without inventing another chec
   expect(side.unresolved).toContain('Browser error: Synthetic page error');
 });
 
+function errorsBundle(coverage: EvidenceValue<'browser-errors'>['coverage']) {
+  return syntheticBundle({
+    observations: {
+      ...syntheticObservations(),
+      browserErrors: ['Synthetic page error'],
+    },
+    browserErrors: {
+      steps: 1,
+      coverage,
+      entries: [
+        {
+          source: 'page',
+          text: 'Synthetic page error',
+          step: 0,
+          after: '2026-09-23T11:59:54.000Z',
+          seenAt: '2026-09-23T11:59:54.300Z',
+        },
+      ],
+    },
+  });
+}
+
+test('leaves browser errors out of unresolved when complete browser-errors evidence lists them', async () => {
+  const side = await inspect(
+    (await errorsBundle({ kind: 'complete' })).directory,
+  );
+
+  expect(side.execution).toBe('complete');
+  expect(side.unresolved).toEqual([]);
+});
+
+test('keeps browser errors unresolved when the browser-errors evidence is incomplete', async () => {
+  const side = await inspect(
+    (
+      await errorsBundle({
+        kind: 'incomplete',
+        reason: 'Synthetic buffer replacement',
+      })
+    ).directory,
+  );
+
+  expect(side.unresolved).toContain('Browser error: Synthetic page error');
+});
+
 test('serializes empty and newline-terminated browser errors without losing their original text', async () => {
   const browserErrors = ['', 'Synthetic page error\n'];
 

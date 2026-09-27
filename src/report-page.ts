@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import { createHash } from 'node:crypto';
 import { preloadReport, ViewFailure, type Asset } from './view';
-import { embeddedEvidenceId } from './viewer/embedded';
+import { embeddedEvidenceId, embeddedResultId } from './viewer/embedded';
 
 function base64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64');
@@ -67,9 +67,16 @@ export const renderReportPage = Effect.fn('renderReportPage')(function* (
     });
   }
 
+  const result = assets.get('/result.json');
+
+  if (result === undefined) {
+    return yield* new ViewFailure({ message: 'The report holds no result' });
+  }
+
+  const resultText = new TextDecoder().decode(result.bytes);
   const evidence = Object.fromEntries(
     [...assets]
-      .filter(([key, asset]) => asset.evidence || key === '/result.json')
+      .filter(([, asset]) => asset.evidence)
       .map(([key, asset]) => [
         key,
         { type: asset.type, data: base64(asset.bytes) },
@@ -94,24 +101,20 @@ export const renderReportPage = Effect.fn('renderReportPage')(function* (
     `<meta http-equiv="Content-Security-Policy" content="${policy}">`,
     '<meta name="referrer" content="no-referrer">',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
-    '<meta name="color-scheme" content="light">',
+    '<meta name="color-scheme" content="light dark">',
     '<title>Observed | Comparison report</title>',
     `<style>${style}</style>`,
     '</head>',
     '<body>',
     '<div id="root"></div>',
     '<noscript>This Observed report needs JavaScript.</noscript>',
+    `<script type="application/json" id="${embeddedResultId}">${resultText.replaceAll('<', '\\u003c')}</script>`,
     `<script type="application/json" id="${embeddedEvidenceId}">${JSON.stringify(evidence).replaceAll('<', '\\u003c')}</script>`,
     `<script type="module">${script}</script>`,
     '</body>',
     '</html>',
     '',
   ].join('\n');
-  const result = assets.get('/result.json');
 
-  if (result === undefined) {
-    return yield* new ViewFailure({ message: 'The report holds no result' });
-  }
-
-  return { page, result: new TextDecoder().decode(result.bytes) };
+  return { page, result: resultText };
 });

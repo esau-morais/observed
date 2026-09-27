@@ -166,21 +166,18 @@ export function Screenshot({
   side,
   label,
   highlight,
-  level = 2,
 }: {
   side: Side;
   label: string;
   highlight: Highlight | null;
-  level?: 2 | 3;
 }) {
   const [failed, setFailed] = useState(false);
   const resolve = use(EvidenceUrls);
   const capture = side.capture?.manifest ?? null;
-  const Heading = level === 2 ? 'h2' : 'h3';
 
   return (
     <figure {...stylex.props(styles.figure)}>
-      <Heading {...stylex.props(styles.heading)}>{label}</Heading>
+      <SubHeading xstyle={styles.heading}>{label}</SubHeading>
       <p {...stylex.props(styles.caption)}>
         {capture?.label ?? 'No capture'}
         {capture === null ? null : (
@@ -322,22 +319,6 @@ export function RequestLedger({ side, label }: { side: Side; label: string }) {
               </table>
             </div>
           )}
-          {observations.browserErrors.length > 0 ? (
-            <div {...stylex.props(styles.stack)}>
-              <p>Recorded browser errors</p>
-              <ul {...stylex.props(styles.list)}>
-                {observations.browserErrors.map((error, index) => (
-                  <li key={index} {...stylex.props(styles.mono)}>
-                    {error}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p {...stylex.props(styles.caption)}>
-              No browser errors recorded in this window.
-            </p>
-          )}
         </>
       )}
     </section>
@@ -399,22 +380,19 @@ export function ChangedRegions({
   before,
   after,
   id,
-  level = 2,
 }: {
   visual: Extract<Visual, { kind: 'changed' }>;
   before: string;
   after: string;
   id: string;
-  level?: 2 | 3;
 }) {
   const resolve = use(EvidenceUrls);
-  const Heading = level === 2 ? 'h2' : 'h3';
 
   return (
     <section {...stylex.props(styles.stack)} aria-labelledby={id}>
-      <Heading id={id} {...stylex.props(styles.heading)}>
+      <SubHeading id={id} xstyle={styles.heading}>
         Changed regions
-      </Heading>
+      </SubHeading>
       <ol {...stylex.props(styles.regionList)}>
         {visual.regions.map((region, index) => {
           const crop = cropAround(region, visual);

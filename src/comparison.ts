@@ -793,16 +793,12 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
         ? screenshotArtifact.path
         : null;
     const captured = { manifest: capture, sha256: manifestArtifact.hash };
-    const evidence = {
-      artifacts,
-      unresolved: [
-        ...reasons,
-        ...(observations?.browserErrors.map(
-          (error) =>
-            `Browser error: ${error.trim() === '' ? '(empty message)' : error.trim()}`,
-        ) ?? []),
-      ],
-    };
+    const errors =
+      observations?.browserErrors.map(
+        (error) =>
+          `Browser error: ${error.trim() === '' ? '(empty message)' : error.trim()}`,
+      ) ?? [];
+    const evidence = { artifacts, unresolved: [...reasons, ...errors] };
     const checks = unknownChecks(
       reasons.length === 0
         ? 'Verified observations unavailable'
@@ -840,6 +836,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
         screenshot,
         checks: [],
         ...evidence,
+        unresolved: errorsListed(views) ? reasons : evidence.unresolved,
       } satisfies Side;
 
       return {
@@ -866,6 +863,17 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
     ),
   );
 });
+
+// Browser errors stay unresolved unless verified, complete browser-errors
+// evidence already lists them.
+function errorsListed(views: readonly EvidenceView[]): boolean {
+  return views.some(
+    (view) =>
+      view.kind === 'browser-errors' &&
+      view.status === 'recorded' &&
+      view.value.coverage.kind === 'complete',
+  );
+}
 
 function sideAt(side: Side, evaluatedAt: string): Side {
   if (side.execution !== 'complete') {

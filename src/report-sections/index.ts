@@ -45,8 +45,31 @@ export type JourneySection<K extends EvidenceKind = EvidenceKind> = {
   readonly input: SectionInput<K>;
 };
 
-// One section per supported evidence kind the candidate recorded, including
-// a failed capture's evidence.
+// The kind's section when the candidate recorded that kind, including a
+// failed capture's evidence.
+export function journeySection<K extends EvidenceKind>(
+  journey: Journey,
+  kind: K,
+): JourneySection<K> | null {
+  if (journey.candidate.execution === 'unavailable') {
+    return null;
+  }
+
+  const after = sectionSide(journey.candidate, kind);
+
+  return after === null
+    ? null
+    : {
+        kind,
+        input: {
+          base: sectionSide(journey.base, kind),
+          candidate: after,
+          comparable: journey.comparison.kind === 'available',
+        },
+      };
+}
+
+// One section per supported evidence kind the candidate recorded.
 export function journeySections(
   journey: Journey,
 ): JourneySection<EvidenceKind>[] {
@@ -61,20 +84,9 @@ export function journeySections(
       return [];
     }
 
-    const after = sectionSide(candidate, view.kind);
+    const section = journeySection(journey, view.kind);
 
-    return after === null
-      ? []
-      : [
-          {
-            kind: view.kind,
-            input: {
-              base: sectionSide(journey.base, view.kind),
-              candidate: after,
-              comparable: journey.comparison.kind === 'available',
-            },
-          },
-        ];
+    return section === null ? [] : [section];
   });
 }
 

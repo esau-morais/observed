@@ -42,8 +42,8 @@ test('captured text cannot close the embedded evidence block or add a script to 
       ),
     );
 
-    expect(page.match(/<script/gi)).toHaveLength(2);
-    expect(page.match(/<\/script/gi)).toHaveLength(2);
+    expect(page.match(/<script/gi)).toHaveLength(3);
+    expect(page.match(/<\/script/gi)).toHaveLength(3);
     expect(page).not.toContain('<!--');
     const data =
       /<script type="application\/json" id="observed-evidence">(.*?)<\/script>/s.exec(
@@ -56,11 +56,16 @@ test('captured text cannot close the embedded evidence block or add a script to 
         'base64',
       ).toString(),
     ).toBe(transcript);
+    const result =
+      /<script type="application\/json" id="observed-result">(.*?)<\/script>/s.exec(
+        page,
+      )?.[1];
     expect(
       Schema.decodeUnknownSync(Schema.fromJsonString(comparisonSchema))(
-        Buffer.from(files['/result.json']?.data ?? '', 'base64').toString(),
+        result ?? '',
       ).journeys[0].candidate.execution,
     ).toBe('unavailable');
+    expect(result).toContain('\\u003c/script>\\u003cimg src=x>');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
