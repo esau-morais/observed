@@ -1,22 +1,11 @@
 import { Option, Schema } from 'effect';
-import type { Comparison } from '../src/comparison-model';
+import { conclusionExitCodes, type Comparison } from '../src/comparison-model';
 
 type Kind = Comparison['conclusion']['kind'];
 
-// The job's conclusion is the verdict, and a job can only pass or fail.
-// Missing or unreadable evidence therefore fails; a run that checked nothing
-// passes, and its check title says so.
-export const jobConclusions = {
-  regression: 'failure',
-  'check-failed': 'failure',
-  unavailable: 'failure',
-  'no-regression': 'success',
-  'not-checked': 'success',
-  preview: 'success',
-} satisfies Record<Kind, 'success' | 'failure'>;
-
-export function jobConclusion(kind: Kind | null) {
-  return kind === null ? 'failure' : jobConclusions[kind];
+// Missing or unreadable evidence counts as failing, like an unavailable result.
+export function failing(kind: Kind | null): boolean {
+  return kind === null || conclusionExitCodes[kind] !== 0;
 }
 
 export function checkName(artifact: string): string {

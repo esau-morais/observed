@@ -21,7 +21,7 @@ import {
   commentMarker,
   DeliveryError,
   findComment,
-  jobConclusion,
+  failing,
   permissionLines,
   titleJobCheck,
   writeComment,
@@ -659,9 +659,12 @@ export type DeliveryItem = { name: string; outcome: Delivered };
 export const readOnlyFork =
   "GitHub gives pull requests from forks a read-only token. This job's result is the verdict.";
 
+// `needs` replaces the header when the refused call only reads, so the reason
+// names the write the item needs.
 export function refusal(
   error: unknown,
   source: PullRequestSource | null,
+  options: { signer?: 'app' | 'workflow'; needs?: string } = {},
 ): Extract<Delivered, { kind: 'not-posted' }> {
   if (!(error instanceof DeliveryError)) {
     return {
@@ -675,12 +678,22 @@ export function refusal(
   }
 
   const lines =
-    error.permissions === null ? null : permissionLines(error.permissions);
+    options.needs ??
+    (error.permissions === null ? null : permissionLines(error.permissions));
 
   if (error.status !== 403) {
     return {
       kind: 'not-posted',
       reason: `${error.message}.`,
+      level: 'warning',
+    };
+  }
+
+  if (options.signer === 'app') {
+    return {
+      kind: 'not-posted',
+      reason:
+        'GitHub refused the GitHub App token. Give the App Pull requests: Read and write, and install it on this repository.',
       level: 'warning',
     };
   }
@@ -821,20 +834,12 @@ export function appToken(options: {
 }
 
 export const deliveryUnfinished =
-  'Not posted: check title and comment. The delivery step did not finish; the job log has details.';
+  'The delivery step did not report what it posted. The job log has details.';
 
 // The job summary always ends with a delivery line, even when the step that
 // writes one crashed.
 export function jobDelivery(note: string): string {
-  if (note !== '') {
-    return note;
-  }
-
-  process.stdout.write(
-    `::warning title=Observed::${escapeCommand(deliveryUnfinished)}\n`,
-  );
-
-  return deliveryUnfinished;
+  return note === '' ? deliveryUnfinished : note;
 }
 
 export function slackSkipReason(options: {
@@ -1024,8 +1029,67 @@ async function readOptional(file: string): Promise<string | null> {
   }
 }
 
+function runSource(): PullRequestSource | null {
+  const pullRequest = Number(environment('OBSERVED_PULL_REQUEST'));
+
+  return Number.isInteger(pullRequest) && pullRequest > 0
+    ? pullRequestSource({
+        repository: environment('GITHUB_REPOSITORY'),
+        headRepository: environment('OBSERVED_HEAD_REPOSITORY'),
+        actor: environment('GITHUB_ACTOR'),
+      })
+    : null;
+}
+
+// Capture never started, so the check is titled here or nowhere.
 async function notRun(reason: string): Promise<never> {
-  await writeSummary(['## Observed: not run', inlineText(reason)].join('\n\n'));
+  const markdown = ['## Observed: not run', inlineText(reason)];
+  const checkRunId = environment('OBSERVED_CHECK_RUN_ID');
+  const token = environment('OBSERVED_GITHUB_TOKEN');
+  let title: Delivered = {
+    kind: 'not-posted',
+    reason: 'The runner gave no job.check_run_id.',
+    level: 'warning',
+  };
+
+  const source = runSource();
+
+  if (source === 'fork') {
+    title = { kind: 'not-posted', reason: readOnlyFork, level: 'notice' };
+  } else if (/^\d+$/.test(checkRunId) && token !== '') {
+    try {
+      title = {
+        kind: 'posted',
+        url: await titleJobCheck(
+          {
+            api:
+              environment('GITHUB_API_URL') === ''
+                ? 'https://api.github.com'
+                : environment('GITHUB_API_URL'),
+            repository: environment('GITHUB_REPOSITORY'),
+            token,
+            pullRequest: null,
+            botLogin: 'github-actions[bot]',
+          },
+          checkRunId,
+          {
+            title: 'Unavailable: Observed did not run',
+            markdown: [...markdown, 'Posted: check title.'].join('\n\n'),
+          },
+        ),
+      };
+    } catch (error) {
+      title = refusal(error, source);
+    }
+  }
+
+  const items = [{ name: 'check title', outcome: title }];
+
+  for (const annotation of deliveryAnnotations(items)) {
+    process.stdout.write(`${annotation}\n`);
+  }
+
+  await writeSummary([...markdown, deliveryLine(items, [])].join('\n\n'));
   process.stderr.write(`Observed: ${reason}\n`);
   process.exit(1);
 }
@@ -1098,14 +1162,7 @@ if (import.meta.main) {
     const pullRequest = Number(environment('OBSERVED_PULL_REQUEST'));
     const pullRequestNumber =
       Number.isInteger(pullRequest) && pullRequest > 0 ? pullRequest : null;
-    const source =
-      pullRequestNumber === null
-        ? null
-        : pullRequestSource({
-            repository: environment('GITHUB_REPOSITORY'),
-            headRepository: environment('OBSERVED_HEAD_REPOSITORY'),
-            actor: environment('GITHUB_ACTOR'),
-          });
+    const source = runSource();
     const finish = async (items: DeliveryItem[], notes: string[]) => {
       for (const annotation of deliveryAnnotations(items)) {
         process.stdout.write(`${annotation}\n`);
@@ -1113,23 +1170,6 @@ if (import.meta.main) {
 
       await writeOutput('note', deliveryLine(items, notes));
     };
-
-    if (identity === 'other') {
-      await finish(
-        [
-          {
-            name: 'check title',
-            outcome: {
-              kind: 'not-posted',
-              reason: `The candidate capture is not pull request head ${headSha.slice(0, 7)} or its merge commit.`,
-              level: 'warning',
-            },
-          },
-        ],
-        [],
-      );
-      process.exit(0);
-    }
 
     const runUrl = `${repository ?? ''}/actions/runs/${environment('GITHUB_RUN_ID')}`;
     const api =
@@ -1159,12 +1199,31 @@ if (import.meta.main) {
 
     if (signer.kind === 'workflow' && signer.problem !== null) {
       process.stdout.write(
-        `::${signer.problem.level} title=Observed::${signer.problem.text}\n`,
+        `::${signer.problem.level} title=Observed::${escapeCommand(signer.problem.text)}\n`,
       );
       notes.push(signer.problem.text);
     }
 
-    // Unlike an item, a failed lookup or Slack call is reported as a note.
+    if (identity === 'other') {
+      const mismatch: Delivered = {
+        kind: 'not-posted',
+        reason: `The candidate capture is not pull request head ${headSha.slice(0, 7)} or its merge commit.`,
+        level: 'warning',
+      };
+
+      await finish(
+        [
+          { name: 'check title', outcome: mismatch },
+          ...(pullRequestNumber === null
+            ? []
+            : [{ name: 'comment', outcome: mismatch }]),
+        ],
+        notes,
+      );
+      process.exit(0);
+    }
+
+    // Slack failures are notes, not items.
     const attempt = async <A>(
       label: string,
       send: () => Promise<A>,
@@ -1175,7 +1234,7 @@ if (import.meta.main) {
         const { reason } = refusal(error, source);
 
         process.stdout.write(
-          `::warning title=Observed::${label} failed. ${reason}\n`,
+          `::warning title=Observed::${escapeCommand(`${label} failed. ${reason}`)}\n`,
         );
         notes.push(`${label} failed. ${reason}`);
 
@@ -1190,6 +1249,7 @@ if (import.meta.main) {
     });
     const send = async (
       token: string,
+      signedBy: 'app' | 'workflow',
       write: () => Promise<string | null>,
     ): Promise<Delivered> => {
       if (source === 'fork') {
@@ -1207,7 +1267,7 @@ if (import.meta.main) {
       try {
         return { kind: 'posted', url: await write() };
       } catch (error) {
-        return refusal(error, source);
+        return refusal(error, source, { signer: signedBy });
       }
     };
 
@@ -1241,13 +1301,16 @@ if (import.meta.main) {
     });
 
     if (slackSkip !== null) {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(`${slackSkip}.`)}\n`,
+      );
       notes.push(slackSkip);
     } else if (slackToken !== '') {
-      const failing = jobConclusion(summary.kind) === 'failure';
+      const isFailing = failing(summary.kind);
       const trusted =
         summary.trusted && Option.isSome(decoded) ? decoded.value : null;
       const action = slackAction(slackState, slackChannel, {
-        failing,
+        failing: isFailing,
         passed: trusted?.result.conclusion.kind === 'no-regression',
       });
       const message = slackMessage(trusted?.result ?? null, {
@@ -1283,7 +1346,7 @@ if (import.meta.main) {
                 ts: earlier.ts,
                 ...message,
               }).catch((error: unknown) => {
-                if (error instanceof SlackError && error.gone && failing) {
+                if (error instanceof SlackError && error.gone && isFailing) {
                   return post();
                 }
 
@@ -1294,7 +1357,11 @@ if (import.meta.main) {
         if (sent !== null) {
           const posted = earlier === null || sent.ts !== earlier.ts;
 
-          slackState = { channel: sent.channel, ts: sent.ts, failing };
+          slackState = {
+            channel: sent.channel,
+            ts: sent.ts,
+            failing: isFailing,
+          };
           notes.push(
             posted
               ? 'Slack: posted a message'
@@ -1346,8 +1413,11 @@ if (import.meta.main) {
         name: 'comment',
         outcome:
           lookup?.kind === 'failed'
-            ? refusal(lookup.error, source)
-            : await send(commenter.token, () =>
+            ? refusal(lookup.error, source, {
+                signer: signer.kind,
+                needs: 'pull-requests: write',
+              })
+            : await send(commenter.token, signer.kind, () =>
                 writeComment(
                   commenter,
                   existing,
@@ -1371,7 +1441,7 @@ if (import.meta.main) {
     // The check's summary ends with the line it is part of, so it is written
     // as if the title posts; a failed title is reported everywhere else.
     const title = /^\d+$/.test(checkRunId)
-      ? await send(workflow.token, () =>
+      ? await send(workflow.token, 'workflow', () =>
           titleJobCheck(workflow, checkRunId, {
             title: summary.title,
             markdown: summarize({
@@ -1400,6 +1470,12 @@ if (import.meta.main) {
       surface: { kind: 'job' },
       delivery: jobDelivery(environment('OBSERVED_DELIVERY_NOTE')),
     });
+
+    if (environment('OBSERVED_DELIVERY_NOTE') === '') {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(deliveryUnfinished)}\n`,
+      );
+    }
 
     await writeSummary(summary.markdown);
     await writeOutput('trusted', String(summary.trusted));

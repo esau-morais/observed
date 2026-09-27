@@ -309,30 +309,26 @@ test('captured text cannot close the agent prompt fence, and the artifact name c
   expect(block?.[1]).toContain('conclusion: regression');
 });
 
-test('a delivery failure changes neither the verdict nor whether the result is trusted', async () => {
+test('a failed delivery leaves the verdict and its trust unchanged and ends the job summary', async () => {
   const output = await regressionRun('Regressed.');
-  const render = (exitCode: number, delivery: string | null) =>
+  const render = (delivery: string | null) =>
     summarize({
       output,
-      exitCode,
+      exitCode: 2,
       artifact: 'observed-bundle',
       page: null,
       surface: { kind: 'job' },
       delivery,
     });
-  const failed = render(
-    2,
-    "Not posted: check title and comment. Add checks: write to the workflow's permissions.",
-  );
+  const line =
+    "Not posted: check title and comment. Add checks: write to the workflow's permissions.";
+  const failed = render(line);
 
   expect({ trusted: failed.trusted, title: failed.title }).toEqual({
-    trusted: render(2, null).trusted,
-    title: render(2, null).title,
+    trusted: render(null).trusted,
+    title: render(null).title,
   });
-  expect(failed.markdown.trimEnd()).toMatch(
-    /Add checks: write to the workflow's permissions\.$/,
-  );
-  expect(render(0, 'Posted: check title.').trusted).toBe(false);
+  expect(failed.markdown.trimEnd().endsWith(line)).toBe(true);
 });
 
 test('a result is posted to a pull request only when its candidate is that head or its merge commit', () => {

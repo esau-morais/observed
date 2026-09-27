@@ -88,6 +88,10 @@ runs:
         OBSERVED_PROJECT: ${{ inputs.project }}
         OBSERVED_JOB_OUTCOME: ${{ inputs.job-outcome }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
+        OBSERVED_GITHUB_TOKEN: ${{ inputs.github-token }}
+        OBSERVED_CHECK_RUN_ID: ${{ job.check_run_id }}
+        OBSERVED_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        OBSERVED_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
       run: |
         if [ -n "$OBSERVED_JOB_OUTCOME" ]; then
           echo "::warning title=Observed::job-outcome is deprecated and has no effect. This job's own check carries the result: require the job, and name it Observed."

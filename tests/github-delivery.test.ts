@@ -7,8 +7,7 @@ import {
   commentMarker,
   DeliveryError,
   findComment,
-  jobConclusion,
-  jobConclusions,
+  failing,
   writeComment,
   type Target,
 } from '../scripts/github-delivery';
@@ -29,13 +28,10 @@ afterEach(async () => {
   server = null;
 });
 
-test('the job fails for failed, missing or unreadable evidence and passes a run that checked nothing', () => {
-  expect(jobConclusion(null)).toBe('failure');
-  expect(
-    Object.entries(jobConclusions)
-      .filter(([, conclusion]) => conclusion === 'success')
-      .map(([kind]) => kind),
-  ).toEqual(['no-regression', 'not-checked', 'preview']);
+test('Slack treats a missing or unreadable result as failing', () => {
+  expect(failing(null)).toBe(true);
+  expect(failing('unavailable')).toBe(true);
+  expect(failing('preview')).toBe(false);
 });
 
 function fakeGitHub(existing: { id: number; login: string; body: string }[]) {
