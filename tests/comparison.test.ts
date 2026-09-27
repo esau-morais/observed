@@ -611,7 +611,7 @@ test.each([0, 2])(
     expect(result.conclusion.kind).toBe('check-failed');
 
     expect(result.conclusion.text).toContain(
-      'Base also failed, so this is not a regression',
+      'Base also failed, so a regression is not established',
     );
   },
 );
