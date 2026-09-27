@@ -8,7 +8,9 @@ action's inputs.
 
 First alpha of 0.2.0. It is published under the npm dist-tag `alpha`, so
 `latest` stays on 0.1.0. Install it with
-`bun add --global @observed-software/cli@alpha`.
+`bun add --global @observed-software/cli@alpha`. The action's `v0` tag also
+stays on 0.1.0; to try the alpha in a workflow, pin the `v0.2.0-alpha.0`
+commit SHA.
 
 Captures saved by 0.1.0 are reported unavailable. Capture both revisions again.
 `observed.json` files from 0.1.0 still load.
@@ -19,9 +21,9 @@ Captures saved by 0.1.0 are reported unavailable. Capture both revisions again.
 - **New evidence and checks.** React renders (`react-renders`), browser timing
   samples with a budget (`performance`), axe accessibility findings
   (`accessibility`), a step timeline with page and console errors
-  (`browser-errors`), API operations sent without a browser (`api-status`,
-  `api-schema`, `api-readback`), and Playwright tests run or imported as
-  checks.
+  (`browser-errors`), API operations sent with `fetch` after the browser
+  capture (`api-status`, `api-schema`, `api-readback`), and Playwright tests
+  run or imported as checks.
 - **Source locations.** Findings point at source lines through source maps,
   including hidden maps fetched by URL, or through names that match the
   base..candidate diff. Build capture targets with hidden source maps, such as
@@ -36,13 +38,16 @@ Captures saved by 0.1.0 are reported unavailable. Capture both revisions again.
   keep 0.1.0's behavior.
 - **Slack.** The message leads with values and the code location, has buttons to
   open the report and the pull request, and replies in its thread when a later
-  run recovers. With the optional `files:write` scope it attaches the
-  pixel-difference crop.
+  run recovers. Set `slack-images: true` and give the bot `files:write` to post
+  the largest changed screenshot region in the failing message's thread. It is
+  off by default.
 - **Report page.** It opens on the evidence behind the verdict. A section rail
   shows each section's status and count, passing sections stay collapsed, and
   steps carry their errors and requests. It has a dark theme, "Copy for agent"
   and "Copy JSON", and embeds the result as
   `<script type="application/json" id="observed-result">`.
+- When both sides fail a check, the conclusion says a regression is not
+  established instead of saying there is no regression.
 - The result is schema version 7.
 
 ## 0.1.0 (2026-09-26)
