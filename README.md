@@ -11,11 +11,10 @@ Everything runs locally. No model or account is required to capture or view it.
 
 ## Install
 
-Observed runs on Linux and macOS with Bun 1.4.2 or later. Windows is not
-supported.
+Observed runs on Linux and macOS with [Bun](https://bun.sh/docs/installation)
+1.4.2 or later. Windows is not supported.
 
 ```bash
-curl -fsSL https://bun.sh/install | bash   # only if `bun --version` fails or is older
 bun add --global @esau-morais/observed
 observed setup
 ```
@@ -48,7 +47,7 @@ Evidence goes to `.observed/` in the app's directory, which holds its own
 output's `directory` is the report, and `observed view <directory>` opens it
 again. `observed view` with no argument opens the latest run in the current
 directory's `.observed/`. Exit codes: `0` completed, `1` unavailable, `2` a
-named check failed. When Observed rejects `observed.json`, it prints no JSON
+named check failed or regressed. When Observed rejects `observed.json`, it prints no JSON
 and explains why on stderr.
 
 Each capture, from setup through the journey, must finish within `--timeout`
@@ -150,8 +149,8 @@ such as password inputs.
 evidence whose bytes changed afterward.
 
 From a checkout of this repository, the version 1 importer accepts generated
-evidence bundles through `bun run report <manifest.json> <new-report.md>`. The output parent must exist and
-the output file must be new. Behavior claims remain labeled imported; missing
+evidence bundles through `bun run report <manifest.json> <new-report.md>`. The
+output parent must exist and the output file must be new. Behavior claims remain labeled imported; missing
 evidence is unknown. Exit success means written, not behavior verified.
 
 See the [schema](src/schema.ts), [example manifest](tests/fixtures/todomvc/manifest.json),

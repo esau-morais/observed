@@ -10,7 +10,7 @@ import { json } from './encoding';
 import { exportComparison } from './export';
 import { agentBrowserPath, unsupportedBun } from './installation';
 import { loadProject } from './project';
-import { serveReport } from './view';
+import { serveReport, ViewFailure } from './view';
 import { buildViewer, runProject } from './workflow';
 
 const toolRoot = path.resolve(import.meta.dirname, '..');
@@ -281,11 +281,9 @@ const view = Command.make(
       const latestFile = path.join(evidenceRoot(process.cwd()), 'latest.json');
 
       if (!(yield* fs.exists(latestFile))) {
-        return yield* Effect.fail(
-          new Error(
-            `No saved run in ${evidenceRoot(process.cwd())}. Run view from the application's directory, or pass the report directory that observe printed.`,
-          ),
-        );
+        return yield* new ViewFailure({
+          message: `No saved run in ${evidenceRoot(process.cwd())}. Run view from the application's directory, or pass the report directory that observe printed.`,
+        });
       }
 
       const latest = yield* Schema.decodeUnknownEffect(

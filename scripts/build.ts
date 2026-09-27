@@ -30,6 +30,13 @@ const status =
   commit === null
     ? null
     : await git('status', '--porcelain', '--untracked-files=no');
+if (commit !== null && status === null) {
+  console.error(
+    'git status failed, so the build cannot say whether it has changes',
+  );
+  process.exit(1);
+}
+
 const build = {
   version,
   commit,

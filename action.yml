@@ -46,18 +46,19 @@ runs:
         bun-version-file: ${{ github.action_path }}/package.json
 
     # Installs the CLI release matching this action's package.json by exact
-    # version. Observed's own workflows set OBSERVED_FROM_SOURCE to pack and
-    # install the checked-out source the same way instead.
+    # version. npm never reuses a version, but nothing pins the tarball's hash.
+    # Observed's own workflows set OBSERVED_FROM_SOURCE to pack and install
+    # the checked-out source the same way instead.
     - name: Install Observed and its browser
       id: install
       shell: bash
       run: |
         cli="$(mktemp -d "$RUNNER_TEMP/observed-cli-XXXXXX")"
-        version="$(bun --print "(await Bun.file(process.env.GITHUB_ACTION_PATH + '/package.json').json()).version")"
         if [ "${OBSERVED_FROM_SOURCE:-}" = true ]; then
           (cd "$GITHUB_ACTION_PATH" && bun install --frozen-lockfile && bun run build && bun pm pack --destination "$cli" --quiet >/dev/null)
           package="$(ls "$cli"/*.tgz)"
         else
+          version="$(bun --print "(await Bun.file(process.env.GITHUB_ACTION_PATH + '/package.json').json()).version")"
           package="@esau-morais/observed@$version"
         fi
         cd "$cli"
