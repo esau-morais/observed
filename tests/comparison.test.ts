@@ -2199,6 +2199,23 @@ test('a test the candidate no longer reports is unknown, not dropped', async () 
   expect(result.conclusion.kind).toBe('unavailable');
 });
 
+test('GitHub lists failures before a long run of unknown tests', async () => {
+  const skipped = Array.from({ length: 60 }, (_, index) =>
+    playwrightTest(`skipped ${index}`, 'skipped'),
+  );
+  const list = checkList(
+    single(
+      await playwrightJourney({
+        base: [...skipped, playwrightTest('late', 'expected')],
+        candidate: [...skipped, playwrightTest('late', 'unexpected')],
+      }),
+    ),
+  ).split('\n');
+
+  expect(list[1]).toMatch(/^- \*\*Regression\*\* · late\. /);
+  expect(list.at(-1)).toBe('- More in the report: 11 unknown.');
+});
+
 test('GitHub lists a large imported suite in one line and never every passing test', async () => {
   const passing = Array.from({ length: 400 }, (_, index) =>
     playwrightTest(`case ${index}`, 'expected'),

@@ -538,11 +538,32 @@ test('redacts a concealed value in text attachments and keeps no zip that holds 
     '- button "Finished" [active]\n',
   );
 
+  const har = path.join(workspace, 'network.har');
+
+  await writeFile(har, '{"text": "Finished"}\n');
+
+  const parsed = await run(parseJsonReport(report));
   const directory = await temporary();
   const artifacts = new Map<string, string>();
   const value = await run(
     collectReport({
-      report: await run(parseJsonReport(report)),
+      report: {
+        ...parsed,
+        tests: parsed.tests.map((item) => ({
+          ...item,
+          results: item.results.map((result) => ({
+            ...result,
+            attachments: [
+              ...result.attachments,
+              {
+                name: 'har',
+                contentType: 'application/octet-stream',
+                source: { kind: 'file', path: har },
+              },
+            ],
+          })),
+        })),
+      },
       exitCode: 1,
       root: workspace,
       workspace,
@@ -562,7 +583,7 @@ test('redacts a concealed value in text attachments and keeps no zip that holds 
   expect(byName('trace')).toEqual({
     kind: 'unavailable',
     reason:
-      'The zip may hold a value from the collector environment, so Observed did not keep it',
+      'The file may hold a value from the collector environment, so Observed did not keep it',
   });
   expect(
     await readFile(
@@ -570,5 +591,6 @@ test('redacts a concealed value in text attachments and keeps no zip that holds 
       'utf8',
     ),
   ).toBe('- button "[REDACTED]" [active]\n');
+  expect(byName('har')?.kind).toBe('unavailable');
   expect(byName('screenshot')?.kind).toBe('recorded');
 });

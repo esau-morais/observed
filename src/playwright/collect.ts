@@ -34,20 +34,35 @@ function safeName(name: string): string {
 
 const textTypes = /^(?:text\/|application\/(?:json|xml)\b)/;
 
-// Every entry's text, checked for a concealed value in any encoding conceal
-// knows. A zip can't be redacted in place, so one that holds a value is not
-// kept.
-function zipHolds(bytes: Uint8Array, concealed: readonly string[]): boolean {
-  const decoder = new TextDecoder();
-
-  return [...readZip(bytes, maxZipEntry).values()].some((entry) => {
-    const text = decoder.decode(entry.read());
-
-    return conceal(text, concealed) !== text;
-  });
-}
-
 const maxZipEntry = 256 * 1024 * 1024;
+
+// Checks the raw bytes and, for a zip, each entry's contents, since those
+// are usually compressed. A zip that can't be read counts as holding one.
+function holdsConcealed(
+  bytes: Uint8Array,
+  concealed: readonly string[],
+): boolean {
+  const found = (text: string) => conceal(text, concealed) !== text;
+
+  if (
+    found(new TextDecoder().decode(bytes)) ||
+    found(new TextDecoder('latin1').decode(bytes))
+  ) {
+    return true;
+  }
+
+  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) {
+    return false;
+  }
+
+  try {
+    return [...readZip(bytes, maxZipEntry).values()].some((entry) =>
+      found(new TextDecoder().decode(entry.read())),
+    );
+  } catch {
+    return true;
+  }
+}
 
 // Report paths are data, so a file outside `root`, including through a
 // symlink, is never read.
@@ -101,7 +116,6 @@ const copyAttachment = Effect.fnUntraced(function* (options: {
   const destination = path.join(options.directory, options.filename);
   const isTrace =
     attachment.name === 'trace' && attachment.contentType === 'application/zip';
-  const isZip = attachment.contentType === 'application/zip';
   let trace: PlaywrightAttachment['trace'] = null;
   let description = `${options.description}, copied unchanged`;
 
@@ -114,23 +128,18 @@ const copyAttachment = Effect.fnUntraced(function* (options: {
       { flag: 'wx' },
     );
     description = `${options.description}; credentials redacted`;
-  } else if (isTrace || (isZip && options.concealed.length > 0)) {
+  } else if (isTrace || options.concealed.length > 0) {
+    // Binary files can't be redacted, so one that may hold a concealed
+    // value is left out.
     const bytes = yield* fs.readFile(source.value);
 
-    if (options.concealed.length > 0) {
-      let holds = true;
-
-      try {
-        holds = zipHolds(bytes, options.concealed);
-      } catch {
-        // An unreadable zip can't be shown to be free of the values.
-      }
-
-      if (holds) {
-        return unavailable(
-          'The zip may hold a value from the collector environment, so Observed did not keep it',
-        );
-      }
+    if (
+      options.concealed.length > 0 &&
+      holdsConcealed(bytes, options.concealed)
+    ) {
+      return unavailable(
+        'The file may hold a value from the collector environment, so Observed did not keep it',
+      );
     }
 
     trace = isTrace ? summarizeTrace(bytes) : null;

@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   comparisonSchema,
   conclusionExitCodes,
+  type CheckVerdict,
   type Comparison,
   type Journey,
   type Side,
@@ -132,8 +133,16 @@ export function journeySides(
 // imported test suite can have hundreds of checks. The report lists them all.
 const listedChecks = 50;
 
+const severity = [
+  'regression',
+  'failed',
+  'unknown',
+  'not-run',
+  'passed',
+] as const satisfies readonly CheckVerdict['verdict'][];
+
 export function checkList(result: Comparison): string {
-  const lines = result.journeys.flatMap((journey) => {
+  const entries = result.journeys.flatMap((journey) => {
     const where =
       result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
     const imported = new Set(
@@ -141,32 +150,47 @@ export function checkList(result: Comparison): string {
         .filter((check) => check.authority !== 'Executed by Observed')
         .map((check) => check.id),
     );
-    const passedImported = journey.checks.filter(
-      (check) => check.verdict === 'passed' && imported.has(check.id),
-    ).length;
+    const folded = (check: CheckVerdict) =>
+      check.verdict === 'passed' && imported.has(check.id);
+    const passedImported = journey.checks.filter(folded).length;
 
     return [
       ...journey.checks
-        .filter(
-          (check) => !(check.verdict === 'passed' && imported.has(check.id)),
-        )
-        .map(
-          (check) =>
-            `- **${verdictLabels[check.verdict]}** · ${where}${inlineText(check.name)}. Scope: ${inlineText(check.scope)}${check.verdict === 'passed' ? '' : ` ${inlineText(check.detail)}`}`,
-        ),
+        .filter((check) => !folded(check))
+        .map((check) => ({
+          verdict: check.verdict,
+          count: 1,
+          text: `- **${verdictLabels[check.verdict]}** · ${where}${inlineText(check.name)}. Scope: ${inlineText(check.scope)}${check.verdict === 'passed' ? '' : ` ${inlineText(check.detail)}`}`,
+        })),
       ...(passedImported === 0
         ? []
         : [
-            `- **${verdictLabels.passed}** · ${where}${passedImported} imported ${passedImported === 1 ? 'test' : 'tests'}, listed in the report.`,
+            {
+              verdict: 'passed' as const,
+              count: passedImported,
+              text: `- **${verdictLabels.passed}** · ${where}${passedImported} imported ${passedImported === 1 ? 'test' : 'tests'}, listed in the report.`,
+            },
           ]),
     ];
   });
-  const hidden = lines.length - listedChecks;
+  const ordered = severity.flatMap((verdict) =>
+    entries.filter((entry) => entry.verdict === verdict),
+  );
+  const hidden = ordered.slice(listedChecks);
+  const more = severity.flatMap((verdict) => {
+    const count = hidden
+      .filter((entry) => entry.verdict === verdict)
+      .reduce((sum, entry) => sum + entry.count, 0);
+
+    return count === 0
+      ? []
+      : [`${count} ${verdictLabels[verdict].toLowerCase()}`];
+  });
 
   return [
     `**${checkSummary(result)}.**`,
-    ...lines.slice(0, listedChecks),
-    ...(hidden > 0 ? [`- ${hidden} more in the report.`] : []),
+    ...ordered.slice(0, listedChecks).map((entry) => entry.text),
+    ...(more.length === 0 ? [] : [`- More in the report: ${more.join(', ')}.`]),
   ].join('\n');
 }
 
