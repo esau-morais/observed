@@ -150,6 +150,17 @@ The [project schema](src/project.ts) and
   aren't recorded. When a step fails, the capture keeps these records so the
   report shows which step failed and which errors came before it. A capture that
   times out or is cancelled keeps none.
+- Observed points errors and React findings at the source line they came
+  from. While the app runs, it fetches the source map for each script that an
+  error's stack frame or a React component names: first `<script>.map`, then the
+  script's `sourceMappingURL`, from the app's own origin only. It saves the maps
+  with the capture and resolves the lines when it compares. Build with
+  `build: { sourcemap: 'hidden' }` in Vite, or your bundler's equivalent, so
+  the map sits next to the script without a comment that points browsers at it.
+  Without a map, Observed matches a name only where the diff defines it, such
+  as `function countShelfView`, and otherwise records why it has no line. It
+  never guesses one. A line in a stack frame shows where the error was thrown,
+  not what caused it.
 - Put the expected result in the check, not in a step. A step that waits for the
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,

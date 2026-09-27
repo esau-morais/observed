@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schema } from 'effect';
+import { DateTime, Effect, Option, Schema } from 'effect';
 import { readFile, realpath } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -54,6 +54,16 @@ import {
 import { nodeIo } from './node-io';
 import { decodePng, type DecodedPng } from './png';
 import { relativePathSchema } from './project';
+import {
+  journeyFindings,
+  type ScriptMap,
+  type SideSource,
+} from './source-anchors';
+import {
+  parseSourceMap,
+  sourceMapIndexPath,
+  sourceMapIndexSchema,
+} from './source-map';
 import { comparePixels } from './visual';
 
 const requiredArtifacts = [
@@ -1227,12 +1237,14 @@ export function compareJourney({
   evaluatedAt,
   visual,
   mode = 'comparison',
+  sources = { base: null, candidate: null },
 }: {
   base: Side;
   candidate: Side;
   evaluatedAt: string;
   visual: Visual;
   mode?: 'preview' | 'comparison';
+  sources?: { base: SideSource | null; candidate: SideSource | null };
 }): Journey {
   const base = sideAt(inspectedBase, evaluatedAt);
   const candidate = sideAt(inspectedCandidate, evaluatedAt);
@@ -1299,7 +1311,7 @@ export function compareJourney({
     pairs?.map((pair) => pair.candidate),
   );
 
-  return {
+  const journey = {
     title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
     base: evaluatedBase,
     candidate: evaluatedCandidate,
@@ -1319,6 +1331,8 @@ export function compareJourney({
       ...(mode === 'comparison' ? observedSourceNotes(base, candidate) : []),
     ],
   };
+
+  return { ...journey, findings: journeyFindings(journey, sources) };
 }
 
 export function summarizeJourneys({
@@ -1453,6 +1467,111 @@ const inspectVisual = Effect.fnUntraced(
   ),
 );
 
+const readArtifactText = Effect.fnUntraced(function* (
+  root: string,
+  artifact: CaptureArtifact,
+) {
+  const read = yield* readVerifiedArtifact(root, artifact);
+
+  return read.kind === 'available'
+    ? new TextDecoder().decode(read.bytes)
+    : null;
+});
+
+// The verified source snapshot and source maps of one capture, read only
+// when every snapshot file is intact.
+const loadSideSource = Effect.fnUntraced(
+  function* (directory: string | null, side: Side) {
+    if (directory === null || side.execution === 'unavailable') {
+      return null;
+    }
+
+    const root = yield* nodeIo(() => realpath(directory));
+    const { manifest } = side.capture;
+    const byPath = new Map(
+      manifest.artifacts.map((artifact) => [artifact.path, artifact]),
+    );
+    const links = new Map(
+      side.artifacts.flatMap((artifact) =>
+        artifact.integrity === 'verified' ? [[artifact.id, artifact.path]] : [],
+      ),
+    );
+    const files = new Map<string, string>();
+
+    for (const file of manifest.source.files) {
+      const artifact = byPath.get(`source/${file.path}`);
+      const content =
+        artifact === undefined || artifact.sha256 !== file.sha256
+          ? null
+          : yield* readArtifactText(root, artifact);
+
+      if (content === null) {
+        return null;
+      }
+
+      files.set(file.path, content);
+    }
+
+    const indexArtifact = byPath.get(sourceMapIndexPath);
+    const indexText =
+      indexArtifact === undefined
+        ? null
+        : yield* readArtifactText(root, indexArtifact);
+    const index =
+      indexText === null
+        ? null
+        : Option.getOrNull(
+            Schema.decodeUnknownOption(
+              Schema.fromJsonString(sourceMapIndexSchema),
+            )(indexText),
+          );
+
+    if (index === null) {
+      return {
+        files,
+        maps: {
+          kind: 'unavailable',
+          reason:
+            indexArtifact === undefined
+              ? 'The capture recorded no source maps'
+              : 'The source map index is unreadable',
+        },
+      } satisfies SideSource;
+    }
+
+    const scripts = new Map<string, ScriptMap>();
+
+    for (const entry of index.scripts) {
+      if (entry.map.kind === 'unavailable') {
+        scripts.set(entry.script, entry.map);
+        continue;
+      }
+
+      const artifact = byPath.get(entry.map.path);
+      const text =
+        artifact === undefined ? null : yield* readArtifactText(root, artifact);
+      const map = text === null ? null : parseSourceMap(text);
+      const link = artifact === undefined ? undefined : links.get(artifact.id);
+
+      scripts.set(
+        entry.script,
+        map === null || link === undefined
+          ? {
+              kind: 'unavailable',
+              reason: `The source map of ${entry.script} is missing or unreadable`,
+            }
+          : { kind: 'recorded', map, artifact: link },
+      );
+    }
+
+    return {
+      files,
+      maps: { kind: 'recorded', origin: index.origin, scripts },
+    } satisfies SideSource;
+  },
+  Effect.catchTag('EvidenceIoError', () => Effect.succeed(null)),
+);
+
 export const inspectJourney = Effect.fn('inspectJourney')(function* ({
   baseDirectory,
   candidateDirectory,
@@ -1520,6 +1639,13 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
     evaluatedAt,
     visual,
     mode,
+    sources: {
+      base:
+        mode === 'comparison'
+          ? yield* loadSideSource(baseDirectory, base)
+          : null,
+      candidate: yield* loadSideSource(candidateDirectory, candidate),
+    },
   });
 
   return {

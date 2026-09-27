@@ -21,6 +21,7 @@ import type { Project } from '../project';
 import { FillValueFailure, resolveFillValues, type Recipe } from './recipe';
 import { resolveCollectorEnvironment } from './collectors';
 import { EnvironmentValueFailure } from './collectors/define';
+import { recordSourceMaps } from './source-maps';
 import { snapshotApplication } from './snapshot';
 
 class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
@@ -252,6 +253,13 @@ export const captureApplication = Effect.fn('captureApplication')(
       });
 
       conditions = { kind: 'recorded', value: browserConditions };
+
+      yield* recordSourceMaps({
+        directory,
+        url,
+        concealed,
+        addArtifact,
+      }).pipe(Effect.orElseSucceed(() => undefined));
     }).pipe(Effect.scoped, Effect.timeout(options.timeoutMs ?? 120_000));
 
     yield* run.pipe(

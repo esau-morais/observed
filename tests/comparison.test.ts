@@ -104,6 +104,7 @@ async function syntheticBundle(
     browserErrors?: EvidenceValue<'browser-errors'>;
     playwright?: EvidenceValue<'playwright'>;
     files?: { path: string; content: string }[];
+    artifacts?: { id: string; path: string; text: string }[];
   } = {},
 ) {
   const directory = await mkdtemp(
@@ -206,6 +207,7 @@ async function syntheticBundle(
       path: `source/${file.path}`,
       text: file.content,
     })),
+    ...(options.artifacts ?? []),
   ];
 
   for (const content of contents) {
@@ -2330,4 +2332,171 @@ test('the seeded Playwright run compares to one regression, with flaky and skipp
     'shelves › keeps the count after a second click': 'unknown',
   });
   expect(result.conclusion.kind).toBe('regression');
+});
+
+const withErrors: Recipe = {
+  ...recipe,
+  checks: [
+    {
+      kind: 'browser-errors',
+      id: 'no-browser-errors',
+      name: 'No browser errors',
+      scope: 'One Load items click through completion and network idle.',
+    },
+  ],
+  collectors: [{ kind: 'browser-errors' }],
+};
+
+const appBefore = 'function open(id) {\n  load(id);\n}\n';
+const appAfter = [
+  'function count(id) {',
+  '  window.views[id] += 1;',
+  '}',
+  'function open(id) {',
+  '  load(id);',
+  '  count(id);',
+  '}',
+  '',
+].join('\n');
+
+// Generated line 1: column 0 maps to src/app.js line 2 and column 10 to line
+// 6, both 1-based. The node_modules source must never become an anchor.
+const appMap = json({
+  version: 3,
+  sources: ['../../src/app.js', '../../node_modules/lib/index.js'],
+  names: [],
+  mappings: 'AACA,UAIA,UCAA',
+});
+
+function thrown(frames: string): EvidenceValue<'browser-errors'> {
+  return {
+    steps: 3,
+    coverage: { kind: 'complete' },
+    entries: [
+      {
+        source: 'page',
+        text: `TypeError: Cannot read properties of undefined\n${frames}`,
+        step: 0,
+        after: '2026-09-23T11:59:54.000Z',
+        seenAt: '2026-09-23T11:59:54.300Z',
+      },
+    ],
+  };
+}
+
+async function errorFindings(frames: string, maps: boolean) {
+  const artifacts = maps
+    ? [
+        {
+          id: 'source-maps',
+          path: 'source-maps.json',
+          text: json({
+            schemaVersion: 1,
+            origin: 'http://127.0.0.1:4173',
+            scripts: [
+              {
+                script: '/assets/app.js',
+                map: {
+                  kind: 'recorded',
+                  path: 'source-maps/1-app.js.map',
+                  via: 'adjacent',
+                },
+              },
+            ],
+          }),
+        },
+        { id: 'source-map-1', path: 'source-maps/1-app.js.map', text: appMap },
+      ]
+    : [];
+  const bundle = (
+    content: string,
+    browserErrors?: EvidenceValue<'browser-errors'>,
+  ) =>
+    syntheticBundle({
+      contract: withErrors,
+      browserErrors: browserErrors ?? thrown(''),
+      files: [
+        { path: 'main.ts', content: 'Synthetic source fixture.\n' },
+        { path: 'src/app.js', content },
+      ],
+      artifacts,
+    });
+  const base = await bundle(appBefore, {
+    steps: 3,
+    coverage: { kind: 'complete' },
+    entries: [],
+  });
+  const candidate = await bundle(appAfter, thrown(frames));
+  const { journey } = await Effect.runPromise(
+    inspectJourney({
+      baseDirectory: base.directory,
+      candidateDirectory: candidate.directory,
+      evaluatedAt,
+    }),
+  );
+
+  return journey.findings;
+}
+
+test('resolves stack frames through the recorded source map to 1-based lines of the added code', async () => {
+  const findings = await errorFindings(
+    [
+      '    at hh (http://127.0.0.1:4173/assets/app.js:1:10)',
+      '    at bl (http://127.0.0.1:4173/assets/app.js:1:11)',
+      '    at lib (http://127.0.0.1:4173/assets/app.js:1:21)',
+    ].join('\n'),
+    true,
+  );
+
+  expect(findings).toMatchObject([
+    {
+      evidence: 'browser-errors',
+      checks: ['no-browser-errors'],
+      subject: 'TypeError thrown',
+      comparison: 'new',
+      location: {
+        kind: 'anchored',
+        anchors: [
+          {
+            path: 'src/app.js',
+            line: 2,
+            side: 'candidate',
+            basis: 'stack-frame',
+            diff: 'added',
+            artifacts: ['candidate/source-maps/1-app.js.map'],
+          },
+          { path: 'src/app.js', line: 6, diff: 'added' },
+        ],
+      },
+    },
+  ]);
+  expect(
+    findings[0]?.location.kind === 'anchored' &&
+      findings[0].location.anchors.length,
+  ).toBe(2);
+});
+
+test('without a source map, minified frame names give no line, and a readable name matches only its added definition', async () => {
+  const minified = await errorFindings(
+    '    at hh (http://127.0.0.1:4173/assets/app.js:1:10)',
+    false,
+  );
+
+  expect(minified[0]?.location).toEqual({
+    kind: 'unanchored',
+    reason:
+      'The capture recorded no source maps; no frame function is defined on an added line',
+  });
+
+  const named = await errorFindings(
+    '    at count (http://127.0.0.1:4173/assets/app.js:1:10)',
+    false,
+  );
+
+  expect(named[0]?.location).toMatchObject({
+    kind: 'anchored',
+    anchors: [
+      { path: 'src/app.js', line: 1, basis: 'diff-name-match', diff: 'added' },
+    ],
+  });
 });

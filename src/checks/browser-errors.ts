@@ -43,7 +43,7 @@ function message(error: BrowserError): string {
 
 // The application listens on a new port for every capture, so a message that
 // names it would otherwise never match between base and candidate.
-function signature(error: BrowserError): string {
+export function signature(error: BrowserError): string {
   const line = message(error)
     .replaceAll(/https?:\/\/(?:127\.0\.0\.1|localhost):\d+/g, '<application>')
     .trim();
@@ -60,14 +60,20 @@ function describe(errors: readonly StepError[]): string {
   return errors.length > 3 ? `${shown}; and ${errors.length - 3} more` : shown;
 }
 
+export function ignoredBy(
+  check: Pick<Definition, 'ignore'>,
+  error: BrowserError,
+): boolean {
+  return (check.ignore ?? []).some((pattern) =>
+    new RegExp(pattern).test(message(error)),
+  );
+}
+
 function classify(check: Definition, record: ErrorRecord) {
-  const patterns = (check.ignore ?? []).map((pattern) => new RegExp(pattern));
   const during = record.entries.filter(
     (error): error is StepError => error.step !== null,
   );
-  const ignored = during.filter((error) =>
-    patterns.some((pattern) => pattern.test(message(error))),
-  );
+  const ignored = during.filter((error) => ignoredBy(check, error));
 
   return {
     counted: during.filter((error) => !ignored.includes(error)),

@@ -228,6 +228,54 @@ const checkVerdictSchema = Schema.Struct({
   measure: Schema.optionalKey(measureSchema),
 });
 
+const lineNumber = Schema.Int.check(Schema.isGreaterThan(0));
+
+// A source line that evidence points at. `path` is relative to the captured
+// project, as in its source snapshot; `side` names the snapshot the line
+// number counts in. `diff` places the line in the base..candidate diff, and
+// is unknown without a comparable base snapshot.
+const anchorSchema = Schema.Struct({
+  path: text,
+  line: lineNumber,
+  side: Schema.Literals(['base', 'candidate']),
+  basis: Schema.Literals([
+    'stack-frame',
+    'component-source',
+    'test-location',
+    'diff-name-match',
+  ]),
+  evidence: text,
+  artifacts: Schema.Array(text),
+  diff: Schema.Literals([
+    'added',
+    'removed',
+    'context',
+    'unchanged',
+    'unknown',
+  ]),
+});
+
+// One observed problem or change, with the checks it bears on. A location is
+// a fact about where evidence points, never a cause.
+const findingSchema = Schema.Struct({
+  id: text,
+  evidence: text,
+  checks: Schema.Array(text),
+  subject: text,
+  comparison: Schema.Literals(['new', 'persisting', 'changed', 'no-baseline']),
+  location: Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal('anchored'),
+      anchors: Schema.NonEmptyArray(anchorSchema),
+    }),
+    Schema.Struct({ kind: Schema.Literal('unanchored'), reason: text }),
+  ]),
+});
+
+export type Anchor = typeof anchorSchema.Type;
+
+export type Finding = typeof findingSchema.Type;
+
 export const journeySchema = Schema.Struct({
   title: text,
   base: sideSchema,
@@ -246,13 +294,14 @@ export const journeySchema = Schema.Struct({
     }),
   ]),
   checks: Schema.Array(checkVerdictSchema),
+  findings: Schema.Array(findingSchema),
   conclusion: conclusionSchema,
   limitations: Schema.Array(text),
 });
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-export const resultSchemaVersion = 6;
+export const resultSchemaVersion = 7;
 
 export const comparisonSchema = Schema.Struct({
   schemaVersion: Schema.Literal(resultSchemaVersion),
