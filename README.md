@@ -166,6 +166,61 @@ The [project schema](src/project.ts) and
   tree's `observed.json`. A start script that exists only in the working tree
   makes the base capture fail, so commit it before comparing.
 
+### Measure browser performance
+
+Add `{ "kind": "performance" }` to a journey's `collectors` to record timing
+samples. A `performance` check adds it for you. After the journey's capture,
+Observed opens a second browser session without DevTools tracing or React
+instrumentation. It runs `warmup` discarded runs (default 1, 1 to 5), then `samples`
+runs (default 5, 3 to 20), all in that one session. Each run opens `path`, runs
+`ready` and `steps`, and reads LCP, FCP, TTFB, CLS, INP, and the
+DOMContentLoaded and load times of the page open at the end. The runs count
+toward `--timeout`, and each one repeats whatever the journey changes on the
+server.
+
+The numbers are local samples from one machine, not production percentiles.
+CPU and network are unthrottled, because agent-browser 0.38.1 can't throttle
+them, and the browser cache is warm after the warm-up. Each side runs its own
+copy of the app, so base samples run before candidate samples and drift between
+the two runs is not controlled.
+
+LCP stops at the first click or key press, and INP covers the interactions on
+the final page. Neither measures a response that arrives after an interaction,
+such as a slow API behind a button.
+
+A `performance` check in `checks` sets a budget on one metric's median:
+
+```json
+{
+  "kind": "performance",
+  "id": "lcp-budget",
+  "name": "Largest contentful paint",
+  "scope": "Open the shelf page through the Reading click.",
+  "metric": "lcp",
+  "max": 2500,
+  "maxIncreasePercent": 20
+}
+```
+
+`metric` is `lcp`, `fcp`, `ttfb`, `cls`, `inp`, `dom-content-loaded` or `load`.
+`max` is in milliseconds, or unitless for `cls`, and applies to each side's
+median. `maxIncreasePercent` compares the candidate median with the base
+median. That relative budget fails only when the median rises by more than the
+percentage and every candidate sample is higher than every base sample. When
+the ranges overlap it is unknown; more samples may settle it. It is also
+unknown in a preview, when the two sides ended on different pages, and when the
+base median is 0 but the candidate's is not. That last case is common for
+`cls`, so give `cls` a `max`. With a relative budget, the whole check is
+unknown in a comparison whose base samples are missing or not comparable. A
+metric missing from any sample, such as INP on a journey without a click or key
+press, makes the check unknown.
+
+For inspection, set `"inspect": true` on the collector:
+`{ "kind": "performance", "inspect": true }`. Observed then records one
+DevTools trace run and one profiler run per side after the samples. Recording
+slows the page, so these files never count as samples. A trace is several
+megabytes.
+
 <details>
 <summary>Agent capture and import interfaces</summary>
 
