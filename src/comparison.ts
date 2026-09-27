@@ -175,6 +175,7 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
   base: CompleteSide | null,
   candidate: CompleteSide,
   mode: 'preview' | 'comparison',
+  comparable: boolean,
 ): CheckPair {
   const kind: CheckKinds[K] = checkKinds[definition.kind];
   const baseInput = base === null ? null : checkInput(base, kind.evidence);
@@ -185,12 +186,17 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
     detail,
   });
 
-  const baseMissing =
-    mode === 'comparison' &&
-    kind.needsBase === true &&
-    (baseInput === null || baseInput.kind === 'missing')
-      ? `Base: ${baseInput?.kind === 'missing' ? baseInput.detail : 'capture unavailable'}`
-      : null;
+  let baseMissing: string | null = null;
+
+  if (mode === 'comparison' && kind.needsBase === true) {
+    if (baseInput === null) {
+      baseMissing = 'Base: capture unavailable';
+    } else if (baseInput.kind === 'missing') {
+      baseMissing = `Base: ${baseInput.detail}`;
+    } else if (!comparable) {
+      baseMissing = 'Base: not comparable with the candidate';
+    }
+  }
 
   const evaluated =
     candidateInput.kind === 'ready' && baseMissing === null
@@ -198,6 +204,7 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
           definition,
           base: baseInput?.kind === 'ready' ? baseInput.input : null,
           candidate: candidateInput.input,
+          comparable,
         })
       : null;
 
@@ -224,6 +231,7 @@ function evaluateDefinition<K extends CheckDefinition['kind']>(
                 definition,
                 base: null,
                 candidate: baseInput.input,
+                comparable: false,
               }).candidate
             : missing('Base evaluation unavailable')));
   }
@@ -248,9 +256,10 @@ function evaluatePairs(
   base: CompleteSide | null,
   candidate: CompleteSide,
   mode: 'preview' | 'comparison',
+  comparable: boolean,
 ): CheckPair[] {
   return candidate.recipe.checks.map((definition) =>
-    evaluateDefinition(definition, base, candidate, mode),
+    evaluateDefinition(definition, base, candidate, mode, comparable),
   );
 }
 
@@ -734,7 +743,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
 
       return {
         ...side,
-        checks: evaluatePairs(null, side, 'preview').map(
+        checks: evaluatePairs(null, side, 'preview', false).map(
           (pair) => pair.candidate.check,
         ),
       } satisfies Side;
@@ -1171,6 +1180,7 @@ export function compareJourney({
           mode === 'comparison' && base.execution === 'complete' ? base : null,
           candidate,
           mode,
+          comparison.kind === 'available',
         )
       : null;
   const verdicts = verdictsFor(

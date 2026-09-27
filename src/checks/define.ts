@@ -40,14 +40,18 @@ export type CheckKind<D extends CheckIdentity, K extends EvidenceKind> = {
   ) => readonly CollectorConfig[];
   readonly expectation: (definition: D) => string;
   // Set when the rule compares the candidate with the base. In a comparison
-  // with an unusable base, or base evidence missing, the candidate is then
-  // unknown and `evaluate` is not called; a preview still calls it.
+  // whose base is unusable, missing declared evidence, or not comparable, the
+  // candidate is then unknown and `evaluate` is not called for it; a preview
+  // still calls it.
   readonly needsBase?: true;
   // `base` is null in a preview or when the base side is unusable.
+  // `comparable` is true only when the journey's comparison is available;
+  // a rule reading both sides must not pass on an incomparable pair.
   readonly evaluate: (input: {
     definition: D;
     base: CheckInput<K> | null;
     candidate: CheckInput<K>;
+    comparable: boolean;
   }) => { base: Evaluation | null; candidate: Evaluation };
   // Runs only for comparable captures whose evaluations are both passed or
   // failed. Defaults to base passed and candidate failed.
@@ -75,6 +79,7 @@ export function perSide<D, K extends EvidenceKind>(
     definition: D;
     base: CheckInput<K> | null;
     candidate: CheckInput<K>;
+    comparable: boolean;
   }) => ({
     base: base === null ? null : evaluate(definition, base),
     candidate: evaluate(definition, candidate),

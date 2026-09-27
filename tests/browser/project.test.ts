@@ -325,7 +325,10 @@ async function reportPage(
       ),
     ).toEqual(
       JSON.parse(
-        await readFile(path.join(directory, 'candidate/requests.har'), 'utf8'),
+        await readFile(
+          path.join(directory, 'journey-1/candidate/requests.har'),
+          'utf8',
+        ),
       ),
     );
   } finally {
@@ -449,20 +452,28 @@ async function viewer(
               'screenshot',
               path.join(evidence, 'viewer-highlighted.png'),
             );
-            const diff = await fetch(new URL('visual-diff.png', String(url)));
+            const diff = await fetch(
+              new URL('journey-1/visual-diff.png', String(url)),
+            );
             expect(diff.status).toBe(200);
             expect(sha256(new Uint8Array(await diff.arrayBuffer()))).toBe(
-              sha256(await readFile(path.join(directory, 'visual-diff.png'))),
+              sha256(
+                await readFile(
+                  path.join(directory, 'journey-1/visual-diff.png'),
+                ),
+              ),
             );
           }
 
           const response = await fetch(
-            new URL('candidate/requests.har', String(url)),
+            new URL('journey-1/candidate/requests.har', String(url)),
           );
           expect(response.status).toBe(200);
           expect(sha256(new Uint8Array(await response.arrayBuffer()))).toBe(
             sha256(
-              await readFile(path.join(directory, 'candidate/requests.har')),
+              await readFile(
+                path.join(directory, 'journey-1/candidate/requests.har'),
+              ),
             ),
           );
         } finally {
@@ -947,28 +958,32 @@ test('additional origins preserve previews and keep same-path request checks sep
         label: 'unconfigured',
         allowed: false,
         check: undefined,
-        outcome: 'unknown',
+        conclusion: 'unavailable',
+        verdicts: [],
         exit: 1,
       },
       {
         label: 'preview',
         allowed: true,
         check: undefined,
-        outcome: 'not-run',
+        conclusion: 'preview',
+        verdicts: [],
         exit: 0,
       },
       {
         label: 'application',
         allowed: true,
         check,
-        outcome: 'passed',
+        conclusion: 'preview',
+        verdicts: ['passed'],
         exit: 0,
       },
       {
         label: 'backend',
         allowed: true,
         check: { ...check, origin, status: 202 },
-        outcome: 'passed',
+        conclusion: 'preview',
+        verdicts: ['passed'],
         exit: 0,
       },
     ]) {
@@ -990,11 +1005,12 @@ test('additional origins preserve previews and keep same-path request checks sep
         scenario.exit,
       );
       expect(result.result.journeys[0].candidate.screenshot).not.toBeNull();
-      expect(result.result.journeys[0].candidate.checks[0]?.outcome).toBe(
-        scenario.outcome,
-      );
+      expect(result.result.conclusion.kind).toBe(scenario.conclusion);
+      expect(
+        result.result.journeys[0].checks.map((item) => item.verdict),
+      ).toEqual(scenario.verdicts);
       const har = await readJson(
-        path.join(result.directory, 'candidate/requests.har'),
+        path.join(result.directory, 'journey-1/candidate/requests.har'),
         harSchema,
       );
       expect(

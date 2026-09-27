@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
-import { createContext, use, useId, useState, type ReactNode } from 'react';
+import { createContext, use, useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
 import { describeRevision, shortSource } from '../provenance-text';
 import { describeStatus } from '../request-text';
@@ -397,15 +397,16 @@ export function ChangedRegions({
   visual,
   before,
   after,
+  id,
   level = 2,
 }: {
   visual: Extract<Visual, { kind: 'changed' }>;
   before: string;
   after: string;
+  id: string;
   level?: 2 | 3;
 }) {
   const resolve = use(EvidenceUrls);
-  const id = useId();
   const Heading = level === 2 ? 'h2' : 'h3';
 
   return (

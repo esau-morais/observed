@@ -672,6 +672,7 @@ function JourneyView({
             visual={visual}
             before={journey.base.screenshot}
             after={journey.candidate.screenshot}
+            id={`${prefix}changed-regions`}
             level={level}
           />
         ) : null}
