@@ -489,21 +489,21 @@ test('compares a React commit with a duplicate-request worktree through the publ
     2,
   );
   expect(result.result.conclusion.kind).toBe('regression');
-  expect(result.result.comparison.kind).toBe('available');
+  expect(result.result.journeys[0].comparison.kind).toBe('available');
   expect(['identical', 'below-threshold']).toContain(
-    result.result.comparison.kind === 'available'
-      ? result.result.comparison.visual.kind
-      : result.result.comparison.kind,
+    result.result.journeys[0].comparison.kind === 'available'
+      ? result.result.journeys[0].comparison.visual.kind
+      : result.result.journeys[0].comparison.kind,
   );
   const before = await rawCapture(
-    path.join(result.directory, 'base'),
+    path.join(result.directory, 'journey-1', 'base'),
     1,
     'GET',
     '/api/items',
     200,
   );
   const after = await rawCapture(
-    path.join(result.directory, 'candidate'),
+    path.join(result.directory, 'journey-1', 'candidate'),
     2,
     'GET',
     '/api/items',
@@ -543,9 +543,9 @@ test('compares a React commit with a duplicate-request worktree through the publ
   };
   expect(before.observed).toEqual(observed);
   expect(after.observed).toEqual(observed);
-  expect(await pageTree(path.join(result.directory, 'candidate'))).toEqual(
-    await pageTree(path.join(result.directory, 'base')),
-  );
+  expect(
+    await pageTree(path.join(result.directory, 'journey-1', 'candidate')),
+  ).toEqual(await pageTree(path.join(result.directory, 'journey-1', 'base')));
   await viewer(result.directory, 'comparison', after.source.sha256);
   await reportPage(result, 'Regression', 0);
 
@@ -558,7 +558,7 @@ test('compares a React commit with a duplicate-request worktree through the publ
         'run',
         'compare',
         'none',
-        path.join(result.directory, 'candidate'),
+        path.join(result.directory, 'journey-1', 'candidate'),
         '--json',
         '--output',
         path.join(evidence, 'react-duplicate-preview'),
@@ -567,20 +567,21 @@ test('compares a React commit with a duplicate-request worktree through the publ
       2,
     ),
   );
-  expect(previewed.result.comparison.kind).toBe('preview');
+  expect(previewed.result.journeys[0].comparison.kind).toBe('preview');
   expect(previewed.result.conclusion.kind).toBe('check-failed');
 
   await cp(path.join(project, 'visual.ts'), path.join(project, 'base.ts'));
   const visual = await observe(project, 'react-visual', ['--base', 'HEAD']);
-  expect(visual.result.comparison).toMatchObject({
+  expect(visual.result.journeys[0].comparison).toMatchObject({
     kind: 'available',
     visual: { kind: 'changed', regionCount: 1 },
   });
-  expect(visual.result.candidate.check.outcome).toBe('passed');
+  expect(visual.result.journeys[0].candidate.checks[0]?.outcome).toBe('passed');
   await viewer(
     visual.directory,
     'comparison',
-    visual.result.candidate.capture?.manifest.source.sha256 ?? 'no capture',
+    visual.result.journeys[0].candidate.capture?.manifest.source.sha256 ??
+      'no capture',
     1,
   );
   await reportPage(visual, 'No regression', 1);
@@ -589,10 +590,10 @@ test('compares a React commit with a duplicate-request worktree through the publ
 test('previews a non-React app without checks and then applies its own POST expectation', async () => {
   const project = await copyProject('shop', 'shop-app');
   const preview = await observe(project, 'shop-preview');
-  expect(preview.result.comparison.kind).toBe('preview');
-  expect(preview.result.candidate.check.outcome).toBe('not-run');
+  expect(preview.result.journeys[0].comparison.kind).toBe('preview');
+  expect(preview.result.journeys[0].candidate.checks).toEqual([]);
   const captured = await rawCapture(
-    path.join(preview.directory, 'candidate'),
+    path.join(preview.directory, 'journey-1', 'candidate'),
     1,
     'POST',
     '/orders',
@@ -625,8 +626,8 @@ test('previews a non-React app without checks and then applies its own POST expe
     }),
   );
   const compared = await observe(project, 'shop-compared', ['--base', 'HEAD']);
-  expect(compared.result.comparison.kind).toBe('available');
-  expect(compared.result.candidate.check).toMatchObject({
+  expect(compared.result.journeys[0].comparison.kind).toBe('available');
+  expect(compared.result.journeys[0].candidate.checks[0]).toMatchObject({
     outcome: 'passed',
     actual: 1,
   });
@@ -636,12 +637,14 @@ test('previews a non-React app without checks and then applies its own POST expe
     ['--base', 'no-such-revision'],
     1,
   );
-  expect(missing.result.comparison.kind).toBe('unavailable');
-  expect(missing.result.candidate.check.outcome).toBe('passed');
-  expect(missing.result.base.unresolved.join(' ')).toContain(
+  expect(missing.result.journeys[0].comparison.kind).toBe('unavailable');
+  expect(missing.result.journeys[0].candidate.checks[0]?.outcome).toBe(
+    'passed',
+  );
+  expect(missing.result.journeys[0].base.unresolved.join(' ')).toContain(
     'no-such-revision',
   );
-  expect(missing.result.base.unresolved.join(' ')).toContain(
+  expect(missing.result.journeys[0].base.unresolved.join(' ')).toContain(
     'Needed a single revision',
   );
 });
@@ -683,9 +686,11 @@ test('redacted text cannot satisfy a literal text expectation', async () => {
     }),
   );
   const result = await observe(project, 'shop-redacted-result', [], 1);
-  expect(result.result.candidate.check.outcome).toBe('unknown');
-  expect(result.result.candidate.screenshot).toBeNull();
-  expect(result.result.candidate.unresolved.join(' ')).toContain(
+  expect(result.result.journeys[0].candidate.checks[0]?.outcome).toBe(
+    'unknown',
+  );
+  expect(result.result.journeys[0].candidate.screenshot).toBeNull();
+  expect(result.result.journeys[0].candidate.unresolved.join(' ')).toContain(
     'Text observation contains credentials',
   );
 });
@@ -734,6 +739,11 @@ test.each([
       path.join(project, 'observed.json'),
       projectSchema,
     );
+
+    if (config.capture === undefined) {
+      throw new Error('The access-code fixture uses one journey');
+    }
+
     await writeFile(
       path.join(project, 'observed.json'),
       json({
@@ -763,7 +773,7 @@ test.each([
     );
     const capture = path.join(
       evidence,
-      `access-code-${label}-result/captures/candidate`,
+      `access-code-${label}-result/captures/journey-1/candidate`,
     );
     const fills = (await transcript(capture)).filter(
       (record) => record.args.at(-2) === 'batch',
@@ -771,13 +781,19 @@ test.each([
     expect(fills).toHaveLength(1);
 
     if (exit === 0) {
-      expect(result.result.candidate.check.outcome).toBe('passed');
+      expect(result.result.journeys[0].candidate.checks[0]?.outcome).toBe(
+        'passed',
+      );
       expect(
         await readFile(path.join(capture, 'application.log'), 'utf8'),
       ).toContain('/session/[REDACTED]');
     } else {
-      expect(result.result.candidate.execution).toBe('capture-failed');
-      expect(result.result.candidate.check.outcome).not.toBe('passed');
+      expect(result.result.journeys[0].candidate.execution).toBe(
+        'capture-failed',
+      );
+      expect(result.result.journeys[0].candidate.checks[0]?.outcome).not.toBe(
+        'passed',
+      );
     }
 
     const leaks: string[] = [];
@@ -824,12 +840,16 @@ test.each([
         ...(value === undefined ? {} : { OBSERVED_ACCESS_CODE: value }),
       },
     );
-    expect(result.result.candidate.execution).toBe('capture-failed');
-    expect(result.result.candidate.check.outcome).not.toBe('passed');
+    expect(result.result.journeys[0].candidate.execution).toBe(
+      'capture-failed',
+    );
+    expect(result.result.journeys[0].candidate.checks[0]?.outcome).not.toBe(
+      'passed',
+    );
     expect(result.result.conclusion.kind).toBe('unavailable');
     const capture = path.join(
       evidence,
-      `access-code-${label}-result/captures/candidate`,
+      `access-code-${label}-result/captures/journey-1/candidate`,
     );
     const manifest = await readJson(
       path.join(capture, 'capture.json'),
@@ -852,11 +872,11 @@ test.each([
 test('a form submission answered by a redirect keeps the capture complete', async () => {
   const project = await copyProject('form-redirect', 'form-redirect');
   const result = await observe(project, 'form-redirect-result');
-  expect(result.result.candidate.execution).toBe('complete');
-  expect(result.result.candidate.check.outcome).toBe('passed');
+  expect(result.result.journeys[0].candidate.execution).toBe('complete');
+  expect(result.result.journeys[0].candidate.checks[0]?.outcome).toBe('passed');
   const capture = path.join(
     evidence,
-    'form-redirect-result/captures/candidate',
+    'form-redirect-result/captures/journey-1/candidate',
   );
   const observations = await readJson(
     path.join(capture, 'observations.json'),
@@ -969,8 +989,10 @@ test('additional origins preserve previews and keep same-path request checks sep
         [],
         scenario.exit,
       );
-      expect(result.result.candidate.screenshot).not.toBeNull();
-      expect(result.result.candidate.check.outcome).toBe(scenario.outcome);
+      expect(result.result.journeys[0].candidate.screenshot).not.toBeNull();
+      expect(result.result.journeys[0].candidate.checks[0]?.outcome).toBe(
+        scenario.outcome,
+      );
       const har = await readJson(
         path.join(result.directory, 'candidate/requests.har'),
         harSchema,
@@ -987,15 +1009,17 @@ test('additional origins preserve previews and keep same-path request checks sep
         { origin: 'backend', path: '/orders', status: 202 },
       ]);
       if (scenario.allowed) {
-        expect(result.result.candidate.execution).toBe('complete');
+        expect(result.result.journeys[0].candidate.execution).toBe('complete');
         if (scenario.check !== undefined) {
-          expect(result.result.candidate.check.actual).toBe(1);
+          expect(result.result.journeys[0].candidate.checks[0]?.actual).toBe(1);
         }
       } else {
-        expect(result.result.candidate.execution).toBe('capture-failed');
+        expect(result.result.journeys[0].candidate.execution).toBe(
+          'capture-failed',
+        );
       }
 
-      await cleanup(path.join(result.directory, 'candidate'));
+      await cleanup(path.join(result.directory, 'journey-1', 'candidate'));
     }
 
     expect(requests).toEqual(Array.from({ length: 4 }, () => 'POST /orders'));
@@ -1151,9 +1175,11 @@ test('bun start opens the example from a fresh checkout without an app path', as
       Schema.fromJsonString(comparisonSchema),
     )(await response.text());
     expect(result.mode).toBe('preview');
-    expect(result.candidate.execution).toBe('complete');
-    expect(result.candidate.check.outcome).toBe('passed');
-    expect(result.candidate.capture?.manifest.observed.source).toEqual({
+    expect(result.journeys[0].candidate.execution).toBe('complete');
+    expect(result.journeys[0].candidate.checks[0]?.outcome).toBe('passed');
+    expect(
+      result.journeys[0].candidate.capture?.manifest.observed.source,
+    ).toEqual({
       kind: 'unavailable',
       reason:
         "Observed's checkout has no HEAD commit; see observed-transcript.jsonl",

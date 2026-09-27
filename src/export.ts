@@ -10,10 +10,7 @@ import {
 } from './capture/model';
 import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
-import {
-  selectionSchema,
-  type JourneySelection,
-} from './comparison-model';
+import { selectionSchema, type JourneySelection } from './comparison-model';
 import { renderComparison } from './comparison-report';
 import { readVerifiedArtifact } from './evidence';
 import { nodeIo, type EvidenceIoError } from './node-io';
@@ -284,7 +281,9 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     sides.some(
       ({ base, candidate }) =>
         (candidate.root !== null && contains(candidate.root, destination)) ||
-        (base !== null && base.root !== null && contains(base.root, destination)),
+        (base !== null &&
+          base.root !== null &&
+          contains(base.root, destination)),
     ) ||
     contains(viewer, destination)
   ) {
@@ -340,7 +339,10 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     );
 
     if (base !== null) {
-      yield* copyCapture(base, path.join(destination, journeyDirectory, 'base'));
+      yield* copyCapture(
+        base,
+        path.join(destination, journeyDirectory, 'base'),
+      );
     }
 
     selected.push({

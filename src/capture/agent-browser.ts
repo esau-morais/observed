@@ -1,28 +1,19 @@
 import { DateTime, Effect, FileSystem, Option, Schema } from 'effect';
 import path from 'node:path';
 import { agentBrowserPath } from '../installation';
-import {
-  observationsSchema,
-  type Conditions,
-  type Observations,
-} from './model';
+import { observationsSchema, type Conditions } from './model';
 import { processOutput } from './process';
 import { json } from '../encoding';
-import { conceal, redact, redactText } from '../redact';
+import { redactText } from '../redact';
 import type { Recipe, Step } from './recipe';
 import { collectorFor } from './collectors';
 import {
   BrowserFailure,
-  EvidenceUnavailable,
   type CollectorContext,
   type CollectorError,
   type CollectorServices,
 } from './collectors/define';
-import {
-  evidenceKinds,
-  type CollectorConfig,
-  type EvidenceKind,
-} from '../evidence-kinds';
+import { evidenceKinds, type EvidenceKind } from '../evidence-kinds';
 
 export { BrowserFailure };
 

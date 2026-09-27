@@ -7,6 +7,7 @@ import {
   comparisonSchema,
   conclusionExitCodes,
   type Comparison,
+  type Journey,
   type Side,
 } from '../src/comparison-model';
 import type { Capture, Source } from '../src/capture/model';
@@ -34,11 +35,11 @@ import {
 import { describeRevision, shortSource } from '../src/provenance-text';
 import { describeVisual } from '../src/visual-text';
 import {
-  checkLabels,
+  checkSummary,
   conclusionTones,
-  coverage,
   executionLabels,
   headline,
+  verdictLabels,
   type Tone,
 } from '../src/result-text';
 
@@ -94,8 +95,51 @@ function revisionCell(side: Side, repository: string | null): string {
     : label;
 }
 
+export function sideChecks(side: Side): string {
+  if (side.execution !== 'complete') {
+    return 'Unknown';
+  }
+
+  const passed = side.checks.filter(
+    (check) => check.outcome === 'passed',
+  ).length;
+
+  return side.checks.length === 0
+    ? 'None configured'
+    : `${passed} of ${side.checks.length} passed`;
+}
+
 function sideRow(label: string, side: Side, repository: string | null) {
-  return `| ${label} | ${revisionCell(side, repository)} | ${executionLabels[side.execution]} | ${checkLabels[side.check.outcome]} |`;
+  return `| ${label} | ${revisionCell(side, repository)} | ${executionLabels[side.execution]} | ${sideChecks(side)} |`;
+}
+
+export function journeySides(
+  result: Comparison,
+  journey: Journey,
+): [string, Side][] {
+  const prefix =
+    result.journeys.length === 1 ? '' : `${inlineText(journey.title)} · `;
+
+  return result.mode === 'preview'
+    ? [[`${prefix}Current`, journey.candidate]]
+    : [
+        [`${prefix}Base`, journey.base],
+        [`${prefix}Candidate`, journey.candidate],
+      ];
+}
+
+// One line per configured check, with the verdict Observed recorded.
+export function checkList(result: Comparison): string {
+  const lines = result.journeys.flatMap((journey) =>
+    journey.checks.map((check) => {
+      const where =
+        result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
+
+      return `- **${verdictLabels[check.verdict]}** · ${where}${inlineText(check.name)}. Scope: ${inlineText(check.scope)}${check.verdict === 'passed' ? '' : ` ${inlineText(check.detail)}`}`;
+    }),
+  );
+
+  return [`**${checkSummary(result)}.**`, ...lines].join('\n');
 }
 
 export function describeFailure(
@@ -214,31 +258,32 @@ export function summarize(options: {
   }
 
   const kind = result.conclusion.kind;
-  const labelled: [string, Side][] =
-    result.mode === 'preview'
-      ? [['Current', result.candidate]]
-      : [
-          ['Base', result.base],
-          ['Candidate', result.candidate],
-        ];
+  const labelled = result.journeys.flatMap((journey) =>
+    journeySides(result, journey),
+  );
   const failures = labelled.flatMap(([label, side]) =>
     describeFailure(label, side.capture?.manifest.execution),
   );
   const reasons =
-    failures.length > 0 || result.comparison.kind !== 'unavailable'
+    failures.length > 0
       ? failures
-      : result.comparison.reasons.map((reason) => `- ${inlineText(reason)}`);
-  const visual =
-    result.comparison.kind === 'available' &&
-    (result.comparison.visual.kind === 'changed' ||
-      result.comparison.visual.kind === 'size-differs')
-      ? `Screenshots: ${inlineText(describeVisual(result.comparison.visual))} An observation, not a check.`
-      : null;
-  const scope = coverage(result);
-  const links = [
-    page === null ? null : `**[Open the report](${page})**`,
-    scope === null ? null : `Covered: ${inlineText(scope)}`,
-  ].filter((item) => item !== null);
+      : result.journeys.flatMap((journey) =>
+          journey.comparison.kind === 'unavailable'
+            ? journey.comparison.reasons.map(
+                (reason) =>
+                  `- ${result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `}${inlineText(reason)}`,
+              )
+            : [],
+        );
+  const visuals = result.journeys.flatMap((journey) =>
+    journey.comparison.kind === 'available' &&
+    (journey.comparison.visual.kind === 'changed' ||
+      journey.comparison.visual.kind === 'size-differs')
+      ? [
+          `Screenshots${result.journeys.length === 1 ? '' : ` (${inlineText(journey.title)})`}: ${inlineText(describeVisual(journey.comparison.visual))} An observation, not a check.`,
+        ]
+      : [],
+  );
   const revisions = labelled.flatMap(([label, side]) =>
     side.capture === null
       ? []
@@ -246,6 +291,9 @@ export function summarize(options: {
           `${label}: \`${describeRevision(side.capture.manifest.source.revision)}\``,
         ],
   );
+  const limitations = [
+    ...new Set(result.journeys.flatMap((journey) => journey.limitations)),
+  ];
 
   const markdown = [
     alert(alerts[conclusionTones[kind]], [
@@ -255,21 +303,24 @@ export function summarize(options: {
       `${inlineText(result.conclusion.text.replace(/\.?$/, '.'))} ${consequences[kind]}`,
     ]),
     [
-      '| | Revision | Capture | Check |',
+      '| | Revision | Capture | Checks |',
       '| --- | --- | --- | --- |',
       ...labelled.map(([label, side]) => sideRow(label, side, repository)),
     ].join('\n'),
     ...(reasons.length === 0 ? [] : [reasons.join('\n')]),
-    ...(visual === null ? [] : [visual]),
-    ...(links.length === 0 ? [] : [links.join(' · ')]),
+    ...(result.summary.total === 0 ? [] : [checkList(result)]),
+    ...visuals,
+    ...(page === null ? [] : [`**[Open the report](${page})**`]),
     ...(page === null ? [`No report page was uploaded. ${bundle}`] : []),
     collapsed('Limits and raw evidence', [
-      ...(result.comparison.kind === 'unavailable' && failures.length > 0
-        ? result.comparison.reasons.map(inlineText)
+      ...(failures.length > 0
+        ? result.journeys.flatMap((journey) =>
+            journey.comparison.kind === 'unavailable'
+              ? journey.comparison.reasons.map(inlineText)
+              : [],
+          )
         : []),
-      ...result.limitations
-        .filter((limitation) => limitation !== scope)
-        .map(inlineText),
+      ...limitations.map(inlineText),
       ...revisions,
       ...(page === null
         ? []
@@ -348,6 +399,26 @@ export function capturedRevision(
   return revision.kind === 'commit' && commits.includes(revision.commit)
     ? 'match'
     : 'other';
+}
+
+// Every journey captures the same candidate; one at another revision means the
+// result does not belong to this pull request.
+export function candidateIdentity(
+  result: Comparison,
+  commits: readonly string[],
+): 'match' | 'unavailable' | 'other' {
+  const identities = result.journeys.map((journey) =>
+    capturedRevision(
+      journey.candidate.capture?.manifest.source.revision ?? null,
+      commits,
+    ),
+  );
+
+  if (identities.includes('other')) {
+    return 'other';
+  }
+
+  return identities.includes('match') ? 'match' : 'unavailable';
 }
 
 function link(label: string, url: string | null): string | null {
@@ -469,11 +540,10 @@ if (import.meta.main) {
         : Schema.decodeUnknownOption(runOutputSchema)(output);
     const identity = Option.isNone(decoded)
       ? 'unavailable'
-      : capturedRevision(
-          decoded.value.result.candidate.capture?.manifest.source.revision ??
-            null,
-          [headSha, environment('GITHUB_SHA')],
-        );
+      : candidateIdentity(decoded.value.result, [
+          headSha,
+          environment('GITHUB_SHA'),
+        ]);
 
     if (identity === 'other') {
       await writeOutput(

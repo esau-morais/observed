@@ -172,6 +172,65 @@ test('a URL in check text renders as code so GitHub cannot autolink the captured
   expect(inlineText('See https://x.test/a.')).toBe('See `https://x.test/a`.');
 });
 
+test('the job summary counts passed checks and states each check scope and verdict', async () => {
+  const missing = await Effect.runPromise(
+    inspectSide({ directory: null, prefix: 'candidate', evaluatedAt }),
+  );
+  const result = compareCaptures({
+    base: missing,
+    candidate: missing,
+    evaluatedAt,
+    visual: { kind: 'unavailable', reason: 'No captures' },
+  });
+  const [journey] = result.journeys;
+  const verdict = {
+    expectation: 'Exactly 1 GET /api/items request(s) with status 200.',
+    detail: 'Observed 2 matching GET /api/items request(s).',
+  };
+  const markdown = summarize({
+    output: json({
+      directory: '/bundle',
+      result: {
+        ...result,
+        journeys: [
+          {
+            ...journey,
+            checks: [
+              {
+                ...verdict,
+                id: 'items',
+                name: 'One items request',
+                scope: 'One Load items click',
+                verdict: 'failed',
+              },
+              {
+                ...verdict,
+                id: 'title',
+                name: 'Page title',
+                scope: 'The loaded page heading',
+                verdict: 'passed',
+              },
+            ],
+          },
+        ],
+        summary: { passed: 1, total: 2 },
+        conclusion: { kind: 'check-failed', text: 'One items request failed.' },
+      },
+    }),
+    exitCode: 2,
+    artifact: 'observed-bundle',
+    page: null,
+  }).markdown;
+
+  expect(markdown).toContain('**1 of 2 checks passed.**');
+  expect(markdown).toContain(
+    '**Failed** · One items request. Scope: One Load items click',
+  );
+  expect(markdown).toContain(
+    '**Passed** · Page title. Scope: The loaded page heading',
+  );
+});
+
 test('a result is posted to a pull request only when its candidate is that head or its merge commit', () => {
   const head = 'a'.repeat(40);
 

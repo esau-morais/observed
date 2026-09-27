@@ -1,4 +1,3 @@
-import { checkLabels } from './result-text';
 import { DateTime, Effect, Schema } from 'effect';
 import { readFile, realpath } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
@@ -135,11 +134,13 @@ function checkInput(
     evidence[kind] = view.value;
   }
 
-  // The loop above supplied every declared kind; evaluators read only those.
   return {
     kind: 'ready',
     input: {
       observations: side.observations,
+      // The loop above recorded every declared kind, and an evaluator's type
+      // lets it read only the kinds it declared.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
       evidence: evidence as CheckInput<EvidenceKind>['evidence'],
     },
   };

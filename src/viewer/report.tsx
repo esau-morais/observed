@@ -1,6 +1,14 @@
 import * as stylex from '@stylexjs/stylex';
 import { useState, type ReactNode } from 'react';
-import type { Comparison, Side } from '../comparison-model';
+import type {
+  Check,
+  CheckVerdict,
+  Comparison,
+  Journey,
+  Side,
+} from '../comparison-model';
+import { evidenceKinds } from '../evidence-kinds';
+import { journeySections } from '../report-sections';
 import { fonts, geometry, media } from './constants.stylex';
 import {
   Artifacts,
@@ -13,14 +21,17 @@ import {
 import { describeObserved, describeRevision } from '../provenance-text';
 import {
   checkLabels,
+  checkSummary,
   conclusionLabels,
   checkTones,
   conclusionTones,
-  coverage,
   executionLabels,
   toneSymbols,
+  verdictLabels,
+  verdictTones,
 } from '../result-text';
 import { describeRegion, describeVisual, diffLegend } from '../visual-text';
+import { EvidenceSection } from './sections';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -148,6 +159,29 @@ const styles = stylex.create({
   },
   unknown: { backgroundColor: colors.unknownFill, color: colors.unknown },
   list: { display: 'grid', gap: 8, paddingInlineStart: 20, marginBlock: 0 },
+  verdicts: {
+    display: 'grid',
+    gap: 16,
+    listStyle: 'none',
+    marginBlock: 0,
+    maxWidth: '68ch',
+    paddingInlineStart: 0,
+  },
+  verdict: { display: 'grid', gap: 4, minWidth: 0 },
+  verdictHeader: {
+    alignItems: 'center',
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  verdictName: { fontWeight: 500 },
+  journeyLabel: { fontSize: '1rem', fontWeight: 500 },
+  journeyTitle: {
+    fontSize: { default: '1.25rem', [media.tablet]: '1.5rem' },
+    fontWeight: 500,
+    letterSpacing: '-0.01em',
+    lineHeight: 1.3,
+  },
   summary: {
     alignContent: 'center',
     cursor: 'pointer',
@@ -218,13 +252,11 @@ function Field({
   );
 }
 
-function Check({ side, label }: { side: Side; label: string }) {
-  const check = side.check;
-
+function CheckPanel({ check, label }: { check: Check; label: string }) {
   return (
     <section
       {...stylex.props(styles.panel)}
-      aria-label={`${label} named check`}
+      aria-label={`${label} named check: ${check.name}`}
     >
       <p {...stylex.props(styles.small)}>
         {label} · {check.authority}
@@ -245,6 +277,78 @@ function Check({ side, label }: { side: Side; label: string }) {
           {check.id}
         </Field>
       </dl>
+    </section>
+  );
+}
+
+function SideChecks({ side, label }: { side: Side; label: string }) {
+  return (
+    <div {...stylex.props(styles.stack)}>
+      {side.checks.length === 0 ? (
+        <p {...stylex.props(styles.text)}>
+          {label}: no named check is configured, so nothing was verified.
+        </p>
+      ) : (
+        side.checks.map((check) => (
+          <CheckPanel key={check.id} check={check} label={label} />
+        ))
+      )}
+    </div>
+  );
+}
+
+function Verdicts({ verdicts }: { verdicts: readonly CheckVerdict[] }) {
+  return (
+    <ul {...stylex.props(styles.verdicts)}>
+      {verdicts.map((item) => {
+        const tone = verdictTones[item.verdict];
+
+        return (
+          <li key={item.id} {...stylex.props(styles.verdict)}>
+            <div {...stylex.props(styles.verdictHeader)}>
+              <span {...stylex.props(styles.badge, styles[tone])}>
+                <span aria-hidden="true">{toneSymbols[tone]}</span>
+                {verdictLabels[item.verdict]}
+              </span>
+              <span {...stylex.props(styles.verdictName)}>{item.name}</span>
+            </div>
+            <p {...stylex.props(styles.text)}>Scope: {item.scope}</p>
+            <p {...stylex.props(styles.small)}>{item.detail}</p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function CheckSummary({ result }: { result: Comparison }) {
+  const multiple = result.journeys.length > 1;
+
+  return (
+    <section {...stylex.props(styles.stack)} aria-labelledby="named-checks">
+      <h2 id="named-checks" {...stylex.props(styles.subheading)}>
+        {checkSummary(result)}
+      </h2>
+      {result.summary.total === 0 ? (
+        <p {...stylex.props(styles.text)}>
+          No behavior was verified. The captures show the application only.
+        </p>
+      ) : (
+        result.journeys.map((journey, index) =>
+          journey.checks.length === 0 ? (
+            <p key={index} {...stylex.props(styles.text)}>
+              {journey.title}: no named check configured.
+            </p>
+          ) : (
+            <div key={index} {...stylex.props(styles.stack)}>
+              {multiple ? (
+                <h3 {...stylex.props(styles.journeyLabel)}>{journey.title}</h3>
+              ) : null}
+              <Verdicts verdicts={journey.checks} />
+            </div>
+          ),
+        )
+      )}
     </section>
   );
 }
@@ -365,9 +469,13 @@ function Identity({ side, label }: { side: Side; label: string }) {
   );
 }
 
-function Availability({ result }: { result: Comparison }) {
-  const comparison = result.comparison;
-
+function Availability({
+  comparison,
+  headingId,
+}: {
+  comparison: Journey['comparison'];
+  headingId: string;
+}) {
   if (comparison.kind === 'preview') {
     return (
       <p {...stylex.props(styles.text)}>
@@ -377,8 +485,8 @@ function Availability({ result }: { result: Comparison }) {
   }
 
   return (
-    <section {...stylex.props(styles.stack)} aria-labelledby="availability">
-      <h3 id="availability" {...stylex.props(styles.subheading)}>
+    <section {...stylex.props(styles.stack)} aria-labelledby={headingId}>
+      <h3 id={headingId} {...stylex.props(styles.subheading)}>
         Comparison
       </h3>
       {comparison.kind === 'unavailable' ? (
@@ -419,16 +527,20 @@ function Availability({ result }: { result: Comparison }) {
 function Disclosure({
   id,
   title,
+  level = 2,
   children,
 }: {
   id: string;
   title: string;
+  level?: 2 | 3;
   children: ReactNode;
 }) {
+  const Heading = level === 2 ? 'h2' : 'h3';
+
   return (
     <details id={id} {...stylex.props(styles.disclosure)}>
       <summary {...stylex.props(styles.summary)}>
-        <h2 {...stylex.props(styles.disclosureTitle)}>{title}</h2>
+        <Heading {...stylex.props(styles.disclosureTitle)}>{title}</Heading>
       </summary>
       <div {...stylex.props(styles.section, styles.disclosureBody)}>
         {children}
@@ -437,32 +549,215 @@ function Disclosure({
   );
 }
 
-export function ComparisonReport({ result }: { result: Comparison }) {
-  const sides =
-    result.mode === 'preview'
-      ? [{ side: result.candidate, label: 'Current capture' }]
-      : [
-          { side: result.base, label: 'Before' },
-          { side: result.candidate, label: 'After' },
-        ];
+function journeySides(journey: Journey, mode: Comparison['mode']) {
+  return mode === 'preview'
+    ? [{ side: journey.candidate, label: 'Current capture' }]
+    : [
+        { side: journey.base, label: 'Before' },
+        { side: journey.candidate, label: 'After' },
+      ];
+}
+
+function journeyUnresolved(journey: Journey, mode: Comparison['mode']) {
+  const sides = journeySides(journey, mode);
   const sideIssues = sides.flatMap(({ side }) => side.unresolved);
-  const unresolved = [
+
+  return [
     ...sides.flatMap(({ side, label }) =>
       side.unresolved.map((reason) => `${label}: ${reason}`),
     ),
-    ...(result.comparison.kind === 'unavailable'
-      ? result.comparison.reasons.filter(
+    ...(journey.comparison.kind === 'unavailable'
+      ? journey.comparison.reasons.filter(
           (reason) => !sideIssues.some((issue) => reason.endsWith(issue)),
         )
       : []),
   ];
-  const tone = conclusionTones[result.conclusion.kind];
-  const scope = coverage(result);
+}
+
+function JourneyView({
+  journey,
+  mode,
+  evaluatedAt,
+  index,
+  multiple,
+}: {
+  journey: Journey;
+  mode: Comparison['mode'];
+  evaluatedAt: string;
+  index: number;
+  multiple: boolean;
+}) {
+  const sides = journeySides(journey, mode);
   const [highlighted, setHighlighted] = useState(false);
   const visual =
-    result.comparison.kind === 'available' ? result.comparison.visual : null;
+    journey.comparison.kind === 'available' ? journey.comparison.visual : null;
   const highlight: Highlight | null =
     highlighted && visual?.kind === 'changed' ? visual : null;
+  const prefix = multiple ? `journey-${index + 1}-` : '';
+  const level = multiple ? 3 : 2;
+  const tone = conclusionTones[journey.conclusion.kind];
+  const titleId = `journey-${index + 1}-title`;
+
+  return (
+    <section
+      {...stylex.props(styles.section)}
+      {...(multiple
+        ? { 'aria-labelledby': titleId }
+        : {
+            'aria-label':
+              mode === 'preview' ? 'Application capture' : 'Before and after',
+          })}
+    >
+      {multiple ? (
+        <div {...stylex.props(styles.stack)}>
+          <h2 id={titleId} {...stylex.props(styles.journeyTitle)}>
+            {journey.title}
+          </h2>
+          <span {...stylex.props(styles.badge, styles[tone])}>
+            <span aria-hidden="true">{toneSymbols[tone]}</span>
+            {conclusionLabels[journey.conclusion.kind]}
+          </span>
+          <p {...stylex.props(styles.text)}>{journey.conclusion.text}</p>
+        </div>
+      ) : null}
+      <div id={`${prefix}screenshots`} {...stylex.props(styles.section)}>
+        {visual === null ? null : (
+          <div {...stylex.props(styles.stack)}>
+            <p {...stylex.props(styles.text)}>
+              {describeVisual(visual)}
+              {visual.kind === 'changed' || visual.kind === 'size-differs'
+                ? ' An observation, not a check.'
+                : ''}
+            </p>
+            {visual.kind === 'changed' ? (
+              <div {...stylex.props(styles.nav)}>
+                <label {...stylex.props(styles.toggle)}>
+                  <input
+                    type="checkbox"
+                    checked={highlighted}
+                    onChange={(event) =>
+                      setHighlighted(event.currentTarget.checked)
+                    }
+                    {...stylex.props(styles.checkbox)}
+                  />
+                  Highlight changed regions
+                </label>
+                <span {...stylex.props(styles.toggle)}>
+                  <EvidenceLink href={visual.diff.path}>
+                    Open pixel difference image
+                  </EvidenceLink>
+                </span>
+              </div>
+            ) : null}
+            {visual.kind === 'changed' ? (
+              <p {...stylex.props(styles.small)}>{diffLegend}</p>
+            ) : null}
+          </div>
+        )}
+        <div {...stylex.props(mode === 'comparison' && styles.grid)}>
+          {sides.map(({ side, label }) => (
+            <Screenshot
+              key={label}
+              side={side}
+              label={label}
+              highlight={highlight}
+              level={level}
+            />
+          ))}
+        </div>
+        {visual?.kind === 'changed' &&
+        journey.base.screenshot !== null &&
+        journey.candidate.screenshot !== null ? (
+          <ChangedRegions
+            visual={visual}
+            before={journey.base.screenshot}
+            after={journey.candidate.screenshot}
+            level={level}
+          />
+        ) : null}
+      </div>
+
+      <div {...stylex.props(styles.disclosures)}>
+        <Disclosure id={`${prefix}checks`} title="Checks" level={level}>
+          <div {...stylex.props(mode === 'comparison' && styles.grid)}>
+            {sides.map(({ side, label }) => (
+              <SideChecks key={label} side={side} label={label} />
+            ))}
+          </div>
+        </Disclosure>
+        <Disclosure id={`${prefix}requests`} title="Requests" level={level}>
+          <p {...stylex.props(styles.text)}>
+            Recorded by the browser. A response status is not a check result.
+          </p>
+          <div {...stylex.props(styles.grid)}>
+            {sides.map(({ side, label }) => (
+              <RequestLedger key={label} side={side} label={label} />
+            ))}
+          </div>
+        </Disclosure>
+        {journeySections(journey).map((section) => (
+          <Disclosure
+            key={section.kind}
+            id={`${prefix}evidence-${section.kind}`}
+            title={evidenceKinds[section.kind].title}
+            level={level}
+          >
+            <EvidenceSection section={section} />
+          </Disclosure>
+        ))}
+        <Disclosure
+          id={`${prefix}captures`}
+          title="Captures and comparison"
+          level={level}
+        >
+          <p {...stylex.props(styles.small)}>
+            Evaluated at <time dateTime={evaluatedAt}>{evaluatedAt}</time>
+          </p>
+          <div {...stylex.props(styles.grid)}>
+            {sides.map(({ side, label }) => (
+              <Identity key={label} side={side} label={label} />
+            ))}
+          </div>
+          <Availability
+            comparison={journey.comparison}
+            headingId={`${prefix}availability`}
+          />
+        </Disclosure>
+        <Disclosure
+          id={`${prefix}artifacts`}
+          title="Original artifacts"
+          level={level}
+        >
+          <p {...stylex.props(styles.text)}>
+            Integrity describes availability and hash verification, not
+            application correctness.
+          </p>
+          <div {...stylex.props(styles.grid)}>
+            {sides.map(({ side, label }) => (
+              <Artifacts key={label} side={side} label={label} />
+            ))}
+          </div>
+        </Disclosure>
+        <Disclosure id={`${prefix}limits`} title="Limits" level={level}>
+          <ul {...stylex.props(styles.list)}>
+            {journey.limitations.map((limitation, item) => (
+              <li key={item}>{limitation}</li>
+            ))}
+          </ul>
+        </Disclosure>
+      </div>
+    </section>
+  );
+}
+
+export function ComparisonReport({ result }: { result: Comparison }) {
+  const multiple = result.journeys.length > 1;
+  const unresolved = result.journeys.flatMap((journey) =>
+    journeyUnresolved(journey, result.mode).map((reason) =>
+      multiple ? `${journey.title}: ${reason}` : reason,
+    ),
+  );
+  const tone = conclusionTones[result.conclusion.kind];
 
   return (
     <div {...stylex.props(styles.canvas)}>
@@ -491,9 +786,11 @@ export function ComparisonReport({ result }: { result: Comparison }) {
               {result.title}
             </h1>
             <p {...stylex.props(styles.lead)}>{result.conclusion.text}</p>
-            {scope === null ? null : (
-              <p {...stylex.props(styles.text)}>Covered: {scope}</p>
-            )}
+            <p {...stylex.props(styles.text)}>
+              <EvidenceLink href="#named-checks">
+                {checkSummary(result)}
+              </EvidenceLink>
+            </p>
             {unresolved.length === 0 ? null : (
               <div {...stylex.props(styles.notice)}>
                 <p {...stylex.props(styles.noticeTitle)}>
@@ -509,125 +806,23 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             )}
           </section>
 
-          <section
-            id="screenshots"
-            {...stylex.props(styles.section)}
-            aria-label={
-              result.mode === 'preview'
-                ? 'Application capture'
-                : 'Before and after'
-            }
-          >
-            {visual === null ? null : (
-              <div {...stylex.props(styles.stack)}>
-                <p {...stylex.props(styles.text)}>
-                  {describeVisual(visual)}
-                  {visual.kind === 'changed' || visual.kind === 'size-differs'
-                    ? ' An observation, not a check.'
-                    : ''}
-                </p>
-                {visual.kind === 'changed' ? (
-                  <div {...stylex.props(styles.nav)}>
-                    <label {...stylex.props(styles.toggle)}>
-                      <input
-                        type="checkbox"
-                        checked={highlighted}
-                        onChange={(event) =>
-                          setHighlighted(event.currentTarget.checked)
-                        }
-                        {...stylex.props(styles.checkbox)}
-                      />
-                      Highlight changed regions
-                    </label>
-                    <span {...stylex.props(styles.toggle)}>
-                      <EvidenceLink href={visual.diff.path}>
-                        Open pixel difference image
-                      </EvidenceLink>
-                    </span>
-                  </div>
-                ) : null}
-                {visual.kind === 'changed' ? (
-                  <p {...stylex.props(styles.small)}>{diffLegend}</p>
-                ) : null}
-              </div>
-            )}
-            <div {...stylex.props(result.mode === 'comparison' && styles.grid)}>
-              {sides.map(({ side, label }) => (
-                <Screenshot
-                  key={label}
-                  side={side}
-                  label={label}
-                  highlight={highlight}
-                />
-              ))}
-            </div>
-            {visual?.kind === 'changed' &&
-            result.base.screenshot !== null &&
-            result.candidate.screenshot !== null ? (
-              <ChangedRegions
-                visual={visual}
-                before={result.base.screenshot}
-                after={result.candidate.screenshot}
-              />
-            ) : null}
-          </section>
+          {result.journeys.map((journey, index) => (
+            <JourneyView
+              key={index}
+              journey={journey}
+              mode={result.mode}
+              evaluatedAt={result.evaluatedAt}
+              index={index}
+              multiple={multiple}
+            />
+          ))}
 
-          <div {...stylex.props(styles.disclosures)}>
-            <Disclosure id="checks" title="Checks">
-              <div {...stylex.props(styles.grid)}>
-                {sides.map(({ side, label }) => (
-                  <Check key={label} side={side} label={label} />
-                ))}
-              </div>
-            </Disclosure>
-            <Disclosure id="requests" title="Requests">
-              <p {...stylex.props(styles.text)}>
-                Recorded by the browser. A response status is not a check
-                result.
-              </p>
-              <div {...stylex.props(styles.grid)}>
-                {sides.map(({ side, label }) => (
-                  <RequestLedger key={label} side={side} label={label} />
-                ))}
-              </div>
-            </Disclosure>
-            <Disclosure id="captures" title="Captures and comparison">
-              <p {...stylex.props(styles.small)}>
-                Evaluated at{' '}
-                <time dateTime={result.evaluatedAt}>{result.evaluatedAt}</time>
-              </p>
-              <div {...stylex.props(styles.grid)}>
-                {sides.map(({ side, label }) => (
-                  <Identity key={label} side={side} label={label} />
-                ))}
-              </div>
-              <Availability result={result} />
-            </Disclosure>
-            <Disclosure id="artifacts" title="Original artifacts">
-              <p {...stylex.props(styles.text)}>
-                Integrity describes availability and hash verification, not
-                application correctness.
-              </p>
-              <div {...stylex.props(styles.grid)}>
-                {sides.map(({ side, label }) => (
-                  <Artifacts key={label} side={side} label={label} />
-                ))}
-              </div>
-              <nav aria-label="Report files" {...stylex.props(styles.nav)}>
-                <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
-                <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
-              </nav>
-            </Disclosure>
-            <Disclosure id="limits" title="Limits">
-              <ul {...stylex.props(styles.list)}>
-                {result.limitations
-                  .filter((limitation) => limitation !== scope)
-                  .map((limitation, index) => (
-                    <li key={index}>{limitation}</li>
-                  ))}
-              </ul>
-            </Disclosure>
-          </div>
+          <CheckSummary result={result} />
+
+          <nav aria-label="Report files" {...stylex.props(styles.nav)}>
+            <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
+            <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
+          </nav>
         </main>
         <footer {...stylex.props(styles.footer)}>
           Captured evidence · Select a screenshot to open it at full size.

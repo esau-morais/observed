@@ -30,8 +30,7 @@ test('captured text cannot close the embedded evidence block or add a script to 
 
     const exported = await Effect.runPromise(
       exportComparison({
-        baseDirectory: null,
-        candidateDirectory: capture,
+        journeys: [{ baseDirectory: null, candidateDirectory: capture }],
         directory: path.join(root, 'report'),
         viewerDirectory: viewer,
         mode: 'preview',
@@ -53,14 +52,14 @@ test('captured text cannot close the embedded evidence block or add a script to 
     const files = Schema.decodeUnknownSync(embeddedSchema)(data ?? '');
     expect(
       Buffer.from(
-        files['/candidate/source-transcript.jsonl']?.data ?? '',
+        files['/journey-1/candidate/source-transcript.jsonl']?.data ?? '',
         'base64',
       ).toString(),
     ).toBe(transcript);
     expect(
       Schema.decodeUnknownSync(Schema.fromJsonString(comparisonSchema))(
         Buffer.from(files['/result.json']?.data ?? '', 'base64').toString(),
-      ).candidate.execution,
+      ).journeys[0].candidate.execution,
     ).toBe('unavailable');
   } finally {
     await rm(root, { recursive: true, force: true });

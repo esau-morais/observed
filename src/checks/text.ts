@@ -15,7 +15,9 @@ export const text = defineCheck({
   definition,
   evidence: ['text'],
   collectors: (checks) => {
-    const [first, ...rest] = [...new Set(checks.map((check) => check.selector))];
+    const [first, ...rest] = [
+      ...new Set(checks.map((check) => check.selector)),
+    ];
 
     return first === undefined
       ? []

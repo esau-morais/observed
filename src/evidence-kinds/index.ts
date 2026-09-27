@@ -11,7 +11,9 @@ export type EvidenceKind = keyof typeof evidenceKinds;
 export type EvidenceValue<K extends EvidenceKind> =
   (typeof evidenceKinds)[K]['value']['Type'];
 
-export const collectorSchema = Schema.Union(kinds.map((kind) => kind.collector));
+export const collectorSchema = Schema.Union(
+  kinds.map((kind) => kind.collector),
+);
 
 export type CollectorConfig<K extends EvidenceKind = EvidenceKind> = Extract<
   typeof collectorSchema.Type,

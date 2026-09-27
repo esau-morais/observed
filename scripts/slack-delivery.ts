@@ -2,7 +2,7 @@ import { Option, Schema } from 'effect';
 import type { Comparison, Side } from '../src/comparison-model';
 import { shortSource } from '../src/provenance-text';
 import {
-  checkLabels,
+  checkSummary,
   conclusionTones,
   executionLabels,
   headline,
@@ -75,7 +75,7 @@ function sideLine(label: string, side: Side): string {
       ? 'unavailable'
       : `\`${slackText(shortSource(side.capture.manifest.source))}\``;
 
-  return `${label} ${revision} ${executionLabels[side.execution].toLowerCase()}, check ${checkLabels[side.check.outcome].toLowerCase()}`;
+  return `${label} ${revision} ${executionLabels[side.execution].toLowerCase()}`;
 }
 
 export function slackMessage(result: Comparison | null, links: SlackLinks) {
@@ -92,7 +92,7 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
   const detail =
     result === null
       ? 'Observed wrote no readable result. The job fails.'
-      : consequences[result.conclusion.kind];
+      : `${slackText(checkSummary(result))}. ${consequences[result.conclusion.kind]}`;
   const where =
     slackLink(links.pullRequestLabel, links.pullRequest) ??
     slackText(links.pullRequestLabel);
@@ -100,10 +100,20 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
     links.name === 'Observed' ? '' : ` · ${slackText(clip(links.name, 200))}`;
   const labelled: [string, Side][] = [];
 
-  if (result?.mode === 'preview') {
-    labelled.push(['Current', result.candidate]);
-  } else if (result !== null) {
-    labelled.push(['Base', result.base], ['Candidate', result.candidate]);
+  for (const journey of result?.journeys ?? []) {
+    const prefix =
+      result === null || result.journeys.length === 1
+        ? ''
+        : `${slackText(clip(journey.title, 100))}: `;
+
+    if (result?.mode === 'preview') {
+      labelled.push([`${prefix}Current`, journey.candidate]);
+    } else {
+      labelled.push(
+        [`${prefix}Base`, journey.base],
+        [`${prefix}Candidate`, journey.candidate],
+      );
+    }
   }
 
   const context: string[] = [];

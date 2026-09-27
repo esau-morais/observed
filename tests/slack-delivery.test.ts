@@ -55,11 +55,33 @@ test('an unavailable or unreadable result never gets a passing icon in Slack', a
 
 test('captured names cannot mention anyone in Slack, and captured values stay out of the message', async () => {
   const result = await unavailable();
+  const [journey] = result.journeys;
+  const verdict = {
+    id: 'total',
+    name: 'Order total',
+    scope: 'One checkout',
+    expectation: 'Exactly one .total element with text "$10".',
+  };
   const message = JSON.stringify(
     slackMessage(
       {
         ...result,
         title: 'Checkout <!channel> <@U123>',
+        journeys: [
+          {
+            ...journey,
+            checks: [
+              { ...verdict, verdict: 'passed', detail: 'Captured page text' },
+              {
+                ...verdict,
+                id: 'items',
+                verdict: 'unknown',
+                detail: 'Captured item text',
+              },
+            ],
+          },
+        ],
+        summary: { passed: 1, total: 2 },
         conclusion: { kind: 'unavailable', text: 'Captured page text' },
       },
       links,
@@ -68,7 +90,9 @@ test('captured names cannot mention anyone in Slack, and captured values stay ou
 
   expect(message).not.toMatch(/<!channel>|<@U123>/);
   expect(message).toContain('&lt;!channel&gt;');
+  expect(message).toContain('1 of 2 checks passed');
   expect(message).not.toContain('Captured page text');
+  expect(message).not.toContain('Captured item text');
 });
 
 test('the Slack message identity stored in a comment round-trips and ignores malformed markers', () => {

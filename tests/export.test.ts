@@ -37,26 +37,33 @@ test.each(['base', 'candidate'] as const)(
 
       const exported = await Effect.runPromise(
         exportComparison({
-          baseDirectory: side === 'base' ? capture : null,
-          candidateDirectory:
-            side === 'candidate'
-              ? capture
-              : path.join(root, 'missing-candidate'),
+          journeys: [
+            {
+              baseDirectory: side === 'base' ? capture : null,
+              candidateDirectory:
+                side === 'candidate'
+                  ? capture
+                  : path.join(root, 'missing-candidate'),
+            },
+          ],
           directory: path.join(root, 'report'),
           viewerDirectory: path.join(root, 'dist/viewer'),
         }).pipe(Effect.provide(BunServices.layer)),
       );
-      expect(exported.result[side]).toMatchObject({
+      expect(exported.result.journeys[0][side]).toMatchObject({
         capture: null,
         execution: 'unavailable',
-        check: { outcome: 'unknown' },
+        checks: [{ outcome: 'unknown' }],
       });
-      expect(exported.result[side].unresolved.join(' ')).toContain(
+      expect(exported.result.journeys[0][side].unresolved.join(' ')).toContain(
         'missing-revision',
       );
       for (const [filename, bytes] of Object.entries(files)) {
         expect(
-          await readFile(path.join(exported.directory, side, filename), 'utf8'),
+          await readFile(
+            path.join(exported.directory, 'journey-1', side, filename),
+            'utf8',
+          ),
         ).toBe(bytes);
       }
 
@@ -68,7 +75,9 @@ test.each(['base', 'candidate'] as const)(
           });
           yield* Effect.promise(async () => {
             for (const [filename, bytes] of Object.entries(files)) {
-              const response = await fetch(new URL(`${side}/${filename}`, url));
+              const response = await fetch(
+                new URL(`journey-1/${side}/${filename}`, url),
+              );
               expect(response.status).toBe(200);
               expect(await response.text()).toBe(bytes);
             }
@@ -77,10 +86,10 @@ test.each(['base', 'candidate'] as const)(
             const result = Schema.decodeUnknownSync(
               Schema.fromJsonString(comparisonSchema),
             )(await response.text());
-            expect(result[side].check.outcome).toBe('unknown');
-            expect(result[side].artifacts).toHaveLength(3);
+            expect(result.journeys[0][side].checks[0]?.outcome).toBe('unknown');
+            expect(result.journeys[0][side].artifacts).toHaveLength(3);
             expect(
-              result[side].artifacts.every(
+              result.journeys[0][side].artifacts.every(
                 (item) => item.integrity === 'verified',
               ),
             ).toBe(true);
@@ -88,7 +97,12 @@ test.each(['base', 'candidate'] as const)(
         }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
       );
       await writeFile(
-        path.join(exported.directory, side, 'source-transcript.jsonl'),
+        path.join(
+          exported.directory,
+          'journey-1',
+          side,
+          'source-transcript.jsonl',
+        ),
         'changed',
       );
       await Effect.runPromise(
@@ -99,16 +113,19 @@ test.each(['base', 'candidate'] as const)(
           });
           yield* Effect.promise(async () => {
             expect(
-              (await fetch(new URL(`${side}/source-transcript.jsonl`, url)))
-                .status,
+              (
+                await fetch(
+                  new URL(`journey-1/${side}/source-transcript.jsonl`, url),
+                )
+              ).status,
             ).toBe(404);
             const response = await fetch(new URL('result.json', url));
             const result = Schema.decodeUnknownSync(
               Schema.fromJsonString(comparisonSchema),
             )(await response.text());
-            expect(result[side].check.outcome).toBe('unknown');
+            expect(result.journeys[0][side].checks[0]?.outcome).toBe('unknown');
             expect(
-              result[side].artifacts.find(
+              result.journeys[0][side].artifacts.find(
                 (item) => item.id === 'source-transcript',
               )?.integrity,
             ).toBe('unavailable');
@@ -144,18 +161,19 @@ test.each(['missing', 'malformed'])(
 
       const exported = await Effect.runPromise(
         exportComparison({
-          baseDirectory: null,
-          candidateDirectory: candidate,
+          journeys: [{ baseDirectory: null, candidateDirectory: candidate }],
           directory: path.join(root, 'report'),
           viewerDirectory: path.join(root, 'dist/viewer'),
         }).pipe(Effect.provide(BunServices.layer)),
       );
 
-      expect(exported.result.candidate.check.outcome).toBe('unknown');
+      const [journey] = exported.result.journeys;
 
-      expect(exported.result.comparison.kind).toBe('unavailable');
+      expect(journey.candidate.checks[0]?.outcome).toBe('unknown');
 
-      expect(exported.result.candidate.unresolved.join(' ')).toMatch(
+      expect(journey.comparison.kind).toBe('unavailable');
+
+      expect(journey.candidate.unresolved.join(' ')).toMatch(
         /Candidate.*(unavailable|malformed)/,
       );
     } finally {

@@ -141,7 +141,11 @@ if (unchanged.result.conclusion.kind !== 'no-regression') {
 
 const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(captureSchema))(
   await readFile(
-    path.join(unchanged.directory, '..', 'captures/candidate/capture.json'),
+    path.join(
+      unchanged.directory,
+      '..',
+      'captures/journey-1/candidate/capture.json',
+    ),
     'utf8',
   ),
 );
