@@ -47,6 +47,9 @@ import { renderComparison } from '../src/comparison-report';
 import { exportComparison } from '../src/export';
 import { encodeRgbPng } from '../src/png';
 import { serveReport } from '../src/view';
+import { checkList } from '../scripts/github-action';
+import { collectReport } from '../src/playwright/collect';
+import { parseJsonReport } from '../src/playwright/report';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
 const whitePng = encodeRgbPng(4, 4, new Uint8Array(4 * 4 * 3).fill(255));
@@ -2178,4 +2181,109 @@ test('missing Playwright evidence is one unknown imported check, never a pass', 
         'Playwright tests evidence unavailable: The capture recorded no evidence of this kind',
     }),
   ]);
+});
+
+test('a test the candidate no longer reports is unknown, not dropped', async () => {
+  const result = await playwrightJourney({
+    base: [
+      playwrightTest('adds an item', 'expected'),
+      playwrightTest('removes an item', 'expected'),
+    ],
+    candidate: [playwrightTest('adds an item', 'expected')],
+  });
+
+  expect(result.checks.map((check) => [check.name, check.verdict])).toEqual([
+    ['adds an item', 'passed'],
+    ['removes an item', 'unknown'],
+  ]);
+  expect(result.conclusion.kind).toBe('unavailable');
+});
+
+test('GitHub lists a large imported suite in one line and never every passing test', async () => {
+  const passing = Array.from({ length: 400 }, (_, index) =>
+    playwrightTest(`case ${index}`, 'expected'),
+  );
+  const result = single(
+    await playwrightJourney({
+      base: passing,
+      candidate: [...passing.slice(1), playwrightTest('case 0', 'unexpected')],
+    }),
+  );
+  const list = checkList(result);
+
+  expect(result.summary).toEqual({ passed: 399, total: 400 });
+  expect(list.split('\n')).toEqual([
+    '**399 of 400 checks passed.**',
+    expect.stringMatching(/^- \*\*Regression\*\* · case 0\. Scope: /),
+    '- **Passed** · 399 imported tests, listed in the report.',
+  ]);
+  expect(result.conclusion.text.length).toBeLessThan(2000);
+});
+
+// The seeded run in fixtures/playwright: the same spec file on both sides.
+async function recordedRun(name: string, workspace: string) {
+  const directory = await mkdtemp(path.join(tmpdir(), 'observed-playwright-'));
+  directories.push(directory);
+
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const report = yield* parseJsonReport(
+        yield* Effect.promise(() =>
+          readFile(
+            path.join(import.meta.dirname, 'fixtures/playwright', name),
+            'utf8',
+          ),
+        ),
+      );
+
+      return yield* collectReport({
+        report,
+        exitCode: report.stats.unexpected > 0 ? 1 : 0,
+        root: workspace,
+        workspace,
+        directory,
+        concealed: [],
+        addArtifact: () => {},
+      });
+    }).pipe(Effect.provide(BunServices.layer)),
+  );
+}
+
+test('the seeded Playwright run compares to one regression, with flaky and skipped tests unknown', async () => {
+  const spec = 'the trial app spec, identical on both sides\n';
+  const base = await syntheticBundle({
+    contract: withPlaywright,
+    playwright: await recordedRun('base.json', '/tmp/observed-app-t6Eogp'),
+    files: [
+      { path: 'e2e/shelves.spec.js', content: spec },
+      { path: 'main.ts', content: 'Synthetic source fixture.\n' },
+    ],
+  });
+  const candidate = await syntheticBundle({
+    contract: withPlaywright,
+    playwright: await recordedRun('candidate.json', '/tmp/observed-app-wSBHQ3'),
+    files: [
+      { path: 'e2e/shelves.spec.js', content: spec },
+      { path: 'main.ts', content: 'Synthetic source fixture.\n' },
+    ],
+  });
+  const result = compareJourney({
+    visual: pixelsNotInspected,
+    base: await inspect(base.directory),
+    candidate: await inspect(candidate.directory),
+    evaluatedAt,
+  });
+
+  expect(
+    Object.fromEntries(
+      result.checks.map((check) => [check.name, check.verdict]),
+    ),
+  ).toEqual({
+    'shelves › starts with no shelf selected': 'passed',
+    'shelves › opens the Reading shelf': 'passed',
+    'shelves › opens the Finished shelf': 'regression',
+    'shelves › exports the shelf as CSV': 'unknown',
+    'shelves › keeps the count after a second click': 'unknown',
+  });
+  expect(result.conclusion.kind).toBe('regression');
 });

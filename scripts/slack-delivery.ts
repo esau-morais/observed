@@ -102,9 +102,9 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
   );
   const checks: string[] = [];
 
-  // Names and scopes come from observed.json; details and measured values
-  // stay out. The list stops at the first check that doesn't fit, so none is
-  // skipped silently.
+  // Names and scopes come from observed.json, or from the app's test titles
+  // for imported checks; details and measured values stay out. The list
+  // stops at the first check that doesn't fit, so none is skipped silently.
   for (const line of lines) {
     if ([...checks, line].join('\n').length > 2000) {
       checks.push(`• ${lines.length - checks.length} more in the report`);

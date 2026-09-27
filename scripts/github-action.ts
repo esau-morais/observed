@@ -128,17 +128,46 @@ export function journeySides(
       ];
 }
 
+// GitHub limits a comment or check run summary to 65,536 characters, and an
+// imported test suite can have hundreds of checks. The report lists them all.
+const listedChecks = 50;
+
 export function checkList(result: Comparison): string {
-  const lines = result.journeys.flatMap((journey) =>
-    journey.checks.map((check) => {
-      const where =
-        result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
+  const lines = result.journeys.flatMap((journey) => {
+    const where =
+      result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
+    const imported = new Set(
+      journey.candidate.checks
+        .filter((check) => check.authority !== 'Executed by Observed')
+        .map((check) => check.id),
+    );
+    const passedImported = journey.checks.filter(
+      (check) => check.verdict === 'passed' && imported.has(check.id),
+    ).length;
 
-      return `- **${verdictLabels[check.verdict]}** · ${where}${inlineText(check.name)}. Scope: ${inlineText(check.scope)}${check.verdict === 'passed' ? '' : ` ${inlineText(check.detail)}`}`;
-    }),
-  );
+    return [
+      ...journey.checks
+        .filter(
+          (check) => !(check.verdict === 'passed' && imported.has(check.id)),
+        )
+        .map(
+          (check) =>
+            `- **${verdictLabels[check.verdict]}** · ${where}${inlineText(check.name)}. Scope: ${inlineText(check.scope)}${check.verdict === 'passed' ? '' : ` ${inlineText(check.detail)}`}`,
+        ),
+      ...(passedImported === 0
+        ? []
+        : [
+            `- **${verdictLabels.passed}** · ${where}${passedImported} imported ${passedImported === 1 ? 'test' : 'tests'}, listed in the report.`,
+          ]),
+    ];
+  });
+  const hidden = lines.length - listedChecks;
 
-  return [`**${checkSummary(result)}.**`, ...lines].join('\n');
+  return [
+    `**${checkSummary(result)}.**`,
+    ...lines.slice(0, listedChecks),
+    ...(hidden > 0 ? [`- ${hidden} more in the report.`] : []),
+  ].join('\n');
 }
 
 export function describeFailure(

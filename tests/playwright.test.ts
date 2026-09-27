@@ -341,6 +341,7 @@ test('copies attachments inside the root and refuses paths outside it, including
       root: workspace,
       workspace,
       directory,
+      concealed: [],
       addArtifact: (id, filename) => {
         artifacts.set(id, filename);
       },
@@ -403,7 +404,6 @@ test('rejects a trace zip with a corrupted entry instead of summarizing it', asy
       .decode(entries.get('0-trace.trace')?.read())
       .startsWith('{"version":8,"type":"context-options"'),
   ).toBe(true);
-  expect(() => entries.get('0-trace.trace')?.read()).not.toThrow();
   expect(() => readZip(bytes, 16).get('0-trace.trace')?.read()).toThrow(
     ZipError,
   );
@@ -525,4 +525,50 @@ test("runs the app's command with its URL, keeps a failing exit, and reports a m
       ],
     },
   });
+});
+
+test('redacts a concealed value in text attachments and keeps no zip that holds one', async () => {
+  const { workspace, report } = await workspaceWithAttachments();
+  const folder = path.join(workspace, failedFolder);
+
+  // The trace records the Finished button's name, standing in for a value
+  // such as a test password.
+  await writeFile(
+    path.join(folder, 'error-context.md'),
+    '- button "Finished" [active]\n',
+  );
+
+  const directory = await temporary();
+  const artifacts = new Map<string, string>();
+  const value = await run(
+    collectReport({
+      report: await run(parseJsonReport(report)),
+      exitCode: 1,
+      root: workspace,
+      workspace,
+      directory,
+      concealed: ['Finished'],
+      addArtifact: (id, filename) => {
+        artifacts.set(id, filename);
+      },
+    }),
+  );
+  const attempt = value.tests.find(
+    (item) => item.titlePath.at(-1) === 'opens the Finished shelf',
+  )?.results[0];
+  const byName = (name: string) =>
+    attempt?.attachments.find((item) => item.name === name)?.file;
+
+  expect(byName('trace')).toEqual({
+    kind: 'unavailable',
+    reason:
+      'The zip may hold a value from the collector environment, so Observed did not keep it',
+  });
+  expect(
+    await readFile(
+      path.join(directory, artifacts.get('playwright-3-0-3') ?? 'missing'),
+      'utf8',
+    ),
+  ).toBe('- button "[REDACTED]" [active]\n');
+  expect(byName('screenshot')?.kind).toBe('recorded');
 });

@@ -9,6 +9,7 @@ import {
   attachmentFile,
   describeRun,
   describeTrace,
+  firstLine,
   notableTests,
   outcomeLabels,
   playwrightClaimLimit,
@@ -65,8 +66,7 @@ function describe(
   return [
     escapeText(describeRun(value)),
     ...value.errors.map(
-      (error) =>
-        `- Error outside any test: ${escapeText(error.trim().split('\n')[0] ?? '')}`,
+      (error) => `- Error outside any test: ${escapeText(firstLine(error))}`,
     ),
     listed.length === 0
       ? 'Every test passed on its first attempt, with no attachments.'

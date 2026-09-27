@@ -24,6 +24,10 @@ export const outcomeTones = {
 
 // The assertion line plus Playwright's Expected and Received lines, when the
 // message has them.
+export function firstLine(value: string): string {
+  return value.trim().split('\n')[0] ?? '';
+}
+
 export function summarizeError(value: string): string {
   const [first = '', ...rest] = value.trim().split('\n');
   const values = rest

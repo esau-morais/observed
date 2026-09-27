@@ -4,8 +4,10 @@ import type {
   PlaywrightAttachment,
   PlaywrightValue,
 } from '../evidence-kinds/playwright';
+import { conceal, redactText } from '../redact';
 import type { ParsedReport, ReportAttachment } from './report';
 import { summarizeTrace } from './trace';
+import { readZip } from './zip';
 
 export type AddArtifact = (
   id: string,
@@ -30,8 +32,25 @@ function safeName(name: string): string {
   return safe === '' ? 'attachment' : safe;
 }
 
-// Copies one attachment into the bundle. Report paths are data, so a file
-// outside `root`, including through a symlink, is never read.
+const textTypes = /^(?:text\/|application\/(?:json|xml)\b)/;
+
+// Every entry's text, checked for a concealed value in any encoding conceal
+// knows. A zip can't be redacted in place, so one that holds a value is not
+// kept.
+function zipHolds(bytes: Uint8Array, concealed: readonly string[]): boolean {
+  const decoder = new TextDecoder();
+
+  return [...readZip(bytes, maxZipEntry).values()].some((entry) => {
+    const text = decoder.decode(entry.read());
+
+    return conceal(text, concealed) !== text;
+  });
+}
+
+const maxZipEntry = 256 * 1024 * 1024;
+
+// Report paths are data, so a file outside `root`, including through a
+// symlink, is never read.
 const copyAttachment = Effect.fnUntraced(function* (options: {
   attachment: ReportAttachment;
   root: string;
@@ -39,6 +58,7 @@ const copyAttachment = Effect.fnUntraced(function* (options: {
   filename: string;
   id: string;
   description: string;
+  concealed: readonly string[];
   addArtifact: AddArtifact;
 }) {
   const fs = yield* FileSystem.FileSystem;
@@ -78,22 +98,54 @@ const copyAttachment = Effect.fnUntraced(function* (options: {
     return unavailable('The attachment is not a regular file');
   }
 
-  const bytes = yield* fs.readFile(source.value);
   const destination = path.join(options.directory, options.filename);
+  const isTrace =
+    attachment.name === 'trace' && attachment.contentType === 'application/zip';
+  const isZip = attachment.contentType === 'application/zip';
+  let trace: PlaywrightAttachment['trace'] = null;
+  let description = `${options.description}, copied unchanged`;
 
   yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
-  yield* fs.writeFile(destination, bytes, { flag: 'wx' });
-  options.addArtifact(options.id, options.filename, options.description);
+
+  if (textTypes.test(attachment.contentType)) {
+    yield* fs.writeFileString(
+      destination,
+      redactText(yield* fs.readFileString(source.value), options.concealed),
+      { flag: 'wx' },
+    );
+    description = `${options.description}; credentials redacted`;
+  } else if (isTrace || (isZip && options.concealed.length > 0)) {
+    const bytes = yield* fs.readFile(source.value);
+
+    if (options.concealed.length > 0) {
+      let holds = true;
+
+      try {
+        holds = zipHolds(bytes, options.concealed);
+      } catch {
+        // An unreadable zip can't be shown to be free of the values.
+      }
+
+      if (holds) {
+        return unavailable(
+          'The zip may hold a value from the collector environment, so Observed did not keep it',
+        );
+      }
+    }
+
+    trace = isTrace ? summarizeTrace(bytes) : null;
+    yield* fs.writeFile(destination, bytes, { flag: 'wx' });
+  } else {
+    yield* fs.copyFile(source.value, destination);
+  }
+
+  options.addArtifact(options.id, options.filename, description);
 
   return {
     name: attachment.name,
     contentType: attachment.contentType,
     file: { kind: 'recorded', artifact: options.id },
-    trace:
-      attachment.name === 'trace' &&
-      attachment.contentType === 'application/zip'
-        ? summarizeTrace(bytes)
-        : null,
+    trace,
   } satisfies PlaywrightAttachment;
 });
 
@@ -106,6 +158,8 @@ export const collectReport = Effect.fnUntraced(function* (options: {
   // The app directory the command ran in, to name test files relative to it.
   workspace: string | null;
   directory: string;
+  // Values the report's files may hold, such as a test password.
+  concealed: readonly string[];
   addArtifact: AddArtifact;
 }) {
   const { report, workspace } = options;
@@ -131,7 +185,8 @@ export const collectReport = Effect.fnUntraced(function* (options: {
             directory: options.directory,
             filename,
             id: `playwright-${testIndex + 1}-${result.retry}-${index + 1}`,
-            description: `Playwright ${attachment.name} for "${test.titlePath.join(' › ')}", attempt ${result.retry + 1}, copied unchanged`,
+            description: `Playwright ${attachment.name} for "${test.titlePath.join(' › ')}", attempt ${result.retry + 1}`,
+            concealed: options.concealed,
             addArtifact: options.addArtifact,
           }),
         );

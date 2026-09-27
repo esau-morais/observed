@@ -9,6 +9,7 @@ import {
   attachmentFile,
   describeRun,
   describeTrace,
+  firstLine,
   notableTests,
   outcomeLabels,
   outcomeTones,
@@ -212,9 +213,7 @@ function RunPanel({
       {view.value.errors.length === 0 ? null : (
         <ul {...stylex.props(styles.list, styles.missing)}>
           {view.value.errors.map((error, index) => (
-            <li key={index}>
-              Error outside any test: {error.trim().split('\n')[0]}
-            </li>
+            <li key={index}>Error outside any test: {firstLine(error)}</li>
           ))}
         </ul>
       )}

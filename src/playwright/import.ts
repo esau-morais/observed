@@ -212,24 +212,29 @@ export const importPlaywright = Effect.fn('importPlaywright')(
       `playwright/${source.rawName}`,
       source.kind === 'json'
         ? "Playwright's JSON report; credentials redacted"
-        : "Playwright's HTML report page, which embeds the report data",
+        : "Playwright's HTML report page, which embeds the report data; not redacted",
     );
 
-    const value = yield* collectReport({
+    const collected = yield* collectReport({
       report: source.report,
       exitCode: null,
       root: source.root,
       workspace: null,
       directory,
+      concealed: [],
       addArtifact,
     });
     const evidencePath = 'evidence/playwright.json';
     const file = yield* Schema.encodeUnknownEffect(playwrightKind.file)({
       kind: playwrightKind.kind,
       schemaVersion: playwrightKind.schemaVersion,
-      value,
+      value: collected,
     });
     const evidenceText = redactText(json(file));
+    // Everything below renders the redacted evidence, as a capture does.
+    const { value } = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(playwrightKind.file),
+    )(evidenceText);
 
     yield* fs.makeDirectory(path.join(directory, 'evidence'));
     yield* fs.writeFileString(

@@ -5,7 +5,7 @@ import type {
   PlaywrightTest,
   PlaywrightValue,
 } from '../evidence-kinds/playwright';
-import { summarizeError } from '../playwright-text';
+import { firstLine, summarizeError } from '../playwright-text';
 
 export const importedAuthority = 'Imported from Playwright';
 
@@ -22,16 +22,12 @@ const runIdentity = {
 const expectation =
   'Playwright reports the test as passing. Observed counts flaky and skipped tests as unknown.';
 
-function firstLine(value: string): string {
-  return value.trim().split('\n')[0] ?? '';
-}
-
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-// Maps one test's Playwright outcome to a check result. Only a test that
-// passed as expected passes; flaky and skipped tests stay unknown.
+// Only a test that passed as expected passes; flaky and skipped tests stay
+// unknown.
 export function testCheck(test: PlaywrightTest): Check {
   const identity = {
     id: `playwright: ${test.id}`,
@@ -47,14 +43,13 @@ export function testCheck(test: PlaywrightTest): Check {
     failure === undefined || failure === null
       ? ''
       : ` ${summarizeError(failure)}`;
+  const markedToFail =
+    test.expectedStatus === 'failed' ||
+    (test.expectedStatus === null &&
+      test.annotations.some((annotation) => annotation.type === 'fail'));
 
   switch (test.outcome) {
     case 'expected': {
-      const markedToFail =
-        test.expectedStatus === 'failed' ||
-        (test.expectedStatus === null &&
-          test.annotations.some((annotation) => annotation.type === 'fail'));
-
       return {
         ...identity,
         outcome: 'passed',
@@ -64,13 +59,20 @@ export function testCheck(test: PlaywrightTest): Check {
           : `Passed${attempts > 1 ? ` on attempt ${attempts}` : ''}.`,
       };
     }
-    case 'unexpected':
+    case 'unexpected': {
+      let detail = `${last?.status === 'timedOut' ? 'Timed out' : 'Failed'} on ${attempts === 1 ? 'its only attempt' : `all ${attempts} attempts`}.${cause}`;
+
+      if (markedToFail && last?.status === 'passed') {
+        detail = 'Marked with test.fail() but passed.';
+      }
+
       return {
         ...identity,
         outcome: 'failed',
         actual: last?.status ?? 'failed',
-        detail: `${last?.status === 'timedOut' ? 'Timed out' : 'Failed'} on ${attempts === 1 ? 'its only attempt' : `all ${attempts} attempts`}.${cause}`,
+        detail,
       };
+    }
     case 'flaky': {
       const failed = test.results.filter(
         (result) => result.status !== 'passed',
@@ -187,10 +189,10 @@ function sourceHash(side: CompleteSide, source: string | null) {
         ?.sha256;
 }
 
-// One pair per candidate test, matched to the base test with the same ID. A
-// test that passed on base and fails on the candidate is a regression only
-// when the captures are comparable and its test file is byte-identical on
-// both sides; otherwise the expectation itself may have changed.
+// Tests are matched by ID. A test that passed on base and fails on the
+// candidate is a regression only when the captures are comparable and its
+// test file is byte-identical on both sides; otherwise the expectation itself
+// may have changed. A base test the candidate didn't report is unknown.
 export function playwrightPairs({
   base,
   candidate,
@@ -223,8 +225,25 @@ export function playwrightPairs({
   const baseValue = before?.kind === 'recorded' ? before.value : null;
   const baseChecks = baseValue === null ? [] : checksForRun(baseValue);
 
-  return checksForRun(after.value).map((check) => {
+  const pairs = checksForRun(after.value).map((check): CheckPair => {
     const previous = baseChecks.find((item) => item.id === check.id) ?? null;
+
+    if (
+      mode === 'comparison' &&
+      previous === null &&
+      check.id !== runIdentity.id &&
+      check.outcome === 'failed'
+    ) {
+      return {
+        base: null,
+        candidate: {
+          ...check,
+          detail: `${check.detail} Base has no result for this test, so a regression is not established.`,
+        },
+        regression: null,
+      };
+    }
+
     const test = after.value.tests.find(
       (item) => `playwright: ${item.id}` === check.id,
     );
@@ -264,4 +283,31 @@ export function playwrightPairs({
       regression: `${check.name} passed on base and failed on the candidate, with the same test file. ${check.detail}`,
     };
   });
+  const removed =
+    mode === 'comparison'
+      ? baseChecks.filter(
+          (check) =>
+            check.id !== runIdentity.id &&
+            !pairs.some((pair) => pair.candidate.id === check.id),
+        )
+      : [];
+
+  return [
+    ...pairs,
+    ...removed.map((previous): CheckPair => ({
+      base: previous,
+      candidate: {
+        id: previous.id,
+        name: previous.name,
+        authority: importedAuthority,
+        scope: previous.scope,
+        expectation: previous.expectation,
+        outcome: 'unknown',
+        actual: null,
+        detail:
+          'Base reported this test and the candidate run did not, so the candidate is unknown.',
+      },
+      regression: null,
+    })),
+  ];
 }

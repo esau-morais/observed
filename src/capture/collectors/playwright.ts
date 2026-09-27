@@ -94,6 +94,7 @@ export const playwright: Collector<'playwright'> = {
         root: workspace,
         workspace,
         directory: context.directory,
+        concealed: context.concealed,
         addArtifact: context.addArtifact,
       });
     }).pipe(Effect.scoped),

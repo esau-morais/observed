@@ -30,6 +30,11 @@ its `error-context.md`. The trace is byte-identical to the `trace.zip` the JSON
 report names. The videos, the retry's trace and the flaky test's attachments
 were left out, so the tests also cover missing files.
 
+That `observe` run concluded regression and exited 2: "opens the Finished
+shelf" passed on base and failed on the candidate with the same test file, the
+flaky and skipped tests were unknown on both sides, and the other two tests
+and the journey's request check passed.
+
 Independent check: Playwright's line reporter printed `1 failed` (opens the
 Finished shelf), `1 flaky` (keeps the count after a second click), `1 skipped`
 and `2 passed` for the candidate, and `1 flaky`, `1 skipped` and `3 passed` for

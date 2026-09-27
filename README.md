@@ -198,10 +198,11 @@ After the journey's browser work, with the app still running, Observed runs
 `TZ`, `BASE_URL` (the app's origin, such as `http://127.0.0.1:41234`), `PORT`
 and `PLAYWRIGHT_JSON_OUTPUT_FILE`, plus any variables the collector's optional
 `environment` list names, such as `["E2E_PASSWORD"]`. A named variable that is
-missing or empty fails the capture, and Observed conceals its value in text
-evidence. Point `use.baseURL` in the Playwright config
-at `process.env.BASE_URL`, and skip `webServer` when `BASE_URL` is set, so the
-tests reach the app Observed started. The command must turn on Playwright's
+missing or empty fails the capture. Point `use.baseURL` in the Playwright
+config at `process.env.BASE_URL`, and skip `webServer` when `BASE_URL` is set.
+Observed doesn't check which URL the tests open: a config that keeps a fixed
+`baseURL`, such as a shared staging site, tests that site on both sides and
+says nothing about the revisions. The command must turn on Playwright's
 JSON reporter without an `outputFile`; `--reporter=line,json` does that. List
 the test files and the Playwright config in `source.paths`, and install
 `@playwright/test` and its browsers in `setup`. The suite counts toward
@@ -224,8 +225,10 @@ passed on base and fails on the candidate is a regression only when its test
 file has the same bytes on both sides. When the file changed, the check fails
 without a regression, because the expectation itself changed. Other files the
 test imports aren't compared. A test only the candidate has fails or passes
-with no base result. A different Playwright version on each side makes the
-journey's captures not comparable.
+with no base result, and a test only base has is unknown on the candidate. A
+different Playwright version on each side makes the journey's captures not
+comparable. GitHub comments list failed and unknown tests and count the
+passing ones in one line; the report lists every test.
 
 Observed copies each test's attachments, such as `trace.zip`, screenshots,
 videos and `error-context.md`, into the evidence and links them from the
@@ -233,9 +236,15 @@ report. It reads each trace's first event to record the browser, channel,
 viewport and Playwright version, and shows the command that opens the trace in
 Playwright's own viewer, such as `npx playwright show-trace
 journey-1/candidate/playwright/3/0/4-trace.zip`, run from the report's
-directory. Observed redacts known secret patterns in the JSON report and error
-messages. It copies attachments byte for byte, so a trace keeps every request,
-cookie and page the test saw. Don't sign tests in with real credentials.
+directory.
+
+Observed conceals the `environment` values and redacts known secret patterns
+in the JSON report, error messages and text attachments such as
+`error-context.md`. It can't rewrite a zip, so it leaves out a trace or other
+zip that holds an `environment` value. Everything else, including traces
+without those values, screenshots and videos, is copied byte for byte and
+keeps whatever the test saw: requests, cookies, and pages. Sign tests in with a
+disposable account.
 
 ### Import Playwright results
 
@@ -259,7 +268,8 @@ under `--root`. It never follows a path or symlink outside it. A JSON report
 from another machine names paths that don't exist here, so its attachments show
 as unavailable; import that run's HTML report instead. The HTML report's data
 format is internal to Playwright, and Observed rejects one it can't read rather
-than guess.
+than guess. Observed keeps a copy of the HTML report's `index.html` without
+redacting it, because its data is compressed inside the page.
 
 ### Measure browser performance
 

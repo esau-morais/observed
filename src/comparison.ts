@@ -1017,8 +1017,29 @@ function verdictsFor(
   });
 }
 
+// Keeps a conclusion about a large imported suite short enough to deliver.
+// The report still lists every check.
+const listedChecks = 10;
+
 function names(verdicts: readonly CheckVerdict[]): string {
-  return verdicts.map((verdict) => verdict.name).join(', ');
+  const shown = verdicts.slice(0, listedChecks).map((verdict) => verdict.name);
+  const hidden = verdicts.length - shown.length;
+
+  return hidden > 0
+    ? `${shown.join(', ')} and ${hidden} more`
+    : shown.join(', ');
+}
+
+function sentences(
+  parts: readonly string[],
+  rest: (count: number) => string,
+): string {
+  const hidden = parts.length - listedChecks;
+
+  return [
+    ...parts.slice(0, listedChecks),
+    ...(hidden > 0 ? [rest(hidden)] : []),
+  ].join(' ');
 }
 
 function journeyConclusion(
@@ -1049,15 +1070,18 @@ function journeyConclusion(
   if (regressions.length > 0) {
     return {
       kind: 'regression',
-      text: regressions.map((item) => item.detail).join(' '),
+      text: sentences(
+        regressions.map((item) => item.detail),
+        (count) => `${count} more checks regressed.`,
+      ),
     };
   }
 
   if (failed.length > 0) {
     return {
       kind: 'check-failed',
-      text: failed
-        .map((item) => {
+      text: sentences(
+        failed.map((item) => {
           const after = candidateCheck(item.id);
 
           if (mode === 'preview') {
@@ -1076,11 +1100,19 @@ function journeyConclusion(
               'Base was not run, so a regression cannot be established.',
             unknown: 'Base was unknown, so a regression cannot be established.',
           } as const;
-          const reading = readings[baseCheck(item.id)?.outcome ?? 'unknown'];
+          const before = baseCheck(item.id);
+          const reading = readings[before?.outcome ?? 'unknown'];
 
-          return `${item.name} failed. ${reading} Base: ${describeActual(baseCheck(item.id))}; candidate: ${describeActual(after)}. ${item.expectation}`;
-        })
-        .join(' '),
+          // An imported check's detail says why no regression was
+          // established when base passed or had no result.
+          if (after?.authority === importedAuthority) {
+            return `${item.name} failed. ${before === undefined || before.outcome === 'passed' ? '' : `${reading} `}${item.detail}`;
+          }
+
+          return `${item.name} failed. ${reading} Base: ${describeActual(before)}; candidate: ${describeActual(after)}. ${item.expectation}`;
+        }),
+        (count) => `${count} more checks failed.`,
+      ),
     };
   }
 
@@ -1104,10 +1136,10 @@ function journeyConclusion(
   if (unknown.length > 0) {
     return {
       kind: 'unavailable',
-      text: unknown
-        .map((item) => `${item.name}: unknown. ${item.detail}`)
-        .join(' ')
-        .concat(notRunText),
+      text: sentences(
+        unknown.map((item) => `${item.name}: unknown. ${item.detail}`),
+        (count) => `${count} more checks are unknown.`,
+      ).concat(notRunText),
     };
   }
 
@@ -1131,20 +1163,23 @@ function journeyConclusion(
   if (mode === 'preview') {
     return {
       kind: 'preview',
-      text: `${passed.map((item) => `${item.name}: passed.`).join(' ')}${notRunText}`,
+      text: `${sentences(
+        passed.map((item) => `${item.name}: passed.`),
+        (count) => `${count} more checks passed.`,
+      )}${notRunText}`,
     };
   }
 
   return {
     kind: 'no-regression',
-    text: passed
-      .map((item) =>
+    text: sentences(
+      passed.map((item) =>
         baseOutcome(item.id) === 'passed'
           ? `${item.name} passed on base and candidate.`
           : `${item.name} ${baseOutcome(item.id)} on base and passed on candidate.`,
-      )
-      .join(' ')
-      .concat(notRunText),
+      ),
+      (count) => `${count} more checks passed on the candidate.`,
+    ).concat(notRunText),
   };
 }
 
