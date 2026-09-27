@@ -146,10 +146,10 @@ The [project schema](src/project.ts) and
   the step after which each was read. agent-browser reports errors without
   times, so Observed reads them after every step and once more after the last
   snapshot, and shows the interval in which each error was reported. Errors
-  after that read, while Observed takes the screenshot, aren't recorded. When
-  a step fails, the capture keeps these records so the report shows which step
-  failed and which errors came before it. A capture that times out or is
-  cancelled keeps none.
+  after that read, while other collectors run and Observed takes the screenshot,
+  aren't recorded. When a step fails, the capture keeps these records so the
+  report shows which step failed and which errors came before it. A capture that
+  times out or is cancelled keeps none.
 - Put the expected result in the check, not in a step. A step that waits for the
   expected text times out when the app regresses, and the run reports
   unavailable instead of a failed check. Wait for something both versions show,
