@@ -131,6 +131,7 @@ test('a failure under a different React build is not attributed as a regression'
       definition: check,
       base,
       candidate,
+      comparable: true,
     });
 
     return {

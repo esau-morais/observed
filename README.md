@@ -109,7 +109,7 @@ The [project schema](src/project.ts) and
 - A journey's optional `collectors` list records more evidence after `steps`,
   with or without a check reading it. Checks add the collectors they need. The
   [evidence kinds](src/evidence-kinds/index.ts) list what can be collected.
-- A check is `request-count` or `text`. A
+- A check is `request-count`, `text` or `react-renders`. A
   `request-count` check counts the requests during `steps` whose method, path
   and status match. It counts requests to the app's origin, or to the check's
   `origin` when set. It compares the path without the query string or

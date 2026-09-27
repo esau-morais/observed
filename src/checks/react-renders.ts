@@ -78,12 +78,13 @@ export const reactRenders = defineCheck({
   evidence: ['react'],
   collectors: () => [{ kind: 'react' }],
   expectation,
-  evaluate: ({ definition: check, base, candidate }) => {
+  evaluate: ({ definition: check, base, candidate, comparable }) => {
     const before =
       base === null ? null : evaluateReactRenders(check, base.evidence.react);
     const after = evaluateReactRenders(check, candidate.evidence.react);
 
     if (
+      !comparable ||
       base === null ||
       typeof before?.actual !== 'number' ||
       typeof after.actual !== 'number'
