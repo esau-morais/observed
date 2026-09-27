@@ -68,3 +68,7 @@ loadReport().catch((error: unknown) => {
     />,
   );
 });
+
+setTimeout(() => {
+  throw new Error('Seeded self-observe error');
+}, 0);
