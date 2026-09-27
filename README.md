@@ -94,11 +94,11 @@ The [project schema](src/project.ts) and
   during `steps` to an origin outside the app and `allowedOrigins`, such as a
   font CDN or analytics, fails the capture.
 - `capture.check` is optional and holds one `request-count` or `text` check. A
-  `request-count` check counts requests during `steps` to the app's origin, or
-  to the check's `origin` when set, whose method, path and status match. It
-  compares the path without the query string or fragment, so
-  `/api/items` counts both `/api/items` and `/api/items?page=2`, and the check's
-  `path` can't contain `?` or `#`. A `text` check passes when exactly one element
+  `request-count` check counts the requests during `steps` whose method, path
+  and status match. It counts requests to the app's origin, or to the check's
+  `origin` when set. It compares the path without the query string or
+  fragment, so `/api/items` counts both `/api/items` and `/api/items?page=2`,
+  and the check's `path` can't contain `?` or `#`. A `text` check passes when exactly one element
   matches its selector and its text equals `expectedText`.
 - Put the expected result in the check, not in a step. A step that waits for the
   expected text times out when the app regresses, and the run reports
