@@ -73,11 +73,11 @@
         },
         {
           "kind": "performance",
-          "id": "report-fcp",
-          "name": "Report paints quickly",
+          "id": "report-load",
+          "name": "Report loads quickly",
           "scope": "Loading the report page until its title renders.",
-          "metric": "fcp",
-          "max": 1800
+          "metric": "load",
+          "max": 250
         }
       ],
       "browserArguments": ["--no-sandbox"],
