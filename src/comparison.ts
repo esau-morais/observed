@@ -213,7 +213,9 @@ export function evaluateCheck<D extends CheckIdentity>(
   const candidateInput = checkInput(candidate, kind.evidence);
   const readBase = baseInput?.kind === 'ready' ? baseInput.input : null;
   const comparesSides =
-    kind.needsBase === true || kind.regression !== undefined;
+    typeof kind.needsBase === 'function'
+      ? kind.needsBase(definition)
+      : kind.needsBase === true || kind.regression !== undefined;
   let blocked: string | null = null;
 
   if (mode === 'comparison' && comparesSides) {

@@ -42,8 +42,11 @@ export type CheckKind<D extends CheckIdentity, K extends EvidenceKind> = {
   // Set when the rule compares the candidate with the base. In a comparison
   // whose base is unusable, missing declared evidence, or not comparable, the
   // candidate is then unknown and `evaluate` is not called for it; a preview
-  // still calls it. Defining `regression` has the same effect.
-  readonly needsBase?: true;
+  // still calls it. Defining `regression` has the same effect unless this is
+  // a function, which decides per definition. It must return true for every
+  // definition whose verdict depends on the base, because `regression` still
+  // runs on comparable pairs when it returns false.
+  readonly needsBase?: true | ((definition: D) => boolean);
   // `base` is null in a preview or when the base side is unusable.
   // `comparable` is true only when the journey's comparison is available;
   // a rule reading both sides must not pass on an incomparable pair.
@@ -55,7 +58,8 @@ export type CheckKind<D extends CheckIdentity, K extends EvidenceKind> = {
   }) => { base: Evaluation | null; candidate: Evaluation };
   // Runs only for comparable captures whose evaluations are both passed or
   // failed. Defaults to base passed and candidate failed. Defining it makes
-  // the kind behave as if `needsBase` were set.
+  // the kind behave as if `needsBase` were set, unless `needsBase` is a
+  // function.
   readonly regression?: (input: {
     definition: D;
     base: Evaluated<K>;

@@ -1,10 +1,16 @@
 import { Schema } from 'effect';
 import { text as nonEmpty } from '../capture/model';
 import { accessibility } from './accessibility';
+import { performance } from './performance';
 import { react } from './react';
 import { text } from './text';
 
-export const evidenceKinds = { text, react, accessibility } as const;
+export const evidenceKinds = {
+  text,
+  react,
+  accessibility,
+  performance,
+} as const;
 
 const kinds = Object.values(evidenceKinds);
 

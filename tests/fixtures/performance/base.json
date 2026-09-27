@@ -1,0 +1,130 @@
+{
+  "conditions": {
+    "samples": 5,
+    "warmup": 1,
+    "cpu": "unthrottled",
+    "network": "unthrottled",
+    "cache": "warm",
+    "order": "sequential",
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "scale": 1
+    }
+  },
+  "samples": [
+    {
+      "run": 1,
+      "warmup": true,
+      "startedAt": "2026-09-27T05:08:45.391Z",
+      "finishedAt": "2026-09-27T05:08:48.199Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 64,
+        "fcp": 64,
+        "ttfb": 8.200000002980232,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 39,
+        "load": 39.20000000298023
+      }
+    },
+    {
+      "run": 2,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:08:48.199Z",
+      "finishedAt": "2026-09-27T05:08:50.884Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 28,
+        "fcp": 28,
+        "ttfb": 3.7000000029802322,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 18.899999998509884,
+        "load": 19
+      }
+    },
+    {
+      "run": 3,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:08:50.884Z",
+      "finishedAt": "2026-09-27T05:08:53.580Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 40,
+        "fcp": 40,
+        "ttfb": 5.299999997019768,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 25.299999997019768,
+        "load": 25.5
+      }
+    },
+    {
+      "run": 4,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:08:53.580Z",
+      "finishedAt": "2026-09-27T05:08:56.262Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 28,
+        "fcp": 28,
+        "ttfb": 3.600000001490116,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 17,
+        "load": 17.200000002980232
+      }
+    },
+    {
+      "run": 5,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:08:56.262Z",
+      "finishedAt": "2026-09-27T05:08:58.929Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 32,
+        "fcp": 32,
+        "ttfb": 3.899999998509884,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 16.399999998509884,
+        "load": 16.600000001490116
+      }
+    },
+    {
+      "run": 6,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:08:58.929Z",
+      "finishedAt": "2026-09-27T05:09:01.611Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 32,
+        "fcp": 32,
+        "ttfb": 4.100000001490116,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 18.100000001490116,
+        "load": 18.30000000447035
+      }
+    }
+  ],
+  "inspection": {
+    "kind": "requested",
+    "trace": {
+      "kind": "recorded",
+      "artifact": "performance-trace"
+    },
+    "profile": {
+      "kind": "recorded",
+      "artifact": "performance-profile"
+    }
+  }
+}

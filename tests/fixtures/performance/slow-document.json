@@ -1,0 +1,130 @@
+{
+  "conditions": {
+    "samples": 5,
+    "warmup": 1,
+    "cpu": "unthrottled",
+    "network": "unthrottled",
+    "cache": "warm",
+    "order": "sequential",
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "scale": 1
+    }
+  },
+  "samples": [
+    {
+      "run": 1,
+      "warmup": true,
+      "startedAt": "2026-09-27T05:09:14.123Z",
+      "finishedAt": "2026-09-27T05:09:17.134Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 452,
+        "fcp": 452,
+        "ttfb": 404.8999999985099,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 435.70000000298023,
+        "load": 435.8999999985099
+      }
+    },
+    {
+      "run": 2,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:09:17.135Z",
+      "finishedAt": "2026-09-27T05:09:20.213Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 440,
+        "fcp": 440,
+        "ttfb": 404.8999999985099,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 420.3999999985099,
+        "load": 420.5
+      }
+    },
+    {
+      "run": 3,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:09:20.213Z",
+      "finishedAt": "2026-09-27T05:09:23.296Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 428,
+        "fcp": 428,
+        "ttfb": 403.5,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 420.69999999552965,
+        "load": 420.79999999701977
+      }
+    },
+    {
+      "run": 4,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:09:23.296Z",
+      "finishedAt": "2026-09-27T05:09:26.378Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 428,
+        "fcp": 428,
+        "ttfb": 404.3999999985099,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 419.1000000014901,
+        "load": 419.1000000014901
+      }
+    },
+    {
+      "run": 5,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:09:26.378Z",
+      "finishedAt": "2026-09-27T05:09:29.445Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 432,
+        "fcp": 432,
+        "ttfb": 404.3999999985099,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 418.09999999403954,
+        "load": 418.29999999701977
+      }
+    },
+    {
+      "run": 6,
+      "warmup": false,
+      "startedAt": "2026-09-27T05:09:29.446Z",
+      "finishedAt": "2026-09-27T05:09:32.527Z",
+      "document": "/",
+      "interactions": 1,
+      "metrics": {
+        "lcp": 428,
+        "fcp": 428,
+        "ttfb": 404.5,
+        "cls": 0,
+        "inp": 16,
+        "dom-content-loaded": 419.6000000014901,
+        "load": 419.70000000298023
+      }
+    }
+  ],
+  "inspection": {
+    "kind": "requested",
+    "trace": {
+      "kind": "recorded",
+      "artifact": "performance-trace"
+    },
+    "profile": {
+      "kind": "recorded",
+      "artifact": "performance-profile"
+    }
+  }
+}

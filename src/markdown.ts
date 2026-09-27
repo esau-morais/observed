@@ -6,3 +6,11 @@ export function escapeText(value: string): string {
     .replace(/[\\`*_{}[\]()#+!|~.=-]/g, '\\$&')
     .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ');
 }
+
+export function link(label: string, path: string): string {
+  const destination = path.replace(/[<>\s\\]/g, (character) =>
+    encodeURIComponent(character),
+  );
+
+  return `[${escapeText(label)}](<${destination}>)`;
+}

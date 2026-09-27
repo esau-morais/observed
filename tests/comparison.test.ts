@@ -19,7 +19,8 @@ import {
 } from '../src/capture/model';
 import { json, sha256 } from '../src/encoding';
 import type { Recipe } from '../src/capture/recipe';
-import type { EvidenceValue } from '../src/evidence-kinds';
+import { checkKinds } from '../src/checks';
+import { evidenceKinds, type EvidenceValue } from '../src/evidence-kinds';
 import {
   fixtureHash,
   observed,
@@ -94,6 +95,7 @@ async function syntheticBundle(
     observations?: Observations;
     contract?: Recipe;
     text?: EvidenceValue<'text'>;
+    performance?: EvidenceValue<'performance'>;
   } = {},
 ) {
   const directory = await mkdtemp(
@@ -150,6 +152,19 @@ async function syntheticBundle(
             id: 'evidence-text',
             path: 'evidence/text.json',
             text: json({ kind: 'text', schemaVersion: 1, value: options.text }),
+          },
+        ]),
+    ...(options.performance === undefined
+      ? []
+      : [
+          {
+            id: 'evidence-performance',
+            path: 'evidence/performance.json',
+            text: json({
+              kind: 'performance',
+              schemaVersion: 1,
+              value: options.performance,
+            }),
           },
         ]),
     ...files.map((file, index) => ({
@@ -211,10 +226,10 @@ async function syntheticBundle(
     execution: { kind: 'complete' },
     artifacts,
     evidence: artifacts.flatMap((artifact) =>
-      artifact.id === 'evidence-text'
+      artifact.id === 'evidence-text' || artifact.id === 'evidence-performance'
         ? [
             {
-              kind: 'text',
+              kind: artifact.id.slice('evidence-'.length),
               schemaVersion: 1,
               status: 'recorded' as const,
               path: artifact.path,
@@ -1879,4 +1894,60 @@ test('a regression hook decides failed-to-failed pairs and never runs without ba
     candidate: { outcome: 'unknown' },
     regression: null,
   });
+});
+
+const performanceBudget = Schema.decodeUnknownSync(
+  checkKinds.performance.definition,
+)({
+  kind: 'performance',
+  id: 'lcp-budget',
+  name: 'Largest contentful paint budget',
+  scope: 'Open the page through the journey.',
+  metric: 'lcp',
+  max: 200,
+});
+
+async function performanceSide(file: string) {
+  const side = await inspect(
+    (
+      await syntheticBundle({
+        contract: twoChecks,
+        performance: Schema.decodeUnknownSync(
+          Schema.fromJsonString(evidenceKinds.performance.value),
+        )(
+          await readFile(
+            new URL(`fixtures/performance/${file}`, import.meta.url),
+            'utf8',
+          ),
+        ),
+      })
+    ).directory,
+  );
+
+  if (side.execution !== 'complete') {
+    throw new Error('A complete synthetic side is expected');
+  }
+
+  return side;
+}
+
+test('an absolute performance budget still fails the candidate when the base is unusable', async () => {
+  const candidate = await performanceSide('slow-document.json');
+
+  expect(
+    evaluateCheck(checkKinds.performance, performanceBudget, {
+      base: null,
+      candidate,
+      mode: 'comparison',
+      comparable: false,
+    }).candidate.outcome,
+  ).toBe('failed');
+  const relative = evaluateCheck(
+    checkKinds.performance,
+    { ...performanceBudget, maxIncreasePercent: 20 },
+    { base: null, candidate, mode: 'comparison', comparable: false },
+  ).candidate;
+
+  expect(relative.outcome).toBe('unknown');
+  expect(relative.detail).toContain('Base: capture unavailable');
 });
