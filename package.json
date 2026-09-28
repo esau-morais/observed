@@ -1,6 +1,6 @@
 {
   "name": "@observed-software/cli",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "description": "See what a code change does in the running app: capture it, compare it with another revision, and check named expectations.",
   "license": "MIT",
   "repository": {

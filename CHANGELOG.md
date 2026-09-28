@@ -4,6 +4,36 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.2 (2026-09-28)
+
+Third alpha of 0.2.0, published under the npm dist-tag `alpha`. The action is
+the same as in 0.2.0-alpha.1, and its `v0` tag stays on 0.1.0.
+
+- **Bare `observed` sets up what is missing.** Run it in your app's directory.
+  It checks Bun and the browser, gets `observed.json` written, captures the app
+  and opens the viewer, then offers a pull request that runs Observed on every
+  pull request. Without a terminal, or with `--json`, it asks nothing, prints
+  the next step and exits `3` when it stopped at a setup step. The README
+  covers `--yes`, `--dry-run`, `--agent` and `--project`.
+- **Your own agent writes `observed.json`.** When the file is missing or
+  invalid, `observed` offers to open Claude Code, Codex, OpenCode or `opencode2`
+  in its own interactive session with one message that points to
+  `observed skill`, and continues when you quit the agent. OpenCode 2 fills in
+  the message and waits for Enter. You can also print the message for any other
+  agent.
+- **`observed skill` and `observed schema`.** The first prints the guide an
+  agent follows, with every command running the same version: `observed` when
+  that version is installed, and otherwise
+  `bunx @observed-software/cli@0.2.0-alpha.2`. The second prints the JSON
+  Schema for `observed.json`.
+- **The setup pull request works without the GitHub CLI.** One question, yes
+  by default. With `gh` signed in, `gh` opens the pull request. Without it,
+  `observed` pushes with your Git credentials and opens GitHub's pull request
+  page with the title and description filled in. The workflow is pinned to this
+  release's commit, and `.github/dependabot.yml` is added when the default
+  branch has none. `observed` links to the ruleset settings and never changes
+  them.
+
 ## 0.2.0-alpha.1 (2026-09-28)
 
 Second alpha of 0.2.0, published under the npm dist-tag `alpha`. The action's
