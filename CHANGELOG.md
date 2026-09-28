@@ -4,6 +4,28 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.1 (2026-09-28)
+
+Second alpha of 0.2.0, published under the npm dist-tag `alpha`. The action's
+`v0` tag stays on 0.1.0; pin the `v0.2.0-alpha.1` commit SHA to try it.
+
+- **No GitHub App needed.** The action posts with the workflow's own token
+  through the new `github-token` input, which defaults to `${{ github.token }}`.
+  Grant `checks: write` and `pull-requests: write` in the workflow's
+  `permissions:`.
+- **The job is the check.** The action titles the job's own check run with the
+  verdict, and the job passes or fails on the result. It no longer posts a
+  separate "Observed" check. Name the job `Observed` and require it. A preview,
+  or a run with no named checks, passes with a title that says so.
+- **Your own App only signs the comment.** `github-app-client-id` and
+  `github-app-private-key` still work. If one of them is empty, the run shows an
+  error naming it and posts with the workflow token.
+- **Every run says what it posted.** The job summary and the check end with a
+  line such as `Posted: check title and comment.` Anything not posted gets an
+  annotation with the reason. A refused write names the missing permission, and
+  a fork pull request gets a notice that its token is read-only.
+- `job-outcome` is deprecated. It has no effect and prints a warning.
+
 ## 0.2.0-alpha.0 (2026-09-27)
 
 First alpha of 0.2.0. It is published under the npm dist-tag `alpha`, so
