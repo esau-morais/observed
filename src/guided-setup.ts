@@ -30,9 +30,9 @@ export function detectAgents(
   );
 }
 
-// Each agent runs non-interactively in the app's directory under its own
-// permissions. Only file edits are pre-approved, since the task is writing
-// observed.json.
+// Each agent runs non-interactively in the app's directory. Claude Code gets
+// file edits pre-approved; Codex may also run commands inside the directory's
+// sandbox; OpenCode follows the user's own permission settings.
 export function agentCommand(
   agent: Agent,
   prompt: string,
@@ -95,7 +95,7 @@ export function writePrompt(options: {
 
   return [
     `Write observed.json in ${facts.directory} so Observed can start this app and capture one journey through it.`,
-    'Only write observed.json. Do not run Observed: when you finish, Observed validates the file, captures the app, and sends you any error.',
+    'Only write observed.json, and do not run Observed. When you finish, Observed validates the file, captures the app, and sends you any error.',
     ...(options.contract === null
       ? []
       : [
@@ -143,7 +143,7 @@ on:
 
 permissions:
   contents: read
-  checks: write         # title this job's check with the result
+  checks: write         # title this job's check with the verdict
   pull-requests: write  # post and update one comment
 
 concurrency:
@@ -156,7 +156,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ${checkoutAction} # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -184,23 +184,29 @@ export function githubRepository(remote: string): string | null {
   return match === null ? null : `${match[1] ?? ''}/${match[2] ?? ''}`;
 }
 
-const permissionsSchema = Schema.Struct({
-  enabled: Schema.Boolean,
-  allowed_actions: Schema.optionalKey(
-    Schema.Literals(['all', 'local_only', 'selected']),
-  ),
-  sha_pinning_required: Schema.optionalKey(Schema.Boolean),
-});
+const permissionsSchema = Schema.fromJsonString(
+  Schema.Struct({
+    enabled: Schema.Boolean,
+    allowed_actions: Schema.optionalKey(
+      Schema.Literals(['all', 'local_only', 'selected']),
+    ),
+  }),
+);
 
-const selectedSchema = Schema.Struct({
-  github_owned_allowed: Schema.optionalKey(Schema.Boolean),
-  patterns_allowed: Schema.optionalKey(Schema.Array(Schema.String)),
-});
+const selectedSchema = Schema.fromJsonString(
+  Schema.Struct({
+    github_owned_allowed: Schema.optionalKey(Schema.Boolean),
+    patterns_allowed: Schema.optionalKey(Schema.Array(Schema.String)),
+  }),
+);
 
 export type Policy =
   | { kind: 'allowed' }
   | { kind: 'blocked'; reason: string }
   | { kind: 'unknown'; reason: string };
+
+export const checkoutAction =
+  'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1';
 
 function matches(pattern: string, reference: string): boolean {
   const expression = new RegExp(
@@ -215,8 +221,14 @@ function matches(pattern: string, reference: string): boolean {
 
 // Reads GitHub's answers for the repository's Actions settings. Only an admin
 // can read them; anyone else gets unknown and the workflow is still offered.
-export function actionsPolicy(permissions: unknown, selected: unknown): Policy {
-  const decoded = Schema.decodeUnknownOption(permissionsSchema)(permissions);
+export function actionsPolicy(options: {
+  permissions: string | null;
+  selected: string | null;
+  uses: readonly string[];
+}): Policy {
+  const decoded = Schema.decodeUnknownOption(permissionsSchema)(
+    options.permissions,
+  );
 
   if (Option.isNone(decoded)) {
     return {
@@ -246,7 +258,7 @@ export function actionsPolicy(permissions: unknown, selected: unknown): Policy {
     return { kind: 'allowed' };
   }
 
-  const list = Schema.decodeUnknownOption(selectedSchema)(selected);
+  const list = Schema.decodeUnknownOption(selectedSchema)(options.selected);
 
   if (Option.isNone(list)) {
     return {
@@ -256,12 +268,14 @@ export function actionsPolicy(permissions: unknown, selected: unknown): Policy {
   }
 
   const patterns = list.value.patterns_allowed ?? [];
-  const missing = [
-    ...(list.value.github_owned_allowed === true ? [] : ['actions/checkout@*']),
-    ...(patterns.some((pattern) => matches(pattern, `${actionRepository}@v0`))
-      ? []
-      : [`${actionRepository}@*`]),
-  ];
+  const missing = options.uses.filter(
+    (reference) =>
+      !(
+        (list.value.github_owned_allowed === true &&
+          /^(actions|github)\//.test(reference)) ||
+        patterns.some((pattern) => matches(pattern, reference))
+      ),
+  );
 
   return missing.length === 0
     ? { kind: 'allowed' }
@@ -275,12 +289,19 @@ export function actionsPolicy(permissions: unknown, selected: unknown): Policy {
 // terminal nothing is asked, and only --yes stands in for a yes.
 export type Consent = 'ask' | 'yes' | 'dry-run' | 'no-terminal';
 
+export class SetupStepFailure extends Schema.TaggedError<SetupStepFailure>()(
+  'SetupStepFailure',
+  { message: Schema.String },
+) {}
+
 export type Shell = (
   argv: readonly string[],
   options: { cwd: string; input?: string },
 ) => Effect.Effect<{ code: number; stdout: string; stderr: string }>;
 
-export type Ask = (question: string) => Effect.Effect<boolean>;
+// Cancelled means the person left the question, which is not a no.
+export type Answer = 'yes' | 'no' | 'cancelled';
+export type Ask = (question: string) => Effect.Effect<Answer>;
 export type Say = (text: string) => Effect.Effect<void>;
 
 export type Step = {
@@ -313,13 +334,11 @@ const decide = (consent: Consent, ask: Ask, question: string) => {
     case 'yes':
       return Effect.succeed('yes' as const);
     case 'ask':
-      return ask(question).pipe(
-        Effect.map((answer) => (answer ? ('yes' as const) : ('no' as const))),
-      );
+      return ask(question);
     case 'dry-run':
       return Effect.succeed('dry-run' as const);
     case 'no-terminal':
-      return Effect.succeed('unanswered' as const);
+      return Effect.succeed('cancelled' as const);
   }
 };
 
@@ -327,7 +346,7 @@ const refSchema = Schema.fromJsonString(
   Schema.Struct({
     object: Schema.Struct({
       type: Schema.String,
-      sha: Schema.String,
+      sha: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
     }),
   }),
 );
@@ -370,33 +389,29 @@ const readPolicy = Effect.fnUntraced(function* (
   shell: Shell,
   repository: string,
   cwd: string,
+  uses: readonly string[],
 ) {
-  const json = (text: string): unknown => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  };
-
   const permissions = yield* shell(
     ['gh', 'api', `repos/${repository}/actions/permissions`],
     { cwd },
   );
+  const selected =
+    permissions.code === 0
+      ? yield* shell(
+          [
+            'gh',
+            'api',
+            `repos/${repository}/actions/permissions/selected-actions`,
+          ],
+          { cwd },
+        )
+      : null;
 
-  if (permissions.code !== 0) {
-    return actionsPolicy(null, null);
-  }
-
-  const selected = yield* shell(
-    ['gh', 'api', `repos/${repository}/actions/permissions/selected-actions`],
-    { cwd },
-  );
-
-  return actionsPolicy(
-    json(permissions.stdout),
-    selected.code === 0 ? json(selected.stdout) : null,
-  );
+  return actionsPolicy({
+    permissions: permissions.code === 0 ? permissions.stdout : null,
+    selected: selected?.code === 0 ? selected.stdout : null,
+    uses,
+  });
 });
 
 export function setupPullRequestBody(dependabot: boolean): string {
@@ -440,7 +455,9 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
         result.code === 0
           ? Effect.succeed(result.stdout.trim())
           : Effect.fail(
-              `${argv.slice(0, 3).join(' ')} failed: ${result.stderr.trim().split('\n').at(-1) ?? ''}`,
+              new SetupStepFailure({
+                message: `${argv.slice(0, 3).join(' ')} failed: ${result.stderr.trim().split('\n').at(-1) ?? ''}`,
+              }),
             ),
       ),
     );
@@ -463,9 +480,9 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
   ]);
 
   if (existing !== '') {
-    return yield* Effect.fail(
-      `The branch ${setupBranch} already exists on origin. Open its pull request or delete the branch, then run observed again.`,
-    );
+    return yield* new SetupStepFailure({
+      message: `The branch ${setupBranch} already exists on origin. Open its pull request or delete the branch, then run observed again.`,
+    });
   }
 
   yield* step(['git', 'fetch', '--quiet', 'origin', base]);
@@ -489,10 +506,18 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
 
       yield* fs
         .makeDirectory(path.dirname(target), { recursive: true })
-        .pipe(Effect.mapError((error) => error.message));
+        .pipe(
+          Effect.mapError(
+            (error) => new SetupStepFailure({ message: error.message }),
+          ),
+        );
       yield* fs
         .writeFileString(target, file.contents)
-        .pipe(Effect.mapError((error) => error.message));
+        .pipe(
+          Effect.mapError(
+            (error) => new SetupStepFailure({ message: error.message }),
+          ),
+        );
     }
 
     yield* step(
@@ -561,11 +586,12 @@ const existingWorkflow = Effect.fnUntraced(function* (gitRoot: string) {
   return null;
 });
 
-export type WorkflowOutcome = {
-  step: Step;
-  next: string | null;
-  base: string | null;
-};
+// Ready means a workflow exists or a setup pull request was opened; base is
+// known only for the pull request.
+export type WorkflowOutcome =
+  | { kind: 'ready'; step: Step; base: string | null }
+  | { kind: 'waiting'; step: Step; next: string }
+  | { kind: 'stopped'; step: Step };
 
 // Offered after a successful capture. Every outward action (branch, push,
 // pull request) waits for a yes, and a no is remembered in .observed/.
@@ -583,24 +609,30 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
 }) {
   const fs = yield* FileSystem.FileSystem;
   const { shell, ask, say, consent } = options;
-  const outcome = (
+  const step = (status: Step['status'], detail: string): Step => ({
+    id: 'workflow',
+    status,
+    detail,
+  });
+  const stopped = (
     status: Step['status'],
     detail: string,
-    next: string | null = null,
-    base: string | null = null,
   ): WorkflowOutcome => ({
-    step: { id: 'workflow', status, detail },
-    next,
-    base,
+    kind: 'stopped',
+    step: step(status, detail),
   });
   const found = yield* existingWorkflow(options.gitRoot);
 
   if (found !== null) {
-    return outcome('done', `${found} runs Observed.`);
+    return {
+      kind: 'ready',
+      step: step('done', `${found} runs Observed.`),
+      base: null,
+    } satisfies WorkflowOutcome;
   }
 
   if ((yield* readState(options.observed)).workflow === 'declined') {
-    return outcome(
+    return stopped(
       'declined',
       `You declined the workflow earlier. Delete ${setupState(options.observed)} to be asked again.`,
     );
@@ -609,16 +641,19 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
   const sha = yield* releaseSha(shell, options.version, options.gitRoot);
 
   if (sha === null) {
-    return outcome(
+    return stopped(
       'failed',
       `No ${actionRepository} release is tagged v${options.version}, so there is no commit to pin. Follow README "Run on pull requests" to add the workflow by hand.`,
     );
   }
 
-  const policy = yield* readPolicy(shell, options.repository, options.gitRoot);
+  const policy = yield* readPolicy(shell, options.repository, options.gitRoot, [
+    `${actionRepository}@${sha}`,
+    checkoutAction,
+  ]);
 
   if (policy.kind === 'blocked') {
-    return outcome(
+    return stopped(
       'failed',
       `The repository's Actions settings would block the workflow. ${policy.reason}`,
     );
@@ -647,16 +682,19 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
 
   switch (decision) {
     case 'dry-run':
-      return outcome(
+      return stopped(
         'planned',
         `Would write ${workflowPath}, commit it with observed.json on ${setupBranch}, push, and open a pull request.`,
       );
-    case 'unanswered':
-      return outcome(
-        'needs-answer',
-        'The workflow is not set up.',
-        `Run observed --yes to open a setup pull request, or add ${workflowPath} by hand.`,
-      );
+    case 'cancelled':
+      return {
+        kind: 'waiting',
+        step: step('needs-answer', 'The workflow is not set up.'),
+        next:
+          consent === 'no-terminal'
+            ? `Ask the person whether Observed may open a setup pull request. With their yes, run observed --yes; otherwise add ${workflowPath} by hand.`
+            : 'Run observed again to be asked about the workflow.',
+      } satisfies WorkflowOutcome;
     case 'no':
       yield* fs
         .makeDirectory(options.observed, { recursive: true })
@@ -668,14 +706,25 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
         )
         .pipe(Effect.ignore);
 
-      return outcome('declined', "Not added. Observed won't ask again.");
+      return stopped('declined', "Not added. Observed won't ask again.");
     case 'yes':
       break;
   }
 
-  const hasDependabot = yield* fs
-    .exists(path.join(options.gitRoot, dependabotPath))
-    .pipe(Effect.orElseSucceed(() => true));
+  const existingDependabot = yield* fs
+    .readFileString(path.join(options.gitRoot, dependabotPath))
+    .pipe(Effect.option);
+  const hasDependabot = Option.isSome(existingDependabot);
+
+  if (
+    hasDependabot &&
+    !existingDependabot.value.includes('package-ecosystem: github-actions')
+  ) {
+    yield* say(
+      `${dependabotPath} has no github-actions entry. Add one so Dependabot proposes updates to the pinned commit:\n\n${dependabotYaml.split('\n').slice(2).join('\n')}`,
+    );
+  }
+
   const dependabot =
     !hasDependabot &&
     (yield* decide(
@@ -683,37 +732,43 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
       ask,
       `Also add ${dependabotPath} so Dependabot proposes updates to the pinned commit?`,
     )) === 'yes';
-  const config = yield* fs
-    .readFileString(
-      path.join(options.gitRoot, options.project, 'observed.json'),
-    )
-    .pipe(Effect.mapError((error) => error.message));
-  const opened = yield* openSetupPullRequest({
-    shell,
-    gitRoot: options.gitRoot,
-    repository: options.repository,
-    files: [
-      {
-        path: path.posix.join(options.project, 'observed.json'),
-        contents: config,
-      },
-      { path: workflowPath, contents: yaml },
-      ...(dependabot
-        ? [{ path: dependabotPath, contents: dependabotYaml }]
-        : []),
-    ],
-    body: setupPullRequestBody(dependabot),
-    scratch: options.scratch,
+  const opened = yield* Effect.gen(function* () {
+    const config = yield* fs
+      .readFileString(
+        path.join(options.gitRoot, options.project, 'observed.json'),
+      )
+      .pipe(
+        Effect.mapError(
+          (error) => new SetupStepFailure({ message: error.message }),
+        ),
+      );
+
+    return yield* openSetupPullRequest({
+      shell,
+      gitRoot: options.gitRoot,
+      repository: options.repository,
+      files: [
+        {
+          path: path.posix.join(options.project, 'observed.json'),
+          contents: config,
+        },
+        { path: workflowPath, contents: yaml },
+        ...(dependabot
+          ? [{ path: dependabotPath, contents: dependabotYaml }]
+          : []),
+      ],
+      body: setupPullRequestBody(dependabot),
+      scratch: options.scratch,
+    });
   }).pipe(Effect.result);
 
   return Result.isFailure(opened)
-    ? outcome('failed', opened.failure)
-    : outcome(
-        'done',
-        `Opened ${opened.success.url}`,
-        null,
-        opened.success.base,
-      );
+    ? stopped('failed', opened.failure.message)
+    : ({
+        kind: 'ready',
+        step: step('done', `Opened ${opened.success.url}`),
+        base: opened.success.base,
+      } satisfies WorkflowOutcome);
 });
 
 const rulesSchema = Schema.fromJsonString(
@@ -782,9 +837,9 @@ export const requiredCheckStep = Effect.fnUntraced(function* (options: {
   }
 
   if (
-    !(yield* options.ask(
+    (yield* options.ask(
       `Create that ruleset now, requiring Observed on ${options.base}?`,
-    ))
+    )) !== 'yes'
   ) {
     return {
       id: 'required-check',

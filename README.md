@@ -70,8 +70,9 @@ Without a terminal, or with `--json`, `observed` never asks. It prints the next
 step, and with `--json` a `{ "steps", "next", "run" }` object. It exits with `3`
 when it stopped at a setup step, and otherwise with the capture's exit code
 below. `--agent claude|codex|opencode|prompt` picks who writes `observed.json`
-without asking. `--yes` answers yes to the workflow and the setup pull request,
-for an agent you authorized, and never creates a ruleset. `--dry-run` prints
+without asking. `--yes` answers yes to the browser download, the workflow,
+Dependabot and the setup pull request. Give it to an agent only after you
+agree to those. It never creates a ruleset. `--dry-run` prints
 the remaining steps and changes nothing. `--project <dir>` runs it for another
 directory.
 
@@ -614,7 +615,7 @@ on:
 
 permissions:
   contents: read
-  checks: write         # title this job's check with the result
+  checks: write         # title this job's check with the verdict
   pull-requests: write  # post and update one comment
 
 concurrency:

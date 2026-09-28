@@ -1,5 +1,5 @@
 import { BunServices } from '@effect/platform-bun';
-import { Effect, Schema } from 'effect';
+import { Effect } from 'effect';
 import {
   chmod,
   mkdir,
@@ -12,10 +12,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import {
+  actionsPolicy,
+  checkoutAction,
   detectAgents,
   requiredCheckStep,
   workflowStep,
   workflowYaml,
+  type Answer,
   type Consent,
   type Shell,
 } from '../src/guided-setup';
@@ -77,6 +80,44 @@ test('the generated workflow pins a full commit SHA and grants exactly three per
   ).toThrow();
 });
 
+test.each([
+  {
+    selected: { patterns_allowed: ['esau-morais/observed@*'] },
+    github: true,
+    policy: 'allowed',
+  },
+  {
+    selected: { patterns_allowed: ['esau-morais/observed@v0'] },
+    github: true,
+    policy: 'blocked',
+  },
+  {
+    selected: {
+      patterns_allowed: ['esau-morais/*', 'actions/checkout@*'],
+    },
+    github: false,
+    policy: 'allowed',
+  },
+  { selected: { patterns_allowed: [] }, github: true, policy: 'blocked' },
+])(
+  'the allowed-actions check matches the pinned references: $policy',
+  ({ selected, github, policy }) => {
+    expect(
+      actionsPolicy({
+        permissions: JSON.stringify({
+          enabled: true,
+          allowed_actions: 'selected',
+        }),
+        selected: JSON.stringify({
+          ...selected,
+          github_owned_allowed: github,
+        }),
+        uses: [`esau-morais/observed@${sha}`, checkoutAction],
+      }).kind,
+    ).toBe(policy);
+  },
+);
+
 // Answers GitHub's read-only questions the way a permissive repository would
 // and records every command, so a test can tell reads from outward writes.
 function recordingShell() {
@@ -110,7 +151,7 @@ function recordingShell() {
   return { shell, commands, outward };
 }
 
-async function offerWorkflow(options: { consent: Consent; answer: boolean }) {
+async function offerWorkflow(options: { consent: Consent; answer: Answer }) {
   const gitRoot = await scratch();
   const observed = path.join(gitRoot, '.observed');
   const recorded = recordingShell();
@@ -144,9 +185,10 @@ async function offerWorkflow(options: { consent: Consent; answer: boolean }) {
 }
 
 test.each([
-  { consent: 'no-terminal', answer: true, status: 'needs-answer' },
-  { consent: 'dry-run', answer: true, status: 'planned' },
-  { consent: 'ask', answer: false, status: 'declined' },
+  { consent: 'no-terminal', answer: 'yes', status: 'needs-answer' },
+  { consent: 'dry-run', answer: 'yes', status: 'planned' },
+  { consent: 'ask', answer: 'no', status: 'declined' },
+  { consent: 'ask', answer: 'cancelled', status: 'needs-answer' },
 ] as const)(
   'no branch, push or pull request happens with $consent and answer $answer',
   async ({ consent, answer, status }) => {
@@ -157,10 +199,22 @@ test.each([
   },
 );
 
+test('a cancelled question is asked again, unlike a no', async () => {
+  const { offer, questions } = await offerWorkflow({
+    consent: 'ask',
+    answer: 'cancelled',
+  });
+
+  await offer();
+  await offer();
+
+  expect(questions).toHaveLength(2);
+});
+
 test('a declined workflow is remembered, so observed stops asking', async () => {
   const { offer, questions, observed } = await offerWorkflow({
     consent: 'ask',
-    answer: false,
+    answer: 'no',
   });
 
   await offer();
@@ -176,7 +230,7 @@ test('a declined workflow is remembered, so observed stops asking', async () => 
 test('--yes opens the setup pull request but never creates a ruleset', async () => {
   const { offer, recorded } = await offerWorkflow({
     consent: 'yes',
-    answer: false,
+    answer: 'no',
   });
 
   expect((await offer()).step).toMatchObject({
@@ -194,7 +248,7 @@ test('--yes opens the setup pull request but never creates a ruleset', async () 
   const step = await Effect.runPromise(
     requiredCheckStep({
       shell: rules.shell,
-      ask: () => Effect.succeed(true),
+      ask: () => Effect.succeed('yes' as const),
       say: () => Effect.void,
       consent: 'yes',
       repository: 'o/r',
@@ -207,7 +261,7 @@ test('--yes opens the setup pull request but never creates a ruleset', async () 
   expect(rules.outward()).toEqual([]);
 });
 
-test('without a terminal observed never prompts or starts an agent, and prints the next step', async () => {
+test('without a terminal observed never prompts or starts an agent, and prints the next step and prompt', async () => {
   const directory = await scratch();
   const bin = path.join(directory, 'bin');
   const home = path.join(directory, 'home');
@@ -223,7 +277,7 @@ test('without a terminal observed never prompts or starts an agent, and prints t
   await chmod(path.join(bin, 'claude'), 0o755);
 
   const child = Bun.spawn(
-    [process.execPath, 'src/workflow-cli.ts', '--project', app, '--json'],
+    [process.execPath, 'src/workflow-cli.ts', '--project', app],
     {
       cwd: root,
       env: {
@@ -241,21 +295,8 @@ test('without a terminal observed never prompts or starts an agent, and prints t
     child.exited,
     new Response(child.stdout).text(),
   ]);
-  const output = Schema.decodeUnknownSync(
-    Schema.fromJsonString(
-      Schema.Struct({
-        next: Schema.NullOr(
-          Schema.Struct({
-            step: Schema.String,
-            prompt: Schema.optionalKey(Schema.String),
-          }),
-        ),
-      }),
-    ),
-  )(stdout);
-
   expect(code).toBe(3);
-  expect(output.next?.step).toBe('config');
-  expect(output.next?.prompt).toContain('### Write observed.json');
+  expect(stdout).toContain('Next: Write observed.json with the prompt below');
+  expect(stdout).toContain('### Write observed.json');
   expect(await Bun.file(marker).exists()).toBe(false);
 }, 30_000);

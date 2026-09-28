@@ -34,11 +34,13 @@ import {
   type Agent,
   type Ask,
   type Consent,
+  type Answer,
   type Say,
   type Shell,
   type Step,
 } from './guided-setup';
 import { loadProject, projectSchema } from './project';
+import { redactText } from './redact';
 import { serveReport, ViewFailure } from './view';
 import { buildViewer, runProject } from './workflow';
 
@@ -551,7 +553,16 @@ const gatherFacts = Effect.fnUntraced(function* (
             .readFileString(path.join(projectRoot, 'package.json'))
             .pipe(Effect.orElseSucceed(() => '')),
         ),
-        { onNone: () => ({}), onSome: (value) => value.scripts ?? {} },
+        {
+          onNone: () => ({}),
+          onSome: (value) =>
+            Object.fromEntries(
+              Object.entries(value.scripts ?? {}).map(([name, script]) => [
+                name,
+                redactText(script).trimEnd(),
+              ]),
+            ),
+        },
       )
     : {};
 
@@ -609,7 +620,8 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
   const terminal = yield* Effect.context<Prompt.Environment>();
   const ask: Ask = (message) =>
     Prompt.run(Prompt.Confirm({ message, initial: false })).pipe(
-      Effect.orElseSucceed(() => false),
+      Effect.map((yes): Answer => (yes ? 'yes' : 'no')),
+      Effect.orElseSucceed((): Answer => 'cancelled'),
       Effect.provideContext(terminal),
     );
   const marks = {
@@ -667,7 +679,8 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     const install =
       consent === 'yes' ||
       (consent === 'ask' &&
-        (yield* ask('Download Chrome for Testing now, about 190 MB?')));
+        (yield* ask('Download Chrome for Testing now, about 190 MB?')) ===
+          'yes');
 
     if (!install) {
       yield* record({
@@ -699,11 +712,18 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
       yield* record({
         id: 'browser',
         status: 'failed',
-        detail:
-          'The browser download failed. On Linux without desktop libraries, run observed setup --with-deps.',
+        detail: 'The browser download failed',
       });
 
-      return yield* finish(null, null, 1);
+      return yield* finish(
+        {
+          step: 'browser',
+          instruction:
+            'Run observed setup, or observed setup --with-deps on Linux without desktop libraries, then observed again.',
+        },
+        null,
+        1,
+      );
     }
 
     yield* record({
@@ -806,141 +826,167 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
         status: 'planned',
         detail: `Would ask ${detected.length === 0 ? 'you' : detected.map((agent) => agentTitles[agent]).join(', ')} to write observed.json, then validate and capture it`,
       });
+    } else {
+      // Too large for a command-line argument, so the agent reads it from
+      // .observed/, which Git ignores.
+      const contract = path.join(
+        yield* makeEvidenceRoot(projectRoot),
+        contractFile,
+      );
 
-      return yield* finish(null, null, 0);
-    }
+      yield* fs.writeFileString(
+        contract,
+        json(Schema.toJsonSchemaDocument(projectSchema).schema),
+      );
 
-    // Too large for a command-line argument, so the agent reads it from
-    // .observed/, which Git ignores.
-    const contract = path.join(
-      yield* makeEvidenceRoot(projectRoot),
-      contractFile,
-    );
+      const prompt = (failure: string | null) =>
+        writePrompt({
+          facts,
+          guide,
+          version,
+          failure,
+          contract: path.relative(projectRoot, contract),
+        });
 
-    yield* fs.writeFileString(
-      contract,
-      json(Schema.toJsonSchemaDocument(projectSchema).schema),
-    );
+      const pick = Prompt.run(
+        Prompt.Select<Agent | 'prompt'>({
+          message: 'Who writes observed.json?',
+          choices: [
+            ...detected.map((agent) => ({
+              title: agentTitles[agent],
+              value: agent,
+              description: `Runs ${agentCommand(agent, '<prompt>', projectRoot).join(' ')} in ${projectRoot}`,
+            })),
+            {
+              title: 'Show me the prompt',
+              value: 'prompt' as const,
+              description: 'Print it for any agent or for writing it yourself',
+            },
+          ],
+        }),
+      ).pipe(Effect.orElseSucceed(() => 'cancelled' as const));
+      let chosen: Agent | 'prompt' | 'cancelled' | null = null;
 
-    const prompt = (failure: string | null) =>
-      writePrompt({
-        facts,
-        guide,
-        version,
-        failure,
-        contract: path.relative(projectRoot, contract),
-      });
+      if (Option.isSome(options.agent)) {
+        chosen = options.agent.value;
+      } else if (interactive) {
+        chosen = yield* pick;
+      }
 
-    const pick = Prompt.run(
-      Prompt.Select<Agent | 'prompt'>({
-        message: 'Who writes observed.json?',
-        choices: [
-          ...detected.map((agent) => ({
-            title: agentTitles[agent],
-            value: agent,
-            description: `Runs ${agentCommand(agent, '<prompt>', projectRoot).join(' ')} in ${projectRoot}`,
-          })),
+      if (chosen === 'cancelled') {
+        return yield* finish(
           {
-            title: 'Show me the prompt',
-            value: 'prompt' as const,
-            description: 'Print it for any agent or for writing it yourself',
+            step: 'config',
+            instruction:
+              'Run observed again to choose who writes observed.json.',
           },
-        ],
-      }),
-    ).pipe(Effect.orElseSucceed(() => 'prompt' as const));
-    let chosen: Agent | 'prompt' | null = null;
-
-    if (Option.isSome(options.agent)) {
-      chosen = options.agent.value;
-    } else if (interactive) {
-      chosen = yield* pick;
-    }
-
-    if (chosen === null || chosen === 'prompt') {
-      return yield* finish(
-        {
-          step: 'config',
-          instruction:
-            chosen === null
-              ? `Write observed.json with the prompt below, then run observed again. With a terminal, observed offers ${detected.length === 0 ? 'no agents, since none is on PATH' : detected.map((agent) => agentTitles[agent]).join(', ')}; without one, pass --agent.`
-              : 'Give this prompt to your agent, then run observed again.',
-          prompt: prompt(firstFailure),
-        },
-        null,
-        setupNeeded,
-      );
-    }
-
-    if (!detected.includes(chosen)) {
-      yield* record({
-        id: 'config',
-        status: 'failed',
-        detail: `${chosen} is not on PATH`,
-      });
-
-      return yield* finish(null, null, setupNeeded);
-    }
-
-    // The agent proposes; validation and the capture decide. A failure goes
-    // back to the agent at most twice.
-    let failure = firstFailure;
-
-    for (let attempt = 0; attempt < 3 && run === null; attempt++) {
-      const argv = agentCommand(chosen, prompt(failure), projectRoot);
-
-      yield* say(
-        `Running ${agentTitles[chosen]}: ${agentCommand(chosen, '<prompt>', projectRoot).join(' ')}`,
-      );
-
-      const code = yield* Effect.promise(
-        () =>
-          Bun.spawn(argv, {
-            cwd: projectRoot,
-            stdin: 'ignore',
-            stdout: options.machine ? 2 : 'inherit',
-            stderr: 'inherit',
-          }).exited,
-      );
-      const checked = yield* loadProject(projectRoot).pipe(Effect.result);
-
-      if (Result.isFailure(checked)) {
-        failure = `${agentTitles[chosen]} exited with ${String(code)}. observed.json is not valid: ${checked.failure.message}`;
-        yield* say(failure);
-        continue;
+          null,
+          setupNeeded,
+        );
       }
 
-      const exported = yield* capture;
-
-      if (exported.result.conclusion.kind === 'unavailable') {
-        failure = `The capture was unavailable: ${exported.result.conclusion.text} ${exported.result.journeys
-          .flatMap((journey) =>
-            journey.comparison.kind === 'unavailable'
-              ? journey.comparison.reasons
-              : [],
-          )
-          .join(' ')} Evidence: ${exported.directory}`;
-        yield* say(failure);
-        continue;
+      if (chosen === null || chosen === 'prompt') {
+        return yield* finish(
+          {
+            step: 'config',
+            instruction:
+              chosen === null
+                ? `Write observed.json with the prompt below, then run observed again. With a terminal, observed offers ${detected.length === 0 ? 'no agents, since none is on PATH' : detected.map((agent) => agentTitles[agent]).join(', ')}; without one, pass --agent.`
+                : 'Give this prompt to your agent, then run observed again.',
+            prompt: prompt(firstFailure),
+          },
+          null,
+          setupNeeded,
+        );
       }
 
-      run = exported;
-    }
+      if (!detected.includes(chosen)) {
+        yield* record({
+          id: 'config',
+          status: 'failed',
+          detail: `${chosen} is not on PATH`,
+        });
 
-    if (run === null) {
+        return yield* finish(
+          {
+            step: 'config',
+            instruction: `Install ${chosen}, or run observed --agent prompt and give the prompt to another agent.`,
+            prompt: prompt(firstFailure),
+          },
+          null,
+          setupNeeded,
+        );
+      }
+
+      // The agent proposes; validation and the capture decide. A failure goes
+      // back to the agent at most twice.
+      let failure = firstFailure;
+
+      for (let attempt = 0; attempt < 3 && run === null; attempt++) {
+        const argv = agentCommand(chosen, prompt(failure), projectRoot);
+
+        yield* say(
+          `Running ${agentTitles[chosen]}: ${agentCommand(chosen, '<prompt>', projectRoot).join(' ')}`,
+        );
+
+        const code = yield* Effect.promise(
+          () =>
+            Bun.spawn(argv, {
+              cwd: projectRoot,
+              stdin: 'ignore',
+              stdout: options.machine ? 2 : 'inherit',
+              stderr: 'inherit',
+            }).exited,
+        );
+        const checked = yield* loadProject(projectRoot).pipe(Effect.result);
+
+        if (Result.isFailure(checked)) {
+          failure = `${agentTitles[chosen]} exited with ${String(code)}. observed.json is not valid: ${checked.failure.message}`;
+          yield* say(failure);
+          continue;
+        }
+
+        const exported = yield* capture;
+
+        if (exported.result.conclusion.kind === 'unavailable') {
+          failure = `The capture was unavailable: ${exported.result.conclusion.text} ${exported.result.journeys
+            .flatMap((journey) =>
+              journey.comparison.kind === 'unavailable'
+                ? journey.comparison.reasons
+                : [],
+            )
+            .join(' ')} Evidence: ${exported.directory}`;
+          yield* say(failure);
+          continue;
+        }
+
+        run = exported;
+      }
+
+      if (run === null) {
+        yield* record({
+          id: 'config',
+          status: 'failed',
+          detail: `Stopped after three attempts. Last error: ${failure ?? 'none'}`,
+        });
+
+        return yield* finish(
+          {
+            step: 'config',
+            instruction:
+              'Fix observed.json using the last error above, then run observed again.',
+          },
+          null,
+          1,
+        );
+      }
+
       yield* record({
         id: 'config',
-        status: 'failed',
-        detail: `Stopped after three attempts. Last error: ${failure ?? 'none'}`,
+        status: 'done',
+        detail: `${agentTitles[chosen]} wrote observed.json`,
       });
-
-      return yield* finish(null, null, 1);
     }
-
-    yield* record({
-      id: 'config',
-      status: 'done',
-      detail: `${agentTitles[chosen]} wrote observed.json`,
-    });
   }
 
   if (consent === 'dry-run') {
@@ -996,27 +1042,35 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
 
     yield* record(workflow.step);
 
-    if (workflow.next !== null) {
+    if (workflow.kind === 'waiting') {
       next = { step: 'workflow', instruction: workflow.next };
     }
 
-    if (workflow.step.status === 'done') {
-      const base =
-        workflow.base ??
-        (yield* bunShell(
-          [
-            'gh',
-            'repo',
-            'view',
-            repository,
-            '--json',
-            'defaultBranchRef',
-            '--jq',
-            '.defaultBranchRef.name',
-          ],
-          { cwd: gitRoot },
-        )).stdout.trim();
+    const base =
+      workflow.kind !== 'ready'
+        ? null
+        : (workflow.base ??
+          (yield* bunShell(
+            [
+              'gh',
+              'repo',
+              'view',
+              repository,
+              '--json',
+              'defaultBranchRef',
+              '--jq',
+              '.defaultBranchRef.name',
+            ],
+            { cwd: gitRoot },
+          ).pipe(
+            Effect.map((result) =>
+              result.code === 0 && result.stdout.trim() !== ''
+                ? result.stdout.trim()
+                : null,
+            ),
+          )));
 
+    if (base !== null) {
       yield* record(
         yield* requiredCheckStep({
           shell: bunShell,
@@ -1053,7 +1107,7 @@ const root = Command.make(
     agent: agentChoiceFlag,
     yes: Flag.Boolean('yes').pipe(
       Flag.withDescription(
-        'Answer yes to adding the workflow and opening the setup pull request, for agents you authorized',
+        'Answer yes to the browser download, the workflow, Dependabot and the setup pull request. Never creates a ruleset',
       ),
       Flag.withDefault(false),
     ),
