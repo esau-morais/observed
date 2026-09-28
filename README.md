@@ -49,8 +49,9 @@ setup steps that are still missing, then previews the app:
    it finds on `PATH`: `claude`, `codex`, `opencode` or `opencode2`. It only
    checks that the command exists and never reads an agent's settings or
    credentials. The agent starts in its own interactive session, under its own
-   permission prompts, with one message: run `observed skill`, through `bunx`
-   at the same version, and follow it. OpenCode 2 fills in the message and
+   permission prompts, with one message: run `observed skill` and follow it.
+   When `observed` on `PATH` is another version or missing, the message runs it
+   through `bunx` at the running version instead. OpenCode 2 fills in the message and
    waits for you to press Enter. When you quit the agent, `observed` checks the
    file and continues. Decline, or choose **Print a prompt for another agent**
    when it lists several, to get the same message for any other agent.
@@ -89,8 +90,9 @@ setup pull request. Give it to an agent only after you agree to those.
 runs it for another directory.
 
 `observed skill` prints the guide a coding agent follows to write
-`observed.json` and run captures. Every command in it names the exact version
-that printed it. `observed schema` prints the JSON Schema for `observed.json`.
+`observed.json` and run captures. Every command in it runs the version that
+printed it: `observed` when that is the installed version, and otherwise
+`bunx @observed-software/cli@<version>`. `observed schema` prints the JSON Schema for `observed.json`.
 
 `observe`, `view` and `setup` each do one step, for scripts and agents. From the
 app's directory:

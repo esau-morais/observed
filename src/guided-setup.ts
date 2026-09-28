@@ -65,13 +65,18 @@ export function agentLaunch(
   }
 }
 
-const cliCommand = (version: string) =>
-  `bunx @observed-software/cli@${version}`;
+// An observed on PATH at the same version prints the same guide and runs the
+// same checks, so the prompt can name it; otherwise bunx pins the version.
+export function cliCommand(version: string, installed: string | null): string {
+  return installed?.trim() === `observed v${version}`
+    ? 'observed'
+    : `bunx @observed-software/cli@${version}`;
+}
 
 export type ConfigState = 'missing' | 'invalid' | 'unavailable';
 
-export function setupPrompt(version: string, state: ConfigState): string {
-  const skill = `\`${cliCommand(version)} skill\``;
+export function setupPrompt(cli: string, state: ConfigState): string {
+  const skill = `\`${cli} skill\``;
 
   switch (state) {
     case 'missing':
@@ -104,10 +109,11 @@ export function guideSection(readme: string): string | null {
 // Printed by observed skill. It names the exact version in every command, so an
 // agent that follows it runs the CLI the guide describes.
 export function skillText(options: {
+  cli: string;
   version: string;
   guide: string | null;
 }): string {
-  const cli = cliCommand(options.version);
+  const { cli } = options;
   const readme = `https://github.com/${actionRepository}/blob/v${options.version}/README.md`;
 
   return `---

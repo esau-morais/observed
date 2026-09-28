@@ -24,6 +24,7 @@ import {
   agentLaunch,
   agents,
   agentTitles,
+  cliCommand,
   detectAgents,
   githubRepository,
   openCodeMajor,
@@ -474,8 +475,10 @@ const skill = Command.make(
     const readme = yield* fs
       .readFileString(path.join(toolRoot, 'README.md'))
       .pipe(Effect.orElseSucceed(() => ''));
+    const version = yield* observedVersion(toolRoot);
     const text = skillText({
-      version: yield* observedVersion(toolRoot),
+      cli: yield* installedCli(version),
+      version,
       guide: guideSection(readme),
     });
 
@@ -560,6 +563,13 @@ const openInBrowser = (url: string) =>
       stdio: ['ignore', 'ignore', 'ignore'],
     }).unref(),
   ).pipe(Effect.ignore);
+
+const installedCli = (version: string) =>
+  bunShell(['observed', '--version'], { cwd: homedir() }).pipe(
+    Effect.map((result) =>
+      cliCommand(version, result.code === 0 ? result.stdout : null),
+    ),
+  );
 
 const isExecutable = (file: string) => {
   try {
@@ -822,7 +832,8 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     const detected = sameOpenCode
       ? found.filter((agent) => agent !== 'opencode2')
       : found;
-    const prompt = setupPrompt(version, missing ? 'missing' : 'invalid');
+    const cli = yield* installedCli(version);
+    const prompt = setupPrompt(cli, missing ? 'missing' : 'invalid');
     const plan = () => {
       const chosen = Option.getOrNull(options.agent);
 
@@ -1006,7 +1017,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
             step: 'config',
             instruction:
               'Give this prompt to your coding agent, then run observed again.',
-            prompt: setupPrompt(version, written ? 'invalid' : 'missing'),
+            prompt: setupPrompt(cli, written ? 'invalid' : 'missing'),
           },
           null,
           setupNeeded,
@@ -1047,7 +1058,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
               step: 'capture',
               instruction:
                 'Give this prompt to your coding agent, then run observed again.',
-              prompt: setupPrompt(version, 'unavailable'),
+              prompt: setupPrompt(yield* installedCli(version), 'unavailable'),
             }
           : null,
         run,
