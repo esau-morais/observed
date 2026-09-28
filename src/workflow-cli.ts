@@ -1,6 +1,16 @@
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Cause, Console, Effect, FileSystem, Option, Schema } from 'effect';
-import { Argument, Command, Flag } from 'effect/unstable/cli';
+import {
+  Cause,
+  Console,
+  Effect,
+  FileSystem,
+  Option,
+  Result,
+  Schema,
+} from 'effect';
+import { Argument, Command, Flag, Prompt } from 'effect/unstable/cli';
+import { accessSync, constants } from 'node:fs';
+import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { captureApplication } from './capture/coordinator';
@@ -10,6 +20,23 @@ import { json } from './encoding';
 import { exportComparison } from './export';
 import { agentBrowserPath, unsupportedBun } from './installation';
 import { importExitCodes, importPlaywright } from './playwright/import';
+import {
+  agentCommand,
+  agents,
+  agentTitles,
+  detectAgents,
+  githubRepository,
+  guideSection,
+  requiredCheckStep,
+  workflowStep,
+  writePrompt,
+  type Agent,
+  type Ask,
+  type Consent,
+  type Say,
+  type Shell,
+  type Step,
+} from './guided-setup';
 import { loadProject } from './project';
 import { serveReport, ViewFailure } from './view';
 import { buildViewer, runProject } from './workflow';
@@ -435,6 +462,597 @@ const setup = Command.make(
   }),
 ).pipe(Command.withDescription('Download the Chrome build that capture uses'));
 
+// Exit code when bare observed stops at a setup step it cannot take alone.
+const setupNeeded = 3;
+
+const toolFiles = [
+  'package.json',
+  'bun.lock',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'index.html',
+  'vite.config.js',
+  'vite.config.ts',
+  'vite.config.mjs',
+  'next.config.js',
+  'next.config.mjs',
+  'next.config.ts',
+  'go.mod',
+  'pyproject.toml',
+  'requirements.txt',
+  'Gemfile',
+  'docker-compose.yml',
+  'compose.yaml',
+];
+
+const scriptsSchema = Schema.fromJsonString(
+  Schema.Struct({
+    scripts: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  }),
+);
+
+const bunShell: Shell = (argv, options) =>
+  Effect.promise(async () => {
+    try {
+      const child = Bun.spawn([...argv], {
+        cwd: options.cwd,
+        stdin:
+          options.input === undefined
+            ? 'ignore'
+            : new TextEncoder().encode(options.input),
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+
+      return { code, stdout, stderr };
+    } catch (error) {
+      return {
+        code: 127,
+        stdout: '',
+        stderr: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+const isExecutable = (file: string) => {
+  try {
+    accessSync(file, constants.X_OK);
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const gatherFacts = Effect.fnUntraced(function* (
+  projectRoot: string,
+  project: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const files: string[] = [];
+
+  for (const file of toolFiles) {
+    if (yield* fs.exists(path.join(projectRoot, file))) {
+      files.push(file);
+    }
+  }
+
+  const scripts = files.includes('package.json')
+    ? Option.match(
+        Schema.decodeUnknownOption(scriptsSchema)(
+          yield* fs
+            .readFileString(path.join(projectRoot, 'package.json'))
+            .pipe(Effect.orElseSucceed(() => '')),
+        ),
+        { onNone: () => ({}), onSome: (value) => value.scripts ?? {} },
+      )
+    : {};
+
+  return { directory: projectRoot, project, scripts, files };
+});
+
+function consentFor(options: {
+  dryRun: boolean;
+  yes: boolean;
+  interactive: boolean;
+}): Consent {
+  if (options.dryRun) {
+    return 'dry-run';
+  }
+
+  if (options.yes) {
+    return 'yes';
+  }
+
+  return options.interactive ? 'ask' : 'no-terminal';
+}
+
+const agentChoiceFlag = Flag.Literals('agent', [
+  ...agents,
+  'prompt',
+] as const).pipe(
+  Flag.withDescription(
+    'Who writes a missing observed.json: an agent CLI on PATH, or prompt to print the prompt',
+  ),
+  Flag.optional,
+);
+
+type Next = { step: string; instruction: string; prompt?: string };
+type ExportedComparison = Effect.Success<ReturnType<typeof runProject>>;
+
+const guided = Effect.fn('guidedSetup')(function* (options: {
+  project: string;
+  agent: Option.Option<Agent | 'prompt'>;
+  yes: boolean;
+  dryRun: boolean;
+  machine: boolean;
+  timeout: number;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const version = yield* observedVersion(toolRoot);
+  const projectRoot = yield* fs.realPath(path.resolve(options.project));
+  const interactive =
+    !options.machine &&
+    process.stdin.isTTY === true &&
+    process.stdout.isTTY === true;
+  const consent = consentFor({ ...options, interactive });
+  const steps: Step[] = [];
+  const say: Say = (text) =>
+    options.machine ? Effect.void : Console.log(text);
+  const terminal = yield* Effect.context<Prompt.Environment>();
+  const ask: Ask = (message) =>
+    Prompt.run(Prompt.Confirm({ message, initial: false })).pipe(
+      Effect.orElseSucceed(() => false),
+      Effect.provideContext(terminal),
+    );
+  const marks = {
+    done: '✓',
+    skipped: '-',
+    planned: '·',
+    declined: '-',
+    'needs-answer': '?',
+    failed: '✗',
+  } satisfies Record<Step['status'], string>;
+  const record = (step: Step) =>
+    Effect.gen(function* () {
+      steps.push(step);
+      yield* say(`${marks[step.status]} ${step.detail}`);
+    });
+  const finish = (
+    next: Next | null,
+    run: ExportedComparison | null,
+    code: number,
+  ) =>
+    Effect.gen(function* () {
+      if (options.machine) {
+        yield* printJson({ steps, next, run });
+      } else if (next !== null) {
+        yield* Console.log(
+          `\nNext: ${next.instruction}${next.prompt === undefined ? '' : `\n\n${next.prompt}`}`,
+        );
+      }
+
+      process.exitCode = code;
+    });
+
+  yield* record({ id: 'bun', status: 'done', detail: `Bun ${Bun.version}` });
+
+  const browsers = path.join(homedir(), '.agent-browser', 'browsers');
+  const browserReady =
+    (yield* fs
+      .readDirectory(browsers)
+      .pipe(Effect.orElseSucceed((): string[] => []))).length > 0;
+
+  if (browserReady) {
+    yield* record({
+      id: 'browser',
+      status: 'done',
+      detail: 'Browser installed',
+    });
+  } else if (consent === 'dry-run') {
+    yield* record({
+      id: 'browser',
+      status: 'planned',
+      detail:
+        'Would download Chrome for Testing with observed setup, about 190 MB',
+    });
+  } else {
+    const install =
+      consent === 'yes' ||
+      (consent === 'ask' &&
+        (yield* ask('Download Chrome for Testing now, about 190 MB?')));
+
+    if (!install) {
+      yield* record({
+        id: 'browser',
+        status: 'needs-answer',
+        detail: 'No browser to capture with',
+      });
+
+      return yield* finish(
+        {
+          step: 'browser',
+          instruction: 'Run observed setup, then observed again.',
+        },
+        null,
+        setupNeeded,
+      );
+    }
+
+    const installed = yield* Effect.promise(
+      () =>
+        Bun.spawn([process.execPath, agentBrowserPath(toolRoot), 'install'], {
+          stdin: 'ignore',
+          stdout: options.machine ? 2 : 'inherit',
+          stderr: 'inherit',
+        }).exited,
+    );
+
+    if (installed !== 0) {
+      yield* record({
+        id: 'browser',
+        status: 'failed',
+        detail:
+          'The browser download failed. On Linux without desktop libraries, run observed setup --with-deps.',
+      });
+
+      return yield* finish(null, null, 1);
+    }
+
+    yield* record({
+      id: 'browser',
+      status: 'done',
+      detail: 'Browser installed',
+    });
+  }
+
+  const gh = yield* bunShell(['gh', 'auth', 'status'], { cwd: projectRoot });
+  const gitRoot = yield* bunShell(['git', 'rev-parse', '--show-toplevel'], {
+    cwd: projectRoot,
+  }).pipe(
+    Effect.map((result) => (result.code === 0 ? result.stdout.trim() : null)),
+  );
+  const remote =
+    gitRoot === null
+      ? null
+      : yield* bunShell(['git', 'remote', 'get-url', 'origin'], {
+          cwd: gitRoot,
+        }).pipe(
+          Effect.map((result) =>
+            result.code === 0 ? githubRepository(result.stdout) : null,
+          ),
+        );
+  const repository = gh.code === 0 ? remote : null;
+
+  yield* record(
+    gh.code === 0
+      ? { id: 'gh', status: 'done', detail: 'GitHub CLI signed in' }
+      : {
+          id: 'gh',
+          status: 'skipped',
+          detail:
+            'GitHub steps skipped: install gh and run gh auth login to add the workflow.',
+        },
+  );
+  yield* record(
+    remote === null
+      ? {
+          id: 'remote',
+          status: 'skipped',
+          detail:
+            gitRoot === null
+              ? 'GitHub steps skipped: this directory is not in a Git repository.'
+              : 'GitHub steps skipped: origin is not a GitHub repository.',
+        }
+      : { id: 'remote', status: 'done', detail: `GitHub repository ${remote}` },
+  );
+
+  const project =
+    gitRoot === null
+      ? '.'
+      : path.relative(yield* fs.realPath(gitRoot), projectRoot);
+  const projectPath = project === '' ? '.' : project;
+  const capture = Effect.gen(function* () {
+    return yield* runProject({
+      projectRoot,
+      toolRoot,
+      directory: yield* chooseDirectory(Option.none(), 'run', projectRoot),
+      baseRevision: null,
+      candidateRevision: null,
+      timeoutMs: options.timeout,
+      quiet: options.machine,
+    });
+  });
+  const loaded = yield* loadProject(projectRoot).pipe(Effect.result);
+  let run: ExportedComparison | null = null;
+
+  if (Result.isSuccess(loaded)) {
+    yield* record({
+      id: 'config',
+      status: 'done',
+      detail: 'observed.json is valid',
+    });
+  } else {
+    const missing = !(yield* fs.exists(
+      path.join(projectRoot, 'observed.json'),
+    ));
+    const detected = detectAgents(process.env.PATH ?? '', isExecutable);
+    const facts = yield* gatherFacts(projectRoot, projectPath);
+    const guide = guideSection(
+      yield* fs
+        .readFileString(path.join(toolRoot, 'README.md'))
+        .pipe(Effect.orElseSucceed(() => '')),
+    );
+    const prompt = (failure: string | null) =>
+      writePrompt({ facts, guide, version, failure });
+    const firstFailure = missing ? null : loaded.failure.message;
+
+    yield* record({
+      id: 'config',
+      status: 'needs-answer',
+      detail: missing
+        ? 'No observed.json yet'
+        : `observed.json is invalid: ${loaded.failure.message}`,
+    });
+
+    if (consent === 'dry-run') {
+      yield* record({
+        id: 'config',
+        status: 'planned',
+        detail: `Would ask ${detected.length === 0 ? 'you' : detected.map((agent) => agentTitles[agent]).join(', ')} to write observed.json, then validate and capture it`,
+      });
+
+      return yield* finish(null, null, 0);
+    }
+
+    const pick = Prompt.run(
+      Prompt.Select<Agent | 'prompt'>({
+        message: 'Who writes observed.json?',
+        choices: [
+          ...detected.map((agent) => ({
+            title: agentTitles[agent],
+            value: agent,
+            description: `Runs ${agentCommand(agent, '<prompt>', projectRoot).join(' ')} in ${projectRoot}`,
+          })),
+          {
+            title: 'Show me the prompt',
+            value: 'prompt' as const,
+            description: 'Print it for any agent or for writing it yourself',
+          },
+        ],
+      }),
+    ).pipe(Effect.orElseSucceed(() => 'prompt' as const));
+    let chosen: Agent | 'prompt' | null = null;
+
+    if (Option.isSome(options.agent)) {
+      chosen = options.agent.value;
+    } else if (interactive) {
+      chosen = yield* pick;
+    }
+
+    if (chosen === null || chosen === 'prompt') {
+      return yield* finish(
+        {
+          step: 'config',
+          instruction:
+            chosen === null
+              ? `Write observed.json with the prompt below, then run observed again. With a terminal, observed offers ${detected.length === 0 ? 'no agents, since none is on PATH' : detected.map((agent) => agentTitles[agent]).join(', ')}; without one, pass --agent.`
+              : 'Give this prompt to your agent, then run observed again.',
+          prompt: prompt(firstFailure),
+        },
+        null,
+        setupNeeded,
+      );
+    }
+
+    if (!detected.includes(chosen)) {
+      yield* record({
+        id: 'config',
+        status: 'failed',
+        detail: `${chosen} is not on PATH`,
+      });
+
+      return yield* finish(null, null, setupNeeded);
+    }
+
+    // The agent proposes; validation and the capture decide. A failure goes
+    // back to the agent at most twice.
+    let failure = firstFailure;
+
+    for (let attempt = 0; attempt < 3 && run === null; attempt++) {
+      const argv = agentCommand(chosen, prompt(failure), projectRoot);
+
+      yield* say(
+        `Running ${agentTitles[chosen]}: ${argv.slice(0, -1).join(' ')} <prompt>${chosen === 'claude' ? ` ${argv.slice(3).join(' ')}` : ''}`,
+      );
+
+      const code = yield* Effect.promise(
+        () =>
+          Bun.spawn(argv, {
+            cwd: projectRoot,
+            stdin: 'ignore',
+            stdout: options.machine ? 2 : 'inherit',
+            stderr: 'inherit',
+          }).exited,
+      );
+      const checked = yield* loadProject(projectRoot).pipe(Effect.result);
+
+      if (Result.isFailure(checked)) {
+        failure = `${agentTitles[chosen]} exited with ${String(code)}. observed.json is not valid: ${checked.failure.message}`;
+        yield* say(failure);
+        continue;
+      }
+
+      const exported = yield* capture;
+
+      if (exported.result.conclusion.kind === 'unavailable') {
+        failure = `The capture was unavailable: ${exported.result.conclusion.text} ${exported.result.journeys
+          .flatMap((journey) =>
+            journey.comparison.kind === 'unavailable'
+              ? journey.comparison.reasons
+              : [],
+          )
+          .join(' ')} Evidence: ${exported.directory}`;
+        yield* say(failure);
+        continue;
+      }
+
+      run = exported;
+    }
+
+    if (run === null) {
+      yield* record({
+        id: 'config',
+        status: 'failed',
+        detail: `Stopped after three attempts. Last error: ${failure ?? 'none'}`,
+      });
+
+      return yield* finish(null, null, 1);
+    }
+
+    yield* record({
+      id: 'config',
+      status: 'done',
+      detail: `${agentTitles[chosen]} wrote observed.json`,
+    });
+  }
+
+  if (consent === 'dry-run') {
+    yield* record({
+      id: 'capture',
+      status: 'planned',
+      detail: 'Would capture the working tree and open the viewer',
+    });
+  } else {
+    run ??= yield* capture;
+    yield* saveLatest(run.directory, projectRoot);
+
+    const { conclusion } = run.result;
+
+    yield* record({
+      id: 'capture',
+      status: conclusion.kind === 'unavailable' ? 'failed' : 'done',
+      detail: `${run.result.title}: ${conclusion.text}`,
+    });
+
+    if (conclusion.kind === 'unavailable') {
+      return yield* finish(null, run, exitCodes.unavailable);
+    }
+  }
+
+  const viewer =
+    interactive && run !== null
+      ? yield* serveReport({ directory: run.directory, port: 4173 })
+      : null;
+
+  if (viewer !== null && run !== null) {
+    yield* say(`Viewer: ${String(viewer)}\nEvidence: ${run.directory}`);
+  }
+
+  let next: Next | null = null;
+
+  if (repository !== null && gitRoot !== null) {
+    const scratch = yield* fs.makeTempDirectoryScoped({
+      prefix: 'observed-setup-',
+    });
+    const workflow = yield* workflowStep({
+      shell: bunShell,
+      ask,
+      say,
+      consent,
+      gitRoot,
+      project: projectPath,
+      repository,
+      version,
+      observed: evidenceRoot(projectRoot),
+      scratch,
+    });
+
+    yield* record(workflow.step);
+
+    if (workflow.next !== null) {
+      next = { step: 'workflow', instruction: workflow.next };
+    }
+
+    if (workflow.step.status === 'done') {
+      const base =
+        workflow.base ??
+        (yield* bunShell(
+          [
+            'gh',
+            'repo',
+            'view',
+            repository,
+            '--json',
+            'defaultBranchRef',
+            '--jq',
+            '.defaultBranchRef.name',
+          ],
+          { cwd: gitRoot },
+        )).stdout.trim();
+
+      yield* record(
+        yield* requiredCheckStep({
+          shell: bunShell,
+          ask,
+          say,
+          consent,
+          repository,
+          base,
+          cwd: gitRoot,
+        }),
+      );
+    }
+  }
+
+  yield* finish(
+    next,
+    run,
+    run === null ? 0 : exitCodes[run.result.conclusion.kind],
+  );
+
+  if (viewer !== null) {
+    yield* Console.log('Press Ctrl+C to stop the viewer.');
+    yield* Effect.never;
+  }
+});
+
+const root = Command.make(
+  'observed',
+  {
+    project: Flag.String('project').pipe(
+      Flag.withDescription('Directory containing observed.json; default .'),
+      Flag.withDefault('.'),
+    ),
+    agent: agentChoiceFlag,
+    yes: Flag.Boolean('yes').pipe(
+      Flag.withDescription(
+        'Answer yes to adding the workflow and opening the setup pull request, for agents you authorized',
+      ),
+      Flag.withDefault(false),
+    ),
+    dryRun: Flag.Boolean('dry-run').pipe(
+      Flag.withDescription(
+        'Print the remaining setup steps and change nothing',
+      ),
+      Flag.withDefault(false),
+    ),
+    machine: machineFlag,
+    timeout: timeoutFlag,
+  },
+  guided,
+).pipe(
+  Command.withDescription(
+    'Run the setup steps still missing, then preview the app. observe, view and setup do one step each',
+  ),
+);
+
 const unsupported = unsupportedBun();
 
 if (unsupported !== null) {
@@ -444,7 +1062,7 @@ if (unsupported !== null) {
 
 observedVersion(toolRoot).pipe(
   Effect.flatMap((version) =>
-    Command.make('observed').pipe(
+    root.pipe(
       Command.withSubcommands([
         observe,
         setup,

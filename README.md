@@ -23,7 +23,8 @@ observed setup
 
 Bun reports one blocked postinstall. It belongs to agent-browser, which already
 ships its binaries, so leave it blocked. `observed setup` downloads the Chrome
-build Observed captures with, about 190 MB. On a Linux machine without desktop
+build Observed captures with, about 190 MB. Bare `observed` offers the same
+download when the browser is missing. On a Linux machine without desktop
 libraries, such as a container, run `observed setup --with-deps` instead; it
 also installs system packages with `sudo apt`.
 
@@ -38,8 +39,44 @@ latest release.
 
 ## Use it on your app
 
-Ask your coding agent to write `observed.json` in your app's directory by
-following [Write observed.json](#write-observedjson). Then, from that directory:
+From your app's directory, run `observed` with no subcommand. It does only the
+setup steps that are still missing, then previews the app:
+
+1. It checks Bun and the browser, and offers to download the browser. It checks
+   `gh auth status` and whether `origin` is a GitHub repository.
+2. When `observed.json` is missing or invalid, it offers the coding agents it
+   finds on `PATH`, plus **Show me the prompt**. It only checks that `claude`,
+   `codex` or `opencode` exists, and never reads an agent's settings or
+   credentials. The agent you pick runs in the app's directory under its own
+   permissions, with the prompt from [Write observed.json](#write-observedjson)
+   and the scripts and files Observed found:
+   `claude -p <prompt> --permission-mode acceptEdits`,
+   `codex exec --sandbox workspace-write -C <dir> <prompt>`, or
+   `opencode run <prompt>`. Observed then validates the file and captures the
+   app. When either fails, it sends the error back to the agent, at most twice,
+   then stops and shows it.
+3. It captures the working tree and opens the viewer.
+4. With `gh` signed in and no Observed workflow yet, it checks the repository's
+   Actions settings and shows the workflow it would add, pinned to the commit
+   of the release that matches the CLI. It asks before it creates the
+   `observed/setup` branch, commits `observed.json` and the workflow, pushes
+   and opens the pull request, and offers `.github/dependabot.yml` so
+   Dependabot updates the pin. Your checkout stays as it is. A no is remembered
+   in `.observed/setup.json`.
+5. It prints how to require the **Observed** check and offers to create the
+   ruleset, which takes its own yes and admin rights.
+
+Without a terminal, or with `--json`, `observed` never asks. It prints the next
+step, and with `--json` a `{ "steps", "next", "run" }` object. It exits with `3`
+when it stopped at a setup step, and otherwise with the capture's exit code
+below. `--agent claude|codex|opencode|prompt` picks who writes `observed.json`
+without asking. `--yes` answers yes to the workflow and the setup pull request,
+for an agent you authorized, and never creates a ruleset. `--dry-run` prints
+the remaining steps and changes nothing. `--project <dir>` runs it for another
+directory.
+
+`observe`, `view` and `setup` each do one step, for scripts and agents. From the
+app's directory:
 
 ```bash
 observed observe --json              # preview the working tree
@@ -564,7 +601,10 @@ a committed `observed.json` following the [project contract](src/project.ts).
 The job needs an `ubuntu-24.04` or `macos-15` runner. On Linux it installs
 packages with passwordless `sudo`, which GitHub-hosted runners provide.
 
-Add `.github/workflows/observed.yml`:
+The quickest way to add it is `bunx @observed-software/cli@alpha` from the app's
+directory. After the first local capture, it offers to open a setup pull request
+with this workflow, and Observed runs on that pull request. To add it by hand,
+create `.github/workflows/observed.yml`:
 
 ```yaml
 name: Observed
