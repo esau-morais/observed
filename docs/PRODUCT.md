@@ -85,6 +85,8 @@ Illustrative summary: "One filter action sent 1 request before and 4 after. The 
 
 GitHub and Slack deliver the same revision-bound result. They are not evidence types or separate verdict engines. One check and at most one summary comment cover every evidence type from a run, with a report link. Line-level output appears only where a finding has a source location.
 
+The action posts with the workflow's own token by default, so a first result needs no GitHub App, secret, or hosted service. The job's own check carries the verdict: its conclusion is the result and its title names it, so there is one check to require on every pull request, forks and Dependabot included. A user's own App only changes who signs the comment. Every run states what it posted and what it skipped, with the reason, such as a missing permission or a fork's read-only token. A skipped delivery never changes the verdict.
+
 The PR line takes the shape "N issues found · N behaviors verified · N unresolved", counting failed, passed, and unknown named checks. Leave out "automatically fixed" until repair exists. Name the head commit the result describes.
 
 Set the `comment` input to choose when to post:
