@@ -53,9 +53,15 @@ artifacts. Add reusable launch and cleanup instructions only after executing the
 Report unavailable paths as unverified; a generated report is not an independent
 rerun of the captured application.
 
+For interactive CLI changes, use the [terminal recording procedure](references/terminal.md)
+to drive the real prompts with a pinned `tui-test` CLI, retain recordings and
+screenshots, and verify process cleanup. This is contributor tooling, not an
+Observed runtime dependency.
+
 ## Retain and clean up
 
 Keep each run immutable. Record the source commit, worktree changes, report hash,
 commands, results, and unresolved checks beside its artifacts. Keep routine
-evidence gitignored. The CLI exits and releases its file handles; it creates no
-browser or server. Remove only temporary resources created by the verification.
+evidence gitignored. The report command creates no browser or server. Runtime
+verification can create both; check their cleanup and close the terminal session.
+Remove only temporary resources created by the verification.
