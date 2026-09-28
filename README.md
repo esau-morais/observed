@@ -56,17 +56,24 @@ setup steps that are still missing, then previews the app:
    when it lists several, to get the same message for any other agent.
 3. It captures the working tree and opens the viewer.
 4. With no Observed workflow yet, it asks one question, yes by default: open a
-   pull request that runs Observed on every pull request. It commits
-   `observed.json`, the workflow and, when you have none,
-   `.github/dependabot.yml` on an `observed/setup` branch, in a separate
-   worktree so your checkout stays as it is, and pushes it with your Git
-   credentials. With `gh` signed in, `gh` opens the pull request. Without it,
-   `observed` opens GitHub's pull request page with the title and description
-   filled in, and you select **Create pull request**. The workflow is pinned to
-   the commit of the release that matches the CLI, which Git reads from the
-   public Observed repository. With `gh`, `observed` also checks the
-   repository's Actions settings first. A no is remembered in
+   pull request that runs Observed on every pull request.
+
+   The pull request adds `observed.json`, the workflow and, when the default
+   branch has none, `.github/dependabot.yml`, so Dependabot updates the pinned
+   commit. `observed` commits them on an `observed/setup` branch in a separate
+   worktree, so your checkout stays as it is, and pushes it with your own Git
+   credentials. Git never prompts for them.
+
+   With `gh` signed in, `gh` opens the pull request and `observed` first checks
+   the repository's Actions settings. Without `gh`, `observed` opens GitHub's
+   pull request page with the title and a short description filled in, and
+   prints the link. Select **Create pull request** there. The same page opens
+   when the branch is already on origin.
+
+   The workflow is pinned to the commit of the release that matches the CLI,
+   which Git reads from the public Observed repository. A no is remembered in
    `.observed/setup.json`.
+
 5. It links to the ruleset settings where you can require the **Observed**
    check. Changing them needs admin rights, so `observed` never does it.
 

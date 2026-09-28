@@ -29,7 +29,7 @@ import {
   openCodeMajor,
   guideSection,
   requiredCheckStep,
-  symrefBranch,
+  defaultBranch,
   setupPrompt,
   skillText,
   workflowStep,
@@ -494,6 +494,9 @@ const schema = Command.make('schema', {}, () =>
 // Exit code when bare observed stops at a setup step it cannot take alone.
 const setupNeeded = 3;
 
+// The shell's exit code for a command that is not installed.
+const notFound = 127;
+
 const bunShell: Shell = (argv, options) =>
   Effect.promise(async () => {
     try {
@@ -516,7 +519,7 @@ const bunShell: Shell = (argv, options) =>
       return { code, stdout, stderr };
     } catch (error) {
       return {
-        code: 127,
+        code: notFound,
         stdout: '',
         stderr: error instanceof Error ? error.message : String(error),
       };
@@ -548,12 +551,19 @@ const handOver = (argv: readonly string[], cwd: string) =>
     }
   });
 
-// Best effort: the URL is always printed as well, for SSH sessions and
-// machines without a desktop.
+// Best effort, and never awaited: xdg-open can start a browser that keeps its
+// output open until it quits. The URL is always printed as well, for SSH
+// sessions and machines without a desktop.
 const openInBrowser = (url: string) =>
-  bunShell([process.platform === 'darwin' ? 'open' : 'xdg-open', url], {
-    cwd: homedir(),
-  }).pipe(Effect.asVoid);
+  Effect.sync(() => {
+    try {
+      Bun.spawn([process.platform === 'darwin' ? 'open' : 'xdg-open', url], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      }).unref();
+    } catch {
+      return;
+    }
+  });
 
 const isExecutable = (file: string) => {
   try {
@@ -736,24 +746,24 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     cwd: projectRoot,
   });
   const gitRoot = git.code === 0 ? git.stdout.trim() : null;
-  const repository =
+  const origin =
     gitRoot === null
       ? null
       : yield* bunShell(['git', 'remote', 'get-url', 'origin'], {
           cwd: gitRoot,
-        }).pipe(
-          Effect.map((result) =>
-            result.code === 0 ? githubRepository(result.stdout) : null,
-          ),
-        );
+        });
+  const repository =
+    origin?.code === 0 ? githubRepository(origin.stdout) : null;
 
   if (repository === null) {
     let reason = 'origin is not a GitHub repository.';
 
-    if (git.code === 127) {
+    if (git.code === notFound) {
       reason = 'Git is not installed.';
     } else if (gitRoot === null) {
       reason = 'this directory is not in a Git repository.';
+    } else if (origin?.code !== 0) {
+      reason = 'this repository has no origin remote.';
     }
 
     yield* record({
@@ -1060,6 +1070,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
   }
 
   let next: Next | null = null;
+  let setupStopped = false;
 
   if (repository !== null && gitRoot !== null) {
     const scratch = yield* fs.makeTempDirectoryScoped({
@@ -1085,25 +1096,31 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
       next = { step: 'workflow', instruction: workflow.next };
     }
 
-    if (workflow.kind === 'ready' && workflow.open !== null) {
+    if (workflow.kind === 'pushed') {
       if (interactive) {
         yield* openInBrowser(workflow.open);
+        yield* say(
+          `Select Create pull request in the browser. If no browser opened, open ${workflow.open}`,
+        );
       } else {
         next = {
           step: 'workflow',
           instruction: `Open this page and select Create pull request: ${workflow.open}`,
         };
+        setupStopped = true;
       }
     }
 
-    const base =
-      workflow.kind !== 'ready'
-        ? null
-        : (workflow.base ??
-          (yield* bunShell(['git', 'ls-remote', '--symref', 'origin', 'HEAD'], {
-            cwd: gitRoot,
-            env: { GIT_TERMINAL_PROMPT: '0' },
-          }).pipe(Effect.map((result) => symrefBranch(result.stdout)))));
+    if (workflow.kind === 'stopped' && workflow.step.status === 'failed') {
+      next = { step: 'workflow', instruction: workflow.step.detail };
+      setupStopped = true;
+    }
+
+    let base: string | null = null;
+
+    if (workflow.kind === 'ready' || workflow.kind === 'pushed') {
+      base = workflow.base ?? (yield* defaultBranch(bunShell, gitRoot));
+    }
 
     if (base !== null) {
       yield* record(
@@ -1118,10 +1135,13 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     }
   }
 
+  const captured = run === null ? 0 : exitCodes[run.result.conclusion.kind];
+
+  // An unfinished setup step outranks a clean capture, not a failed check.
   yield* finish(
     next,
     run,
-    run === null ? 0 : exitCodes[run.result.conclusion.kind],
+    captured === 0 && setupStopped ? setupNeeded : captured,
   );
 
   if (viewer !== null) {
