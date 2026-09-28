@@ -6,15 +6,16 @@ action's inputs.
 
 ## 0.2.0-alpha.2 (2026-09-28)
 
-Third alpha of 0.2.0, published under the npm dist-tag `alpha`. The action is
-the same as in 0.2.0-alpha.1, and its `v0` tag stays on 0.1.0.
+Third alpha of 0.2.0, published under the npm dist-tag `alpha`. The action's
+inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
 
 - **Bare `observed` sets up what is missing.** Run it in your app's directory.
-  It checks Bun and the browser, gets `observed.json` written, captures the app
-  and opens the viewer, then offers a pull request that runs Observed on every
-  pull request. Without a terminal, or with `--json`, it asks nothing, prints
-  the next step and exits `3` when it stopped at a setup step. The README
-  covers `--yes`, `--dry-run`, `--agent` and `--project`.
+  It checks Bun and the browser, has your coding agent write `observed.json`,
+  captures the app and opens the viewer, then offers a pull request that runs
+  Observed on every pull request. Without a terminal, or with `--json`, it asks
+  nothing, prints the next step and exits `3` when it stopped at a setup step.
+  `--yes` answers yes to every question, and `--dry-run` prints the remaining
+  steps without changing anything.
 - **Your own agent writes `observed.json`.** When the file is missing or
   invalid, `observed` offers to open Claude Code, Codex, OpenCode or `opencode2`
   in its own interactive session with one message that points to
@@ -27,12 +28,15 @@ the same as in 0.2.0-alpha.1, and its `v0` tag stays on 0.1.0.
   `bunx @observed-software/cli@0.2.0-alpha.2`. The second prints the JSON
   Schema for `observed.json`.
 - **The setup pull request works without the GitHub CLI.** One question, yes
-  by default. With `gh` signed in, `gh` opens the pull request. Without it,
-  `observed` pushes with your Git credentials and opens GitHub's pull request
-  page with the title and description filled in. The workflow is pinned to this
+  by default. `observed` pushes an `observed/setup` branch with your Git
+  credentials. With `gh` signed in, `gh` opens the pull request; otherwise
+  `observed` opens GitHub's pull request page with the title and description
+  filled in. The workflow is pinned to this
   release's commit, and `.github/dependabot.yml` is added when the default
   branch has none. `observed` links to the ruleset settings and never changes
   them.
+- **Every problem in `observed.json` at once.** A rejected `observed.json` now
+  lists every issue, in the CLI and in the action, not only the first.
 
 ## 0.2.0-alpha.1 (2026-09-28)
 
