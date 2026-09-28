@@ -35,6 +35,10 @@ jobs:
   # observed side. Bump the pin after each release.
   self-observe:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,7 +56,7 @@ jobs:
             echo "::notice title=Observed::Not observed: the base has no self-observe fixture, so its viewer can't be captured."
             echo "**Not observed.** The base has no \`tests/fixtures/self-observe/captures.tar.gz\`, so its viewer can't be captured. Self-observation starts once the fixture is on the base branch." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
+      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
         if: steps.base.outputs.ready == 'true'
         with:
           project: .

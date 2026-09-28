@@ -591,7 +591,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
+      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
@@ -607,14 +607,12 @@ The action uses the workflow's own token by default, through its `github-token`
 input. It needs no GitHub App, secret or variable. The `concurrency` block
 cancels an older run, so it can't overwrite the comment with a stale result.
 
-- The full commit SHA pins the action to the `v0.2.0-alpha.0` prerelease; the
+- The full commit SHA pins the action to the `v0.2.0-alpha.1` prerelease; the
   comment names the tag. The action installs `@observed-software/cli` with the
-  same version. That prerelease posts to the pull request only through a
-  [GitHub App](#use-your-own-github-app-optional). Posting with the workflow
-  token and titling the job's check arrive in the next release. To upgrade, use
-  the commit of a newer [release](https://github.com/esau-morais/observed/releases)
-  tag, or let Dependabot's `github-actions` updates propose it. `@v0` follows
-  the latest 0.x release, currently 0.1.0, which lacks inputs such as
+  same version. To upgrade, use the commit of a newer
+  [release](https://github.com/esau-morais/observed/releases) tag, or let
+  Dependabot's `github-actions` updates propose it. `@v0` follows the latest
+  0.x release, currently 0.1.0, which lacks inputs such as `github-token` and
   `slack-images`. A tag can move, so prefer the SHA.
 - `uses:` works for any public repository. The GitHub Marketplace listing is
   only for finding the action.
@@ -642,7 +640,7 @@ step before Observed's, with the version your project uses:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
+      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
 ```
 
 Pin those actions by full commit SHA, as here.
@@ -691,7 +689,7 @@ A journey that signs in reads its secret from an environment variable, as in
 `{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
 
 ```yaml
-      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
+      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
         env:
           LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
         with:
@@ -761,7 +759,7 @@ webhook: the job creates a short-lived token after capture finishes.
    `permissions:` for the check title:
 
 ```yaml
-      - uses: esau-morais/observed@ff217d89f43032a878100167856ae08aa44ae1e6 # v0.2.0-alpha.0
+      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
