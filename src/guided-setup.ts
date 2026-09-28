@@ -81,11 +81,14 @@ export type Facts = {
   files: string[];
 };
 
+export const contractFile = 'observed.schema.json';
+
 export function writePrompt(options: {
   facts: Facts;
   guide: string | null;
   version: string;
   failure: string | null;
+  contract: string | null;
 }): string {
   const { facts } = options;
   const scripts = Object.entries(facts.scripts);
@@ -93,6 +96,11 @@ export function writePrompt(options: {
   return [
     `Write observed.json in ${facts.directory} so Observed can start this app and capture one journey through it.`,
     'Only write observed.json. Do not run Observed: when you finish, Observed validates the file, captures the app, and sends you any error.',
+    ...(options.contract === null
+      ? []
+      : [
+          `observed.json must validate against the JSON Schema in ${options.contract}. Read it first; it lists every required key.`,
+        ]),
     '',
     'Detected facts:',
     `- App directory, relative to the Git root: ${facts.project}`,

@@ -24,6 +24,7 @@ import {
   agentCommand,
   agents,
   agentTitles,
+  contractFile,
   detectAgents,
   githubRepository,
   guideSection,
@@ -37,7 +38,7 @@ import {
   type Shell,
   type Step,
 } from './guided-setup';
-import { loadProject } from './project';
+import { loadProject, projectSchema } from './project';
 import { serveReport, ViewFailure } from './view';
 import { buildViewer, runProject } from './workflow';
 
@@ -789,8 +790,6 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
         .readFileString(path.join(toolRoot, 'README.md'))
         .pipe(Effect.orElseSucceed(() => '')),
     );
-    const prompt = (failure: string | null) =>
-      writePrompt({ facts, guide, version, failure });
     const firstFailure = missing ? null : loaded.failure.message;
 
     yield* record({
@@ -810,6 +809,27 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
 
       return yield* finish(null, null, 0);
     }
+
+    // Too large for a command-line argument, so the agent reads it from
+    // .observed/, which Git ignores.
+    const contract = path.join(
+      yield* makeEvidenceRoot(projectRoot),
+      contractFile,
+    );
+
+    yield* fs.writeFileString(
+      contract,
+      json(Schema.toJsonSchemaDocument(projectSchema).schema),
+    );
+
+    const prompt = (failure: string | null) =>
+      writePrompt({
+        facts,
+        guide,
+        version,
+        failure,
+        contract: path.relative(projectRoot, contract),
+      });
 
     const pick = Prompt.run(
       Prompt.Select<Agent | 'prompt'>({
@@ -869,7 +889,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
       const argv = agentCommand(chosen, prompt(failure), projectRoot);
 
       yield* say(
-        `Running ${agentTitles[chosen]}: ${argv.slice(0, -1).join(' ')} <prompt>${chosen === 'claude' ? ` ${argv.slice(3).join(' ')}` : ''}`,
+        `Running ${agentTitles[chosen]}: ${agentCommand(chosen, '<prompt>', projectRoot).join(' ')}`,
       );
 
       const code = yield* Effect.promise(

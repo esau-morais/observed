@@ -115,6 +115,7 @@ export const loadProject = Effect.fn('loadProject')(function* (
 
   const project = yield* Schema.decodeUnknownEffect(projectSchema, {
     onExcessProperty: 'error',
+    errors: 'all',
   })(input).pipe(
     Effect.mapError(
       (error) =>
