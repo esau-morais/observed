@@ -50,10 +50,10 @@ setup steps that are still missing, then previews the app:
    checks that the command exists and never reads an agent's settings or
    credentials. The agent starts in its own interactive session, under its own
    permission prompts, with one message: run `observed skill` and follow it.
-   When `observed` on `PATH` is another version or missing, the message runs it
-   through `bunx` at the running version instead. OpenCode 2 fills in the message and
-   waits for you to press Enter. When you quit the agent, `observed` checks the
-   file and continues. Decline, or choose **Print a prompt for another agent**
+   When `observed` on `PATH` is another version or missing, the message names
+   `bunx @observed-software/cli@<version>` instead. OpenCode 2 fills in the
+   message and waits for you to press Enter. When you quit the agent,
+   `observed` checks the file and continues. Decline, or choose **Print a prompt for another agent**
    when it lists several, to get the same message for any other agent.
 3. It captures the working tree and opens the viewer.
 4. With no Observed workflow yet, it asks one question, yes by default: open a

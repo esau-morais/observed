@@ -25,6 +25,7 @@ import {
   pushFailure,
   requiredCheckStep,
   setupTitle,
+  shellPath,
   workflowStep,
   workflowYaml,
   type Answer,
@@ -144,6 +145,19 @@ test.each([
     expect(cliCommand('0.3.0-alpha.2', installed)).toBe(cli);
   },
 );
+
+test('the installed-command check ignores the node_modules/.bin that bunx adds to PATH', () => {
+  expect(
+    shellPath(
+      [
+        '/tmp/bunx-1000-@observed-software/cli@0.3.0/node_modules/.bin',
+        '/home/me/app/node_modules/.bin',
+        '/home/me/.bun/bin',
+        '/usr/bin',
+      ].join(path.delimiter),
+    ),
+  ).toBe(['/home/me/.bun/bin', '/usr/bin'].join(path.delimiter));
+});
 
 test('the generated workflow pins a full commit SHA and grants exactly three permissions', () => {
   const yaml = workflowYaml({ project: 'app', sha, version: '0.3.0' });

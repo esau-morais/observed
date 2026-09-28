@@ -65,6 +65,16 @@ export function agentLaunch(
   }
 }
 
+// bunx and bun run put a package's node_modules/.bin on PATH, which would
+// find the very CLI that is running. The prompt can name observed only when the
+// person's own shell finds it.
+export function shellPath(pathValue: string): string {
+  return pathValue
+    .split(path.delimiter)
+    .filter((directory) => !directory.split(/[\\/]/).includes('node_modules'))
+    .join(path.delimiter);
+}
+
 // An observed on PATH at the same version prints the same guide and runs the
 // same checks, so the prompt can name it; otherwise bunx pins the version.
 export function cliCommand(version: string, installed: string | null): string {
@@ -106,8 +116,8 @@ export function guideSection(readme: string): string | null {
     .trim();
 }
 
-// Printed by observed skill. It names the exact version in every command, so an
-// agent that follows it runs the CLI the guide describes.
+// Printed by observed skill. Every command runs the version that printed it,
+// so an agent that follows it runs the CLI the guide describes.
 export function skillText(options: {
   cli: string;
   version: string;

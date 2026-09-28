@@ -32,6 +32,7 @@ import {
   requiredCheckStep,
   defaultBranch,
   setupPrompt,
+  shellPath,
   skillText,
   workflowStep,
   type Agent,
@@ -564,12 +565,54 @@ const openInBrowser = (url: string) =>
     }).unref(),
   ).pipe(Effect.ignore);
 
+// Another program named observed must not hold up setup, even when a child it
+// started keeps the output open, so the read stops at the deadline too.
 const installedCli = (version: string) =>
-  bunShell(['observed', '--version'], { cwd: homedir() }).pipe(
-    Effect.map((result) =>
-      cliCommand(version, result.code === 0 ? result.stdout : null),
-    ),
-  );
+  Effect.promise(async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const child = Bun.spawn(['observed', '--version'], {
+        cwd: homedir(),
+        env: { ...process.env, PATH: shellPath(process.env.PATH ?? '') },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'ignore',
+        timeout: 3000,
+      });
+      const reader = child.stdout.getReader();
+      const read = async () => {
+        const decoder = new TextDecoder();
+        let text = '';
+
+        for (;;) {
+          const chunk = await reader.read();
+
+          if (chunk.done) {
+            return text;
+          }
+
+          text += decoder.decode(chunk.value, { stream: true });
+        }
+      };
+
+      const output = await Promise.race([
+        read(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => {
+            reader.cancel().catch(() => undefined);
+            resolve(null);
+          }, 3000);
+        }),
+      ]);
+
+      return cliCommand(version, (await child.exited) === 0 ? output : null);
+    } catch {
+      return cliCommand(version, null);
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 
 const isExecutable = (file: string) => {
   try {
