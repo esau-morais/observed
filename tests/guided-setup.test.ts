@@ -13,8 +13,12 @@ import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import {
   actionsPolicy,
+  agentLaunch,
+  agents,
   checkoutAction,
   detectAgents,
+  openCodeMajor,
+  skillText,
   requiredCheckStep,
   workflowStep,
   workflowYaml,
@@ -58,9 +62,61 @@ test('agent detection only looks for the agent commands in PATH directories', ()
     checked.every(
       (file) =>
         ['/opt/bin', '/usr/local/bin'].includes(path.dirname(file)) &&
-        ['claude', 'codex', 'opencode'].includes(path.basename(file)),
+        ['claude', 'codex', 'opencode', 'opencode2'].includes(
+          path.basename(file),
+        ),
     ),
   ).toBe(true);
+});
+
+test('an opened agent gets only the setup prompt, never a permission or non-interactive flag', () => {
+  for (const agent of agents) {
+    for (const major of [null, 1, 2]) {
+      const { argv } = agentLaunch(agent, 'the prompt', major);
+
+      expect(argv[0]).toBe(agent);
+      expect(argv.at(-1)).toBe('the prompt');
+      expect(
+        argv
+          .slice(1, -1)
+          .filter(
+            (argument) => !['--prompt', '--standalone'].includes(argument),
+          ),
+      ).toEqual([]);
+    }
+  }
+});
+
+test.each([
+  { output: '1.18.33', major: 1, sends: true },
+  { output: 'opencode v2.0.18', major: 2, sends: false },
+  { output: 'unexpected', major: null, sends: true },
+])(
+  'OpenCode $output gets a private server only from version 2',
+  ({ output, major, sends }) => {
+    expect(openCodeMajor(output)).toBe(major);
+    expect(agentLaunch('opencode', 'p', openCodeMajor(output))).toEqual({
+      argv: sends
+        ? ['opencode', '--prompt', 'p']
+        : ['opencode', '--standalone', '--prompt', 'p'],
+      sends,
+    });
+  },
+);
+
+test('every command in the skill runs the exact version that printed it', () => {
+  const text = skillText({ version: '0.3.0-alpha.2', guide: null });
+  const commands = [...text.matchAll(/bunx ([^\s`]+)/g)].map(
+    (match) => match[1],
+  );
+
+  expect(commands.length).toBeGreaterThan(3);
+  expect(
+    commands.every(
+      (command) => command === '@observed-software/cli@0.3.0-alpha.2',
+    ),
+  ).toBe(true);
+  expect(text).toContain('blob/v0.3.0-alpha.2/README.md');
 });
 
 test('the generated workflow pins a full commit SHA and grants exactly three permissions', () => {
@@ -261,42 +317,53 @@ test('--yes opens the setup pull request but never creates a ruleset', async () 
   expect(rules.outward()).toEqual([]);
 });
 
-test('without a terminal observed never prompts or starts an agent, and prints the next step and prompt', async () => {
-  const directory = await scratch();
-  const bin = path.join(directory, 'bin');
-  const home = path.join(directory, 'home');
-  const app = path.join(directory, 'app');
-  const marker = path.join(directory, 'agent-ran');
+test.each([
+  { name: 'no agent named', agent: [] },
+  { name: '--agent claude', agent: ['--agent', 'claude'] },
+])(
+  'without a terminal observed never prompts or opens an agent ($name), and prints the setup prompt',
+  async ({ agent }) => {
+    const directory = await scratch();
+    const bin = path.join(directory, 'bin');
+    const home = path.join(directory, 'home');
+    const app = path.join(directory, 'app');
+    const marker = path.join(directory, 'agent-ran');
 
-  await mkdir(bin);
-  await mkdir(path.join(home, '.agent-browser', 'browsers', 'chrome'), {
-    recursive: true,
-  });
-  await mkdir(app);
-  await writeFile(path.join(bin, 'claude'), `#!/bin/sh\ntouch '${marker}'\n`);
-  await chmod(path.join(bin, 'claude'), 0o755);
+    await mkdir(bin);
+    await mkdir(path.join(home, '.agent-browser', 'browsers', 'chrome'), {
+      recursive: true,
+    });
+    await mkdir(app);
+    await writeFile(path.join(bin, 'claude'), `#!/bin/sh\ntouch '${marker}'\n`);
+    await chmod(path.join(bin, 'claude'), 0o755);
 
-  const child = Bun.spawn(
-    [process.execPath, 'src/workflow-cli.ts', '--project', app],
-    {
-      cwd: root,
-      env: {
-        PATH: [bin, path.dirname(process.execPath), '/usr/bin', '/bin'].join(
-          path.delimiter,
-        ),
-        HOME: home,
+    const child = Bun.spawn(
+      [process.execPath, 'src/workflow-cli.ts', '--project', app, ...agent],
+      {
+        cwd: root,
+        env: {
+          PATH: [bin, path.dirname(process.execPath), '/usr/bin', '/bin'].join(
+            path.delimiter,
+          ),
+          HOME: home,
+        },
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
       },
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  );
-  const [code, stdout] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-  ]);
-  expect(code).toBe(3);
-  expect(stdout).toContain('Next: Write observed.json with the prompt below');
-  expect(stdout).toContain('### Write observed.json');
-  expect(await Bun.file(marker).exists()).toBe(false);
-}, 30_000);
+    );
+    const [code, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+    ]);
+    expect(code).toBe(3);
+    expect(stdout).toContain(
+      'Next: Give this prompt to your coding agent, then run observed again.',
+    );
+    expect(stdout).toMatch(
+      /Set up Observed in this directory: run `bunx @observed-software\/cli@[^`]+ skill`/,
+    );
+    expect(await Bun.file(marker).exists()).toBe(false);
+  },
+  30_000,
+);

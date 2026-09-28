@@ -44,17 +44,14 @@ setup steps that are still missing, then previews the app:
 
 1. It checks Bun and the browser, and offers to download the browser. It checks
    `gh auth status` and whether `origin` is a GitHub repository.
-2. When `observed.json` is missing or invalid, it offers the coding agents it
-   finds on `PATH`, plus **Show me the prompt**. It only checks that `claude`,
-   `codex` or `opencode` exists, and never reads an agent's settings or
-   credentials. The agent you pick runs in the app's directory under its own
-   permissions, with the prompt from [Write observed.json](#write-observedjson)
-   and the scripts and files Observed found:
-   `claude -p <prompt> --permission-mode acceptEdits`,
-   `codex exec --sandbox workspace-write -C <dir> <prompt>`, or
-   `opencode run <prompt>`. Observed then validates the file and captures the
-   app. When either fails, it sends the error back to the agent, at most twice,
-   then stops and shows it.
+2. When `observed.json` is missing or invalid, it offers to open a coding agent
+   it finds on `PATH`: `claude`, `codex`, `opencode` or `opencode2`. It only
+   checks that the command exists and never reads an agent's settings or
+   credentials. The agent starts in its own interactive session, under its own
+   permission prompts, with one message: run `observed skill` and follow it.
+   OpenCode 2 fills in the message and waits for you to press Enter. When you
+   quit the agent, `observed` checks the file and continues. Choose **Print a
+   prompt for another agent** to paste the same message elsewhere.
 3. It captures the working tree and opens the viewer.
 4. With `gh` signed in and no Observed workflow yet, it checks the repository's
    Actions settings and shows the workflow it would add, pinned to the commit
@@ -69,12 +66,17 @@ setup steps that are still missing, then previews the app:
 Without a terminal, or with `--json`, `observed` never asks. It prints the next
 step, and with `--json` a `{ "steps", "next", "run" }` object. It exits with `3`
 when it stopped at a setup step, and otherwise with the capture's exit code
-below. `--agent claude|codex|opencode|prompt` picks who writes `observed.json`
-without asking. `--yes` answers yes to the browser download, the workflow,
-Dependabot and the setup pull request. Give it to an agent only after you
+below. `--agent claude|codex|opencode|opencode2|prompt` picks the agent without
+asking, or prints the prompt. An agent opens only in a terminal. `--yes`
+answers yes to the browser download, opening the first agent found, the
+workflow, Dependabot and the setup pull request. Give it to an agent only after you
 agree to those. It never creates a ruleset. `--dry-run` prints
 the remaining steps and changes nothing. `--project <dir>` runs it for another
 directory.
+
+`observed skill` prints the guide a coding agent follows to write
+`observed.json` and run captures. Every command in it names the exact version
+that printed it. `observed schema` prints the JSON Schema for `observed.json`.
 
 `observe`, `view` and `setup` each do one step, for scripts and agents. From the
 app's directory:
