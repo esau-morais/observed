@@ -13,7 +13,7 @@ export const agentTitles = {
   claude: 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode',
-  opencode2: 'OpenCode 2 beta',
+  opencode2: 'OpenCode (opencode2)',
 } satisfies Record<Agent, string>;
 
 // Looks only for an executable named after each agent in the PATH
@@ -31,9 +31,14 @@ export function detectAgents(
   );
 }
 
-// Reads the major version from opencode --version: "1.18.33" or
-// "opencode v2.0.18". Null when the output has no version.
+// Reads the major version from opencode --version: "1.18.33",
+// "opencode v2.0.18", or a 2.0 preview such as "opencode2
+// v0.0.0-beta-19271". Null when the output has no version.
 export function openCodeMajor(output: string): number | null {
+  if (/-beta\b/.test(output)) {
+    return 2;
+  }
+
   const match = /(?:^|\s)v?(\d+)\.\d+\.\d+/.exec(output.trim());
 
   return match?.[1] === undefined ? null : Number(match[1]);
@@ -41,8 +46,8 @@ export function openCodeMajor(output: string): number | null {
 
 // Starts the agent's own interactive session with a first message, so its
 // permission prompts and settings apply. OpenCode 1 sends --prompt; OpenCode 2
-// only fills the input, and its shared background service can stall at
-// startup, so it gets a private server.
+// only fills the input. The opencode2 preview hung at "Starting background
+// server..." without --standalone, so every 2.x gets a private server.
 export function agentLaunch(
   agent: Agent,
   prompt: string,
@@ -60,13 +65,22 @@ export function agentLaunch(
   }
 }
 
-export const cliCommand = (version: string) =>
+const cliCommand = (version: string) =>
   `bunx @observed-software/cli@${version}`;
 
-export function setupPrompt(version: string, invalid: boolean): string {
-  return invalid
-    ? `observed.json in this directory does not validate. Run \`${cliCommand(version)} skill\` and follow it to fix the file.`
-    : `Set up Observed in this directory: run \`${cliCommand(version)} skill\` and follow it.`;
+export type ConfigState = 'missing' | 'invalid' | 'unavailable';
+
+export function setupPrompt(version: string, state: ConfigState): string {
+  const skill = `\`${cliCommand(version)} skill\``;
+
+  switch (state) {
+    case 'missing':
+      return `Set up Observed in this directory: run ${skill} and follow it.`;
+    case 'invalid':
+      return `observed.json in this directory does not validate. Run ${skill} and follow it to fix the file.`;
+    case 'unavailable':
+      return `observed.json in this directory validates, but Observed could not capture the app with it. Run ${skill} and follow it to fix the file.`;
+  }
 }
 
 export function guideSection(readme: string): string | null {
@@ -110,7 +124,7 @@ Observed starts an app from observed.json, drives one journey through it in a br
 1. Read how the app installs, builds and starts: package.json scripts, the lockfile, and framework config. Pick one short journey a person would care about, such as opening the main page and using its main control.
 2. Run \`${cli} schema\` for the JSON Schema of observed.json. It lists every key.
 3. Write observed.json in the app's directory, following "Write observed.json" below. Change no other file; if the app needs a change to run under Observed, ask the person first.
-4. Run \`${cli} observe --json\` in that directory. When Observed rejects observed.json, stderr lists every problem. Exit 1 means the capture is unavailable, and the JSON says why. Fix observed.json and run it again. Exit 2 means a named check failed on the app as it is now; tell the person which one, and ask before changing that check. Exit 0 means it works.
+4. Run \`${cli} observe --json\` in that directory. When Observed rejects observed.json, it exits 1, prints no JSON, and stderr lists every problem. Otherwise exit 1 means the capture is unavailable, and the JSON says why. Fix observed.json and run it again. Exit 2 means a named check failed on the app as it is now; tell the person which one, and ask before changing that check. Exit 0 means it works.
 5. Tell the person observed.json works. Running \`${cli}\` with no subcommand finishes setup: it shows the result and asks before it opens a pull request that runs Observed on pull requests. If Observed opened this session, quitting it continues setup.
 
 If the browser is missing, \`${cli} setup\` downloads it, about 190 MB. Ask the person first.
@@ -128,6 +142,7 @@ ${
     ? `Follow "Write observed.json" in ${readme}.`
     : options.guide
         .replace(/^### /, '## ')
+        .replaceAll(/`observed(\s+)/g, `\`${cli}$1`)
         .replaceAll(
           '](src/',
           `](https://github.com/${actionRepository}/blob/v${options.version}/src/`,

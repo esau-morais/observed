@@ -530,7 +530,8 @@ const handOver = (argv: readonly string[], cwd: string) =>
       process.stdin.setRawMode(false);
     }
 
-    // observed.json decides what happens next, not how the agent exited.
+    // observed.json decides what happens next, not how the agent exited, so
+    // only a failure to start is reported.
     try {
       await Bun.spawn([...argv], {
         cwd,
@@ -538,8 +539,10 @@ const handOver = (argv: readonly string[], cwd: string) =>
         stdout: 'inherit',
         stderr: 'inherit',
       }).exited;
-    } catch {
-      return;
+
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
     }
   });
 
@@ -776,6 +779,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
   });
   const loaded = yield* loadProject(projectRoot).pipe(Effect.result);
   let run: ExportedComparison | null = null;
+  let configured = false;
 
   if (Result.isSuccess(loaded)) {
     yield* record({
@@ -787,8 +791,35 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     const missing = !(yield* fs.exists(
       path.join(projectRoot, 'observed.json'),
     ));
-    const detected = detectAgents(process.env.PATH ?? '', isExecutable);
-    const prompt = setupPrompt(version, !missing);
+    const found = detectAgents(process.env.PATH ?? '', isExecutable);
+    const openCodeVersion = found.includes('opencode')
+      ? (yield* bunShell(['opencode', '--version'], { cwd: projectRoot }))
+          .stdout
+      : null;
+    // OpenCode's installer can add opencode2 as a wrapper around the same
+    // opencode, so it is offered once.
+    const sameOpenCode =
+      openCodeVersion !== null &&
+      found.includes('opencode2') &&
+      (yield* bunShell(['opencode2', '--version'], { cwd: projectRoot }))
+        .stdout === openCodeVersion;
+    const detected = sameOpenCode
+      ? found.filter((agent) => agent !== 'opencode2')
+      : found;
+    const prompt = setupPrompt(version, missing ? 'missing' : 'invalid');
+    const plan = () => {
+      const chosen = Option.getOrNull(options.agent);
+
+      if (chosen === 'prompt' || !interactive || detected.length === 0) {
+        return `Would print this prompt for your coding agent: ${prompt}`;
+      }
+
+      if (chosen !== null) {
+        return `Would open ${agentTitles[chosen]} with: ${prompt}`;
+      }
+
+      return `Would offer to open ${detected.map((agent) => agentTitles[agent]).join(' or ')} with: ${prompt}`;
+    };
 
     yield* record({
       id: 'config',
@@ -799,14 +830,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     });
 
     if (consent === 'dry-run') {
-      yield* record({
-        id: 'config',
-        status: 'planned',
-        detail:
-          detected.length === 0
-            ? `Would print this prompt for your coding agent: ${prompt}`
-            : `Would offer to open ${detected.map((agent) => agentTitles[agent]).join(' or ')} with: ${prompt}`,
-      });
+      yield* record({ id: 'config', status: 'planned', detail: plan() });
     } else {
       const choose = (): Effect.Effect<
         Agent | 'prompt' | 'cancelled' | null
@@ -834,16 +858,16 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
             `Open ${agentTitles[first]} here to set up observed.json?`,
             true,
           ).pipe(
-            Effect.map(
-              (answer) =>
-                (
-                  ({
-                    yes: first,
-                    no: 'prompt',
-                    cancelled: 'cancelled',
-                  }) as const
-                )[answer],
-            ),
+            Effect.map((answer) => {
+              switch (answer) {
+                case 'yes':
+                  return first;
+                case 'no':
+                  return 'prompt' as const;
+                case 'cancelled':
+                  return 'cancelled' as const;
+              }
+            }),
           );
         }
 
@@ -899,7 +923,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
           status: 'failed',
           detail: interactive
             ? `${chosen} is not on PATH`
-            : `${agentTitles[chosen]} needs a terminal to open`,
+            : `${agentTitles[chosen]} opens only in a terminal, and never with --json`,
         });
 
         return yield* finish(
@@ -917,18 +941,34 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
       const launch = agentLaunch(
         chosen,
         prompt,
-        chosen === 'opencode'
-          ? openCodeMajor(
-              (yield* bunShell(['opencode', '--version'], { cwd: projectRoot }))
-                .stdout,
-            )
+        chosen === 'opencode' && openCodeVersion !== null
+          ? openCodeMajor(openCodeVersion)
           : null,
       );
 
       yield* say(
         `Opening ${agentTitles[chosen]} with: ${prompt}\n${launch.sends ? '' : `Press Enter in ${agentTitles[chosen]} to send it. `}Quit it when observed.json works, and setup continues here.`,
       );
-      yield* handOver(launch.argv, projectRoot);
+      const failedToStart = yield* handOver(launch.argv, projectRoot);
+
+      if (failedToStart !== null) {
+        yield* record({
+          id: 'config',
+          status: 'failed',
+          detail: `${agentTitles[chosen]} did not start: ${failedToStart}`,
+        });
+
+        return yield* finish(
+          {
+            step: 'config',
+            instruction:
+              'Give this prompt to your coding agent, then run observed again.',
+            prompt,
+          },
+          null,
+          setupNeeded,
+        );
+      }
 
       const checked = yield* loadProject(projectRoot).pipe(Effect.result);
 
@@ -950,7 +990,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
             step: 'config',
             instruction:
               'Give this prompt to your coding agent, then run observed again.',
-            prompt: setupPrompt(version, written),
+            prompt: setupPrompt(version, written ? 'invalid' : 'missing'),
           },
           null,
           setupNeeded,
@@ -962,6 +1002,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
         status: 'done',
         detail: 'observed.json is valid',
       });
+      configured = true;
     }
   }
 
@@ -972,7 +1013,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
       detail: 'Would capture the working tree and open the viewer',
     });
   } else {
-    run ??= yield* capture;
+    run = yield* capture;
     yield* saveLatest(run.directory, projectRoot);
 
     const { conclusion } = run.result;
@@ -984,7 +1025,18 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     });
 
     if (conclusion.kind === 'unavailable') {
-      return yield* finish(null, run, exitCodes.unavailable);
+      return yield* finish(
+        configured
+          ? {
+              step: 'capture',
+              instruction:
+                'Give this prompt to your coding agent, then run observed again.',
+              prompt: setupPrompt(version, 'unavailable'),
+            }
+          : null,
+        run,
+        exitCodes.unavailable,
+      );
     }
   }
 

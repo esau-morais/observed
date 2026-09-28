@@ -48,10 +48,11 @@ setup steps that are still missing, then previews the app:
    it finds on `PATH`: `claude`, `codex`, `opencode` or `opencode2`. It only
    checks that the command exists and never reads an agent's settings or
    credentials. The agent starts in its own interactive session, under its own
-   permission prompts, with one message: run `observed skill` and follow it.
-   OpenCode 2 fills in the message and waits for you to press Enter. When you
-   quit the agent, `observed` checks the file and continues. Choose **Print a
-   prompt for another agent** to paste the same message elsewhere.
+   permission prompts, with one message: run `observed skill`, through `bunx`
+   at the same version, and follow it. OpenCode 2 fills in the message and
+   waits for you to press Enter. When you quit the agent, `observed` checks the
+   file and continues. Decline, or choose **Print a prompt for another agent**
+   when it lists several, to get the same message for any other agent.
 3. It captures the working tree and opens the viewer.
 4. With `gh` signed in and no Observed workflow yet, it checks the repository's
    Actions settings and shows the workflow it would add, pinned to the commit

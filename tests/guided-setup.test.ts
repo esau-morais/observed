@@ -90,6 +90,7 @@ test('an opened agent gets only the setup prompt, never a permission or non-inte
 test.each([
   { output: '1.18.33', major: 1, sends: true },
   { output: 'opencode v2.0.18', major: 2, sends: false },
+  { output: 'opencode2 v0.0.0-beta-19271', major: 2, sends: false },
   { output: 'unexpected', major: null, sends: true },
 ])(
   'OpenCode $output gets a private server only from version 2',
@@ -105,7 +106,11 @@ test.each([
 );
 
 test('every command in the skill runs the exact version that printed it', () => {
-  const text = skillText({ version: '0.3.0-alpha.2', guide: null });
+  const text = skillText({
+    version: '0.3.0-alpha.2',
+    guide:
+      '### Write observed.json\n\nThen `observed\n  capture` takes the first journey.',
+  });
   const commands = [...text.matchAll(/bunx ([^\s`]+)/g)].map(
     (match) => match[1],
   );
@@ -116,6 +121,7 @@ test('every command in the skill runs the exact version that printed it', () => 
       (command) => command === '@observed-software/cli@0.3.0-alpha.2',
     ),
   ).toBe(true);
+  expect(text).not.toMatch(/`observed\s/);
   expect(text).toContain('blob/v0.3.0-alpha.2/README.md');
 });
 
