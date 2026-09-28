@@ -555,15 +555,11 @@ const handOver = (argv: readonly string[], cwd: string) =>
 // output open until it quits. The URL is always printed as well, for SSH
 // sessions and machines without a desktop.
 const openInBrowser = (url: string) =>
-  Effect.sync(() => {
-    try {
-      Bun.spawn([process.platform === 'darwin' ? 'open' : 'xdg-open', url], {
-        stdio: ['ignore', 'ignore', 'ignore'],
-      }).unref();
-    } catch {
-      return;
-    }
-  });
+  Effect.try(() =>
+    Bun.spawn([process.platform === 'darwin' ? 'open' : 'xdg-open', url], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+    }).unref(),
+  ).pipe(Effect.ignore);
 
 const isExecutable = (file: string) => {
   try {
@@ -1094,18 +1090,19 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
 
     if (workflow.kind === 'waiting') {
       next = { step: 'workflow', instruction: workflow.next };
+      setupStopped = !interactive;
     }
 
     if (workflow.kind === 'pushed') {
       if (interactive) {
         yield* openInBrowser(workflow.open);
         yield* say(
-          `Select Create pull request in the browser. If no browser opened, open ${workflow.open}`,
+          `Create the pull request in the browser, or open it there if it already exists. If no browser opened, open ${workflow.open}`,
         );
       } else {
         next = {
           step: 'workflow',
-          instruction: `Open this page and select Create pull request: ${workflow.open}`,
+          instruction: `Open this page to create the pull request, or to find it if it already exists: ${workflow.open}`,
         };
         setupStopped = true;
       }

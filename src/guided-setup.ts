@@ -545,7 +545,7 @@ type Written = { path: string; contents: string };
 
 export type Opened =
   | { kind: 'opened'; url: string }
-  | { kind: 'pushed'; url: string; note: string };
+  | { kind: 'pushed'; url: string; note: string; status: Step['status'] };
 
 // Works in a separate worktree from the default branch, so the user's
 // checkout, index and uncommitted changes stay as they were. With gh signed
@@ -593,6 +593,7 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
       kind: 'pushed',
       url: page,
       note: `${setupBranch} is already on origin.`,
+      status: 'done',
     } satisfies Opened;
   }
 
@@ -659,6 +660,7 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
         kind: 'pushed',
         url: page,
         note: `Pushed ${setupBranch}.`,
+        status: 'done',
       } satisfies Opened;
     }
 
@@ -687,6 +689,7 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
           kind: 'pushed',
           url: page,
           note: `Pushed ${setupBranch}, but ${created.failure.message}`,
+          status: 'needs-answer',
         } satisfies Opened);
   }).pipe(
     Effect.ensuring(
@@ -898,7 +901,7 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
       } satisfies WorkflowOutcome)
     : ({
         kind: 'pushed',
-        step: step('done', opened.success.note),
+        step: step(opened.success.status, opened.success.note),
         base,
         open: opened.success.url,
       } satisfies WorkflowOutcome);

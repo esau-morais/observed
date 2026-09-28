@@ -67,8 +67,9 @@ setup steps that are still missing, then previews the app:
    With `gh` signed in, `gh` opens the pull request and `observed` first checks
    the repository's Actions settings. Without `gh`, `observed` opens GitHub's
    pull request page with the title and a short description filled in, and
-   prints the link. Select **Create pull request** there. The same page opens
-   when the branch is already on origin.
+   prints the link; without a terminal it only prints it. Select **Create pull
+   request** there. The same page comes up when the branch is already on
+   origin, or when `gh` cannot open the pull request.
 
    The workflow is pinned to the commit of the release that matches the CLI,
    which Git reads from the public Observed repository. A no is remembered in
