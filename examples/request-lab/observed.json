@@ -14,7 +14,8 @@
       "build.ts",
       "server.ts",
       "package.json",
-      "bun.lock"
+      "bun.lock",
+      "duplicate.ts"
     ]
   },
   "setup": [
@@ -46,6 +47,7 @@
       "status": 200
     },
     "browserArguments": ["--no-sandbox"],
+    "maxAgeMs": 315360000000,
     "viewport": { "width": 1120, "height": 800, "scale": 1 }
   }
 }

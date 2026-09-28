@@ -1,6 +1,6 @@
 import * as stylex from '@stylexjs/stylex';
 import { useRef, useState } from 'react';
-import { loadItems, title } from './base';
+import { loadItems, title } from './duplicate';
 import type { Item } from './items';
 import { colors } from './tokens.stylex';
 
