@@ -29,6 +29,7 @@ import {
   openCodeMajor,
   guideSection,
   requiredCheckStep,
+  symrefBranch,
   setupPrompt,
   skillText,
   workflowStep,
@@ -498,6 +499,7 @@ const bunShell: Shell = (argv, options) =>
     try {
       const child = Bun.spawn([...argv], {
         cwd: options.cwd,
+        env: { ...process.env, ...options.env },
         stdin:
           options.input === undefined
             ? 'ignore'
@@ -545,6 +547,13 @@ const handOver = (argv: readonly string[], cwd: string) =>
       return error instanceof Error ? error.message : String(error);
     }
   });
+
+// Best effort: the URL is always printed as well, for SSH sessions and
+// machines without a desktop.
+const openInBrowser = (url: string) =>
+  bunShell([process.platform === 'darwin' ? 'open' : 'xdg-open', url], {
+    cwd: homedir(),
+  }).pipe(Effect.asVoid);
 
 const isExecutable = (file: string) => {
   try {
@@ -720,13 +729,14 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     });
   }
 
-  const gh = yield* bunShell(['gh', 'auth', 'status'], { cwd: projectRoot });
-  const gitRoot = yield* bunShell(['git', 'rev-parse', '--show-toplevel'], {
+  const gh =
+    (yield* bunShell(['gh', 'auth', 'status'], { cwd: projectRoot })).code ===
+    0;
+  const git = yield* bunShell(['git', 'rev-parse', '--show-toplevel'], {
     cwd: projectRoot,
-  }).pipe(
-    Effect.map((result) => (result.code === 0 ? result.stdout.trim() : null)),
-  );
-  const remote =
+  });
+  const gitRoot = git.code === 0 ? git.stdout.trim() : null;
+  const repository =
     gitRoot === null
       ? null
       : yield* bunShell(['git', 'remote', 'get-url', 'origin'], {
@@ -736,30 +746,30 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
             result.code === 0 ? githubRepository(result.stdout) : null,
           ),
         );
-  const repository = gh.code === 0 ? remote : null;
 
-  yield* record(
-    gh.code === 0
-      ? { id: 'gh', status: 'done', detail: 'GitHub CLI signed in' }
-      : {
-          id: 'gh',
-          status: 'skipped',
-          detail:
-            'GitHub steps skipped: install gh and run gh auth login to add the workflow.',
-        },
-  );
-  yield* record(
-    remote === null
-      ? {
-          id: 'remote',
-          status: 'skipped',
-          detail:
-            gitRoot === null
-              ? 'GitHub steps skipped: this directory is not in a Git repository.'
-              : 'GitHub steps skipped: origin is not a GitHub repository.',
-        }
-      : { id: 'remote', status: 'done', detail: `GitHub repository ${remote}` },
-  );
+  if (repository === null) {
+    let reason = 'origin is not a GitHub repository.';
+
+    if (git.code === 127) {
+      reason = 'Git is not installed.';
+    } else if (gitRoot === null) {
+      reason = 'this directory is not in a Git repository.';
+    }
+
+    yield* record({
+      id: 'github',
+      status: 'skipped',
+      detail: `GitHub steps skipped: ${reason}`,
+    });
+  } else {
+    yield* record({
+      id: 'github',
+      status: 'done',
+      detail: gh
+        ? `GitHub repository ${repository}, GitHub CLI signed in`
+        : `GitHub repository ${repository}. Without the GitHub CLI, Observed opens the pull request page in your browser.`,
+    });
+  }
 
   const project =
     gitRoot === null
@@ -1057,6 +1067,7 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
     });
     const workflow = yield* workflowStep({
       shell: bunShell,
+      gh,
       ask,
       say,
       consent,
@@ -1074,37 +1085,31 @@ const guided = Effect.fn('guidedSetup')(function* (options: {
       next = { step: 'workflow', instruction: workflow.next };
     }
 
+    if (workflow.kind === 'ready' && workflow.open !== null) {
+      if (interactive) {
+        yield* openInBrowser(workflow.open);
+      } else {
+        next = {
+          step: 'workflow',
+          instruction: `Open this page and select Create pull request: ${workflow.open}`,
+        };
+      }
+    }
+
     const base =
       workflow.kind !== 'ready'
         ? null
         : (workflow.base ??
-          (yield* bunShell(
-            [
-              'gh',
-              'repo',
-              'view',
-              repository,
-              '--json',
-              'defaultBranchRef',
-              '--jq',
-              '.defaultBranchRef.name',
-            ],
-            { cwd: gitRoot },
-          ).pipe(
-            Effect.map((result) =>
-              result.code === 0 && result.stdout.trim() !== ''
-                ? result.stdout.trim()
-                : null,
-            ),
-          )));
+          (yield* bunShell(['git', 'ls-remote', '--symref', 'origin', 'HEAD'], {
+            cwd: gitRoot,
+            env: { GIT_TERMINAL_PROMPT: '0' },
+          }).pipe(Effect.map((result) => symrefBranch(result.stdout)))));
 
     if (base !== null) {
       yield* record(
         yield* requiredCheckStep({
           shell: bunShell,
-          ask,
-          say,
-          consent,
+          gh,
           repository,
           base,
           cwd: gitRoot,
@@ -1135,7 +1140,7 @@ const root = Command.make(
     agent: agentChoiceFlag,
     yes: Flag.Boolean('yes').pipe(
       Flag.withDescription(
-        'Answer yes to the browser download, opening the first agent found, the workflow, Dependabot and the setup pull request. Never creates a ruleset',
+        'Answer yes to the browser download, opening the first agent found, and the setup pull request',
       ),
       Flag.withDefault(false),
     ),

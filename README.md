@@ -42,8 +42,9 @@ latest release.
 From your app's directory, run `observed` with no subcommand. It does only the
 setup steps that are still missing, then previews the app:
 
-1. It checks Bun and the browser, and offers to download the browser. It checks
-   `gh auth status` and whether `origin` is a GitHub repository.
+1. It checks Bun and the browser, and offers to download the browser. It
+   checks whether `origin` is a GitHub repository and whether the GitHub CLI,
+   `gh`, is signed in.
 2. When `observed.json` is missing or invalid, it offers to open a coding agent
    it finds on `PATH`: `claude`, `codex`, `opencode` or `opencode2`. It only
    checks that the command exists and never reads an agent's settings or
@@ -54,26 +55,30 @@ setup steps that are still missing, then previews the app:
    file and continues. Decline, or choose **Print a prompt for another agent**
    when it lists several, to get the same message for any other agent.
 3. It captures the working tree and opens the viewer.
-4. With `gh` signed in and no Observed workflow yet, it checks the repository's
-   Actions settings and shows the workflow it would add, pinned to the commit
-   of the release that matches the CLI. It asks before it creates the
-   `observed/setup` branch, commits `observed.json` and the workflow, pushes
-   and opens the pull request, and offers `.github/dependabot.yml` so
-   Dependabot updates the pin. Your checkout stays as it is. A no is remembered
-   in `.observed/setup.json`.
-5. It prints how to require the **Observed** check and offers to create the
-   ruleset, which takes its own yes and admin rights.
+4. With no Observed workflow yet, it asks one question, yes by default: open a
+   pull request that runs Observed on every pull request. It commits
+   `observed.json`, the workflow and, when you have none,
+   `.github/dependabot.yml` on an `observed/setup` branch, in a separate
+   worktree so your checkout stays as it is, and pushes it with your Git
+   credentials. With `gh` signed in, `gh` opens the pull request. Without it,
+   `observed` opens GitHub's pull request page with the title and description
+   filled in, and you select **Create pull request**. The workflow is pinned to
+   the commit of the release that matches the CLI, which Git reads from the
+   public Observed repository. With `gh`, `observed` also checks the
+   repository's Actions settings first. A no is remembered in
+   `.observed/setup.json`.
+5. It links to the ruleset settings where you can require the **Observed**
+   check. Changing them needs admin rights, so `observed` never does it.
 
 Without a terminal, or with `--json`, `observed` never asks. It prints the next
 step, and with `--json` a `{ "steps", "next", "run" }` object. It exits with `3`
 when it stopped at a setup step, and otherwise with the capture's exit code
 below. `--agent claude|codex|opencode|opencode2|prompt` picks the agent without
 asking, or prints the prompt. An agent opens only in a terminal. `--yes`
-answers yes to the browser download, opening the first agent found, the
-workflow, Dependabot and the setup pull request. Give it to an agent only after you
-agree to those. It never creates a ruleset. `--dry-run` prints
-the remaining steps and changes nothing. `--project <dir>` runs it for another
-directory.
+answers yes to the browser download, opening the first agent found, and the
+setup pull request. Give it to an agent only after you agree to those.
+`--dry-run` prints the remaining steps and changes nothing. `--project <dir>`
+runs it for another directory.
 
 `observed skill` prints the guide a coding agent follows to write
 `observed.json` and run captures. Every command in it names the exact version

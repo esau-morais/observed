@@ -324,7 +324,7 @@ export class SetupStepFailure extends Schema.TaggedError<SetupStepFailure>()(
 
 export type Shell = (
   argv: readonly string[],
-  options: { cwd: string; input?: string },
+  options: { cwd: string; input?: string; env?: Record<string, string> },
 ) => Effect.Effect<{ code: number; stdout: string; stderr: string }>;
 
 // Cancelled means the person left the question, which is not a no.
@@ -360,12 +360,17 @@ const readState = Effect.fnUntraced(function* (observed: string) {
   );
 });
 
-const decide = (consent: Consent, ask: Ask, question: string) => {
+const decide = (
+  consent: Consent,
+  ask: Ask,
+  question: string,
+  initial: boolean,
+) => {
   switch (consent) {
     case 'yes':
       return Effect.succeed('yes' as const);
     case 'ask':
-      return ask(question);
+      return ask(question, initial);
     case 'dry-run':
       return Effect.succeed('dry-run' as const);
     case 'no-terminal':
@@ -373,48 +378,53 @@ const decide = (consent: Consent, ask: Ask, question: string) => {
   }
 };
 
-const refSchema = Schema.fromJsonString(
-  Schema.Struct({
-    object: Schema.Struct({
-      type: Schema.String,
-      sha: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
-    }),
-  }),
-);
+// Git never prompts for a username or password, so a remote without stored
+// credentials fails at once instead of waiting on input nobody sees.
+const quietGit = { GIT_TERMINAL_PROMPT: '0' };
+
+// Reads the commit a release tag points to from git ls-remote output. An
+// annotated tag lists its commit on the peeled ^{} line.
+export function tagCommit(output: string, version: string): string | null {
+  const refs = new Map(
+    output
+      .split('\n')
+      .map((line) => line.split('\t'))
+      .filter(
+        (fields): fields is [string, string] =>
+          fields.length === 2 && fullSha.test(fields[0] ?? ''),
+      )
+      .map(([sha, ref]) => [ref, sha]),
+  );
+  const tag = `refs/tags/v${version}`;
+
+  return refs.get(`${tag}^{}`) ?? refs.get(tag) ?? null;
+}
 
 // The action is pinned to the commit of the release that matches this CLI, so
-// the workflow runs the same version that wrote it.
+// the workflow runs the same version that wrote it. The repository is public,
+// so this needs Git but no GitHub sign-in.
 export const releaseSha = Effect.fnUntraced(function* (
   shell: Shell,
   version: string,
   cwd: string,
 ) {
-  const tag = yield* shell(
-    ['gh', 'api', `repos/${actionRepository}/git/ref/tags/v${version}`],
-    { cwd },
+  const listed = yield* shell(
+    [
+      'git',
+      'ls-remote',
+      `https://github.com/${actionRepository}.git`,
+      `refs/tags/v${version}`,
+      `refs/tags/v${version}^{}`,
+    ],
+    { cwd, env: quietGit },
   );
-  const ref = Schema.decodeUnknownOption(refSchema)(tag.stdout);
 
-  if (tag.code !== 0 || Option.isNone(ref)) {
-    return null;
-  }
-
-  if (ref.value.object.type === 'commit') {
-    return ref.value.object.sha;
-  }
-
-  const annotated = yield* shell(
-    ['gh', 'api', `repos/${actionRepository}/git/tags/${ref.value.object.sha}`],
-    { cwd },
-  );
-  const target = Schema.decodeUnknownOption(refSchema)(annotated.stdout);
-
-  return annotated.code === 0 &&
-    Option.isSome(target) &&
-    target.value.object.type === 'commit'
-    ? target.value.object.sha
-    : null;
+  return listed.code === 0 ? tagCommit(listed.stdout, version) : null;
 });
+
+export function symrefBranch(output: string): string | null {
+  return /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(output)?.[1] ?? null;
+}
 
 const readPolicy = Effect.fnUntraced(function* (
   shell: Shell,
@@ -445,7 +455,9 @@ const readPolicy = Effect.fnUntraced(function* (
   });
 });
 
-export function setupPullRequestBody(dependabot: boolean): string {
+export function setupPullRequestBody(options: {
+  dependabot: 'added' | 'present' | 'missing-actions';
+}): string {
   return [
     'This pull request runs [Observed](https://github.com/esau-morais/observed) on every pull request. Observed captures the app on the base and the head, compares them, and checks what `observed.json` names.',
     '',
@@ -460,18 +472,57 @@ export function setupPullRequestBody(dependabot: boolean): string {
     "| `checks: write` | Put the result in the title of this job's own check |",
     '| `pull-requests: write` | Post one comment and edit it on later runs |',
     '',
-    `The action is pinned to a full commit SHA with its version in a comment.${dependabot ? ' `.github/dependabot.yml` lets Dependabot propose updates to that pin.' : ''}`,
+    {
+      added:
+        'The action is pinned to a full commit SHA with its version in a comment. `.github/dependabot.yml` lets Dependabot propose updates to that pin.',
+      present:
+        'The action is pinned to a full commit SHA with its version in a comment. The existing `.github/dependabot.yml` already updates GitHub Actions.',
+      'missing-actions': `The action is pinned to a full commit SHA with its version in a comment. To let Dependabot propose updates to that pin, add this entry under \`updates:\` in \`.github/dependabot.yml\`:\n\n\`\`\`yaml\n${dependabotYaml.split('\n').slice(2).join('\n')}\`\`\``,
+    }[options.dependabot],
     '',
     'To require the check, add **Observed** to a branch ruleset. To turn Observed off, remove it from the ruleset first, then delete the workflow and `observed.json`.',
   ].join('\n');
 }
 
+export const setupTitle = 'Run Observed on pull requests';
+
+// GitHub's documented query parameters open the new pull request form with
+// the title and description filled in.
+export function compareUrl(options: {
+  repository: string;
+  base: string;
+  body: string;
+}): string {
+  const query = new URLSearchParams({
+    quick_pull: '1',
+    title: setupTitle,
+    body: options.body,
+  });
+
+  return `https://github.com/${options.repository}/compare/${encodeURIComponent(options.base)}...${encodeURIComponent(setupBranch)}?${query.toString()}`;
+}
+
+// A push that adds a workflow file needs the workflow scope on a token; an SSH
+// key needs nothing extra.
+export function pushFailure(stderr: string): string {
+  return /workflow.+scope|scope.+workflow/i.test(stderr)
+    ? 'GitHub refused to add the workflow because your Git token lacks the workflow scope. Run gh auth refresh -s workflow, or push over SSH, then run observed again.'
+    : `git push failed: ${stderr.trim().split('\n').at(-1) ?? ''}. Check that git push works for this repository, then run observed again.`;
+}
+
 type Written = { path: string; contents: string };
 
+export type Opened =
+  | { kind: 'opened'; url: string; base: string }
+  | { kind: 'pushed'; url: string; base: string };
+
 // Works in a separate worktree from the default branch, so the user's
-// checkout, index and uncommitted changes stay as they were.
+// checkout, index and uncommitted changes stay as they were. With gh signed
+// in, gh opens the pull request; otherwise the person opens it from the
+// prefilled page, after a push with their own Git credentials.
 export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
   shell: Shell;
+  gh: boolean;
   gitRoot: string;
   repository: string;
   files: Written[];
@@ -481,27 +532,30 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
   const fs = yield* FileSystem.FileSystem;
   const { shell, gitRoot } = options;
   const step = (argv: readonly string[], cwd = gitRoot) =>
-    shell(argv, { cwd }).pipe(
+    shell(argv, { cwd, env: quietGit }).pipe(
       Effect.flatMap((result) =>
         result.code === 0
           ? Effect.succeed(result.stdout.trim())
           : Effect.fail(
               new SetupStepFailure({
-                message: `${argv.slice(0, 3).join(' ')} failed: ${result.stderr.trim().split('\n').at(-1) ?? ''}`,
+                message:
+                  argv[1] === 'push'
+                    ? pushFailure(result.stderr)
+                    : `${argv.slice(0, 3).join(' ')} failed: ${result.stderr.trim().split('\n').at(-1) ?? ''}`,
               }),
             ),
       ),
     );
-  const base = yield* step([
-    'gh',
-    'repo',
-    'view',
-    options.repository,
-    '--json',
-    'defaultBranchRef',
-    '--jq',
-    '.defaultBranchRef.name',
-  ]);
+  const base = symrefBranch(
+    yield* step(['git', 'ls-remote', '--symref', 'origin', 'HEAD']),
+  );
+
+  if (base === null) {
+    return yield* new SetupStepFailure({
+      message: 'origin did not name its default branch.',
+    });
+  }
+
   const existing = yield* step([
     'git',
     'ls-remote',
@@ -531,7 +585,7 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
     `origin/${base}`,
   ]);
 
-  const opened = yield* Effect.gen(function* () {
+  return yield* Effect.gen(function* () {
     for (const file of options.files) {
       const target = path.join(worktree, file.path);
 
@@ -564,24 +618,40 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
       worktree,
     );
 
-    return yield* step(
-      [
-        'gh',
-        'pr',
-        'create',
-        '--repo',
-        options.repository,
-        '--base',
+    if (!options.gh) {
+      return {
+        kind: 'pushed',
+        url: compareUrl({
+          repository: options.repository,
+          base,
+          body: options.body,
+        }),
         base,
-        '--head',
-        setupBranch,
-        '--title',
-        'Run Observed on pull requests',
-        '--body',
-        options.body,
-      ],
-      worktree,
-    );
+      } satisfies Opened;
+    }
+
+    return {
+      kind: 'opened',
+      url: yield* step(
+        [
+          'gh',
+          'pr',
+          'create',
+          '--repo',
+          options.repository,
+          '--base',
+          base,
+          '--head',
+          setupBranch,
+          '--title',
+          setupTitle,
+          '--body',
+          options.body,
+        ],
+        worktree,
+      ),
+      base,
+    } satisfies Opened;
   }).pipe(
     Effect.ensuring(
       shell(['git', 'worktree', 'remove', '--force', worktree], {
@@ -593,8 +663,6 @@ export const openSetupPullRequest = Effect.fnUntraced(function* (options: {
       ),
     ),
   );
-
-  return { url: opened, base };
 });
 
 const existingWorkflow = Effect.fnUntraced(function* (gitRoot: string) {
@@ -619,15 +687,19 @@ const existingWorkflow = Effect.fnUntraced(function* (gitRoot: string) {
 
 // Ready means a workflow exists or a setup pull request was opened; base is
 // known only for the pull request.
+// Ready means a workflow exists or a setup branch was pushed; base is known
+// only for the pull request. A pushed branch waits for the person to press
+// Create pull request on GitHub's prefilled page.
 export type WorkflowOutcome =
-  | { kind: 'ready'; step: Step; base: string | null }
+  | { kind: 'ready'; step: Step; base: string | null; open: string | null }
   | { kind: 'waiting'; step: Step; next: string }
   | { kind: 'stopped'; step: Step };
 
-// Offered after a successful capture. Every outward action (branch, push,
-// pull request) waits for a yes, and a no is remembered in .observed/.
+// Offered after a successful capture. The branch, push and pull request wait
+// for one yes, and a no is remembered in .observed/.
 export const workflowStep = Effect.fnUntraced(function* (options: {
   shell: Shell;
+  gh: boolean;
   ask: Ask;
   say: Say;
   consent: Consent;
@@ -659,6 +731,7 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
       kind: 'ready',
       step: step('done', `${found} runs Observed.`),
       base: null,
+      open: null,
     } satisfies WorkflowOutcome;
   }
 
@@ -674,48 +747,58 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
   if (sha === null) {
     return stopped(
       'failed',
-      `No ${actionRepository} release is tagged v${options.version}, so there is no commit to pin. Follow README "Run on pull requests" to add the workflow by hand.`,
+      `Git could not read the commit of ${actionRepository} v${options.version}, so there is nothing to pin. Follow README "Run on pull requests" to add the workflow by hand.`,
     );
   }
 
-  const policy = yield* readPolicy(shell, options.repository, options.gitRoot, [
-    `${actionRepository}@${sha}`,
-    checkoutAction,
-  ]);
+  // Only an admin can read the Actions settings, and only through gh.
+  const policy = options.gh
+    ? yield* readPolicy(shell, options.repository, options.gitRoot, [
+        `${actionRepository}@${sha}`,
+        checkoutAction,
+      ])
+    : null;
 
-  if (policy.kind === 'blocked') {
+  if (policy?.kind === 'blocked') {
     return stopped(
       'failed',
       `The repository's Actions settings would block the workflow. ${policy.reason}`,
     );
   }
 
-  const yaml = workflowYaml({
-    project: options.project,
-    sha,
-    version: options.version,
+  const existingDependabot = yield* fs
+    .readFileString(path.join(options.gitRoot, dependabotPath))
+    .pipe(Effect.option);
+  const dependabot = Option.match(existingDependabot, {
+    onNone: () => 'added' as const,
+    onSome: (text) =>
+      text.includes('package-ecosystem: github-actions')
+        ? ('present' as const)
+        : ('missing-actions' as const),
   });
 
+  const added = [
+    path.posix.join(options.project, 'observed.json'),
+    `${workflowPath} pinned to v${options.version}`,
+    ...(dependabot === 'added' ? [dependabotPath] : []),
+  ];
+
   yield* say(
-    [
-      `Observed can add ${workflowPath}, pinned to v${options.version}:`,
-      '',
-      yaml,
-      ...(policy.kind === 'unknown' ? [`Not checked: ${policy.reason}`] : []),
-    ].join('\n'),
+    `The pull request adds ${added.slice(0, -1).join(', ')} and ${added.at(-1) ?? ''} on a new ${setupBranch} branch. Your checkout stays as it is.`,
   );
 
   const decision = yield* decide(
     consent,
     ask,
-    `Write ${workflowPath} and open a setup pull request from ${setupBranch}?`,
+    'Open a pull request that runs Observed on every pull request?',
+    true,
   );
 
   switch (decision) {
     case 'dry-run':
       return stopped(
         'planned',
-        `Would write ${workflowPath}, commit it with observed.json on ${setupBranch}, push, and open a pull request.`,
+        `Would push ${setupBranch} with observed.json and ${workflowPath}, then ${options.gh ? 'open a pull request with gh' : "open GitHub's pull request page"}.`,
       );
     case 'cancelled':
       return {
@@ -742,27 +825,11 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
       break;
   }
 
-  const existingDependabot = yield* fs
-    .readFileString(path.join(options.gitRoot, dependabotPath))
-    .pipe(Effect.option);
-  const hasDependabot = Option.isSome(existingDependabot);
-
-  if (
-    hasDependabot &&
-    !existingDependabot.value.includes('package-ecosystem: github-actions')
-  ) {
-    yield* say(
-      `${dependabotPath} has no github-actions entry. Add one so Dependabot proposes updates to the pinned commit:\n\n${dependabotYaml.split('\n').slice(2).join('\n')}`,
-    );
-  }
-
-  const dependabot =
-    !hasDependabot &&
-    (yield* decide(
-      consent,
-      ask,
-      `Also add ${dependabotPath} so Dependabot proposes updates to the pinned commit?`,
-    )) === 'yes';
+  const yaml = workflowYaml({
+    project: options.project,
+    sha,
+    version: options.version,
+  });
   const opened = yield* Effect.gen(function* () {
     const config = yield* fs
       .readFileString(
@@ -776,6 +843,7 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
 
     return yield* openSetupPullRequest({
       shell,
+      gh: options.gh,
       gitRoot: options.gitRoot,
       repository: options.repository,
       files: [
@@ -784,21 +852,34 @@ export const workflowStep = Effect.fnUntraced(function* (options: {
           contents: config,
         },
         { path: workflowPath, contents: yaml },
-        ...(dependabot
+        ...(dependabot === 'added'
           ? [{ path: dependabotPath, contents: dependabotYaml }]
           : []),
       ],
-      body: setupPullRequestBody(dependabot),
+      body: setupPullRequestBody({ dependabot }),
       scratch: options.scratch,
     });
   }).pipe(Effect.result);
 
-  return Result.isFailure(opened)
-    ? stopped('failed', opened.failure.message)
-    : ({
+  if (Result.isFailure(opened)) {
+    return stopped('failed', opened.failure.message);
+  }
+
+  return opened.success.kind === 'opened'
+    ? ({
         kind: 'ready',
         step: step('done', `Opened ${opened.success.url}`),
         base: opened.success.base,
+        open: null,
+      } satisfies WorkflowOutcome)
+    : ({
+        kind: 'ready',
+        step: step(
+          'done',
+          `Pushed ${setupBranch}. Select Create pull request on the page that opens, or open https://github.com/${options.repository}/pull/new/${setupBranch}`,
+        ),
+        base: opened.success.base,
+        open: opened.success.url,
       } satisfies WorkflowOutcome);
 });
 
@@ -817,26 +898,26 @@ const rulesSchema = Schema.fromJsonString(
   ),
 );
 
-// GitHub Actions' App ID, so only a workflow job can satisfy the check.
-const actionsIntegration = 15368;
-
-// Creating a ruleset changes repository settings, so it takes its own yes
-// in a terminal; --yes never covers it.
+// Creating a ruleset changes repository settings and needs admin rights, so
+// Observed only checks for one, with gh, and links to the settings page.
 export const requiredCheckStep = Effect.fnUntraced(function* (options: {
   shell: Shell;
-  ask: Ask;
-  say: Say;
-  consent: Consent;
+  gh: boolean;
   repository: string;
   base: string;
   cwd: string;
 }) {
-  const { shell } = options;
-  const rules = yield* shell(
-    ['gh', 'api', `repos/${options.repository}/rules/branches/${options.base}`],
-    { cwd: options.cwd },
-  );
-  const decoded = Schema.decodeUnknownOption(rulesSchema)(rules.stdout);
+  const rules = options.gh
+    ? yield* options.shell(
+        [
+          'gh',
+          'api',
+          `repos/${options.repository}/rules/branches/${options.base}`,
+        ],
+        { cwd: options.cwd },
+      )
+    : null;
+  const decoded = Schema.decodeUnknownOption(rulesSchema)(rules?.stdout ?? '');
   const required =
     Option.isSome(decoded) &&
     decoded.value.some(
@@ -847,79 +928,15 @@ export const requiredCheckStep = Effect.fnUntraced(function* (options: {
         ),
     );
 
-  if (required) {
-    return {
-      id: 'required-check',
-      status: 'done',
-      detail: `A ruleset on ${options.base} already requires Observed.`,
-    } satisfies Step;
-  }
-
-  yield* options.say(
-    `To require the check, open https://github.com/${options.repository}/settings/rules, add a branch ruleset for ${options.base} with "Require status checks to pass", and add Observed. It needs admin rights.`,
-  );
-
-  if (options.consent !== 'ask') {
-    return {
-      id: 'required-check',
-      status: 'skipped',
-      detail: 'Not required yet. The instructions above say how.',
-    } satisfies Step;
-  }
-
-  if (
-    (yield* options.ask(
-      `Create that ruleset now, requiring Observed on ${options.base}?`,
-    )) !== 'yes'
-  ) {
-    return {
-      id: 'required-check',
-      status: 'declined',
-      detail: 'Not required.',
-    } satisfies Step;
-  }
-
-  const created = yield* shell(
-    [
-      'gh',
-      'api',
-      '--method',
-      'POST',
-      `repos/${options.repository}/rulesets`,
-      '--input',
-      '-',
-    ],
-    {
-      cwd: options.cwd,
-      input: JSON.stringify({
-        name: 'Require Observed',
-        target: 'branch',
-        enforcement: 'active',
-        conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
-        rules: [
-          {
-            type: 'required_status_checks',
-            parameters: {
-              strict_required_status_checks_policy: false,
-              required_status_checks: [
-                { context: 'Observed', integration_id: actionsIntegration },
-              ],
-            },
-          },
-        ],
-      }),
-    },
-  );
-
-  return created.code === 0
+  return required
     ? ({
         id: 'required-check',
         status: 'done',
-        detail: `Created the ruleset "Require Observed" on ${options.base}.`,
+        detail: `A ruleset on ${options.base} already requires Observed.`,
       } satisfies Step)
     : ({
         id: 'required-check',
-        status: 'failed',
-        detail: `GitHub refused the ruleset: ${created.stderr.trim()}`,
+        status: 'skipped',
+        detail: `To require the check, add Observed to a branch ruleset for ${options.base}: https://github.com/${options.repository}/settings/rules`,
       } satisfies Step);
 });
