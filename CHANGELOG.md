@@ -4,6 +4,29 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.3 (2026-09-29)
+
+Fourth alpha of 0.2.0, published under the npm dist-tag `alpha`. The action's
+inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
+
+- **A failed setup step says which step failed and why.** The capture records
+  the step's number, command and exit code, and the last lines of its stderr
+  with credentials redacted. It files the failure under the application, not
+  the browser tool. A capture that times out during setup names the step.
+- **One failure is reported once.** A failed capture no longer adds "Required
+  artifact is missing" and "Capture conditions unavailable" lines. When base
+  and candidate fail with the same error, the comparison says so in one
+  reason, and conclusions read "Both captures failed" or "Every capture
+  failed". The verdict stays unavailable.
+- **The report leads with the capture failure.** A Capture section quotes each
+  distinct failure, links `transcript.jsonl` and `failure.txt`, and lists the
+  evidence no capture recorded, in place of empty evidence sections. Repeated
+  reasons are grouped by journey and side, and section counts no longer
+  overflow the section index.
+- **Shorter PR comments on failed captures.** A failure shared by every
+  capture is one line, the checks are listed once by verdict, and the check
+  and Slack headline read "Unavailable: Every capture failed".
+
 ## 0.2.0-alpha.2 (2026-09-28)
 
 Third alpha of 0.2.0, published under the npm dist-tag `alpha`. The action's
