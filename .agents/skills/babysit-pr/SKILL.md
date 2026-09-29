@@ -131,7 +131,7 @@ and restart it at `.0` when the stage changes. Never go back a stage. `0.1.0`
 went stable without passing through these stages and is the only release that
 breaks the pattern; do not repeat it.
 
-To release, follow the README's release section:
+To release, follow [Releasing Observed](../../../docs/GITHUB.md#releasing-observed):
 
 1. Open `chore(release): prepare <version>` with the `package.json` version and
    a `CHANGELOG.md` entry in the existing style: what changed for people using
@@ -139,7 +139,7 @@ To release, follow the README's release section:
    this workflow.
 2. Tag the merge commit on `main` as `v<version>`, push the tag, and watch the
    Release workflow. Confirm the npm version and dist-tag and the GitHub release.
-3. Open a PR that pins the `self-observe` job and the README's workflow examples
-   to the release commit.
+3. Open a PR that pins the `self-observe` job and the workflow examples in the
+   README and docs/GITHUB.md to the release commit.
 
 Report the decision either way, with the reason and any PR you are waiting for.

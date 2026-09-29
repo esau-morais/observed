@@ -44,13 +44,21 @@ browser adapter. Application routes, data, frameworks, and build tools belong to
 project configuration and test applications. Keep fixture-specific assertions in
 integration tests using the public runner.
 
+Read `observed.json` from the base revision as well as the candidate. Capture
+both sides with the candidate's journeys so the captures stay comparable, and
+record every difference between the two files in the result. Judge a check
+that exists on the base by the base's definition. The rules are in
+[PRODUCT.md](PRODUCT.md#change-scope). Today one `observed.json`, read from
+the candidate checkout, drives both sides, so an expectation altered by the
+change applies to the base without a trace.
+
 ## Evidence contract
 
 Start with versioned JSON and ordinary artifact files. Preserve raw output; normalize only what the report needs.
 
 | Record | Required information |
 | --- | --- |
-| Change | Repository, base, candidate commit or snapshot, changed files, supplied intent |
+| Change | Repository, base, candidate commit or snapshot, changed files with their relation to evidence, recipe differences, supplied intent |
 | Recipe | Stable ID, version or hash, setup, journey, fixtures, expectations, cleanup |
 | Run | ID, revision, recipe hash, producer versions, Observed version and source commit, environment, timestamps, completion |
 | Evidence | Run and step IDs, kind, producer, value or artifact reference, hash, conditions |
@@ -60,6 +68,60 @@ Start with versioned JSON and ordinary artifact files. Preserve raw output; norm
 Use explicit links and adapter extension payloads. No graph database or universal ontology is needed. Add SQLite when queryable history, queues, or deduplication justify it. Preserve portable export.
 
 Hashes detect changed artifacts; they do not establish collector honesty. A stack trace can associate a source location with an error. Temporal proximity cannot prove that a changed line caused a slowdown. Expose missing mappings and inferred relationships.
+
+### Change scope
+
+The comparator writes the change scope to `result.json` with the result.
+Delivery adapters and the viewer render it; they never compute or adjust it.
+
+1. Changed files come from the two source snapshots, which already hash every
+   captured file. Files that Git reports as changed outside `source.paths` are
+   listed as outside the captured source. Without a base snapshot the scope is
+   unavailable, with the reason.
+2. A file's relation comes only from recorded evidence: execution coverage,
+   an anchor's basis, or a collector record. The strongest recorded relation
+   wins. No record means "not observed".
+3. Recipe differences come from comparing the base and candidate
+   `observed.json` by journey name and check ID.
+
+The relations, their wording, and the rules for altered checks are in
+[PRODUCT.md](PRODUCT.md#change-scope).
+
+Coverage collectors supply the "exercised" relation. Each was probed on
+2026-09-29, and none is built yet.
+
+| Runtime | How | Probe result |
+| --- | --- | --- |
+| Browser | agent-browser 0.38.1 has no coverage command. It prints the browser's DevTools address (`get cdp-url`), and a second DevTools client takes [precise coverage](https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#method-startPreciseCoverage) on the page | On the bundled React example, coverage mapped through the source map to `App.tsx`, `base.ts` and `items.ts`. The click handler ran once and the error handler did not run. The HAR and the React render record were identical with and without the second client |
+| Node server | The same protocol through `--inspect` | The called function showed one call. `NODE_V8_COVERAGE` wrote nothing when the process was stopped with SIGTERM, so it does not fit a server Observed stops |
+| Bun server | Bun's inspector has no `Profiler` domain. `Runtime.enableControlFlowProfiler` and `Runtime.getBasicBlocks` report executed blocks | The handler's block was unexecuted before the request and executed after it. Offsets are in Bun's transpiled output, and mapping them to source lines is untested |
+| Other runtimes | A collector per runtime | Not probed. Their files stay "not observed", with that reason |
+
+- Start coverage before the journey's first navigation, or before the server
+  loads its code, so code that runs during load counts.
+- Attach to the page target by its address. The first page target can be the
+  browser's own new-tab page.
+- Map ranges to source lines through source maps, then intersect them with the
+  changed lines. Today the capture fetches maps only for scripts that an error
+  frame or a React component names.
+- Run coverage in the separate browser session, never in the one that takes
+  timing samples, because instrumentation changes timing.
+- Server coverage changes how the app starts. It applies only when the
+  project's `start` runs Node or Bun, and the run records that it did.
+
+### Generated journeys
+
+An agent supplies generated journeys for one run in a file of their own.
+Observed validates them with the journey schema, runs them after the saved
+journeys, and records them in the result with their origin. They carry only
+baseline checks. They cannot add a check with a written expectation, change a
+saved journey, or write to `observed.json`.
+
+Locally the person's agent drives the loop by following `observed skill`: run,
+read the scope, write journeys for what is not observed, run again, and stop
+at the budget. In CI the same loop needs a configured agent command, which
+belongs to [Phase 4](ROADMAP.md#status). Observed treats the file as data. A
+journey cannot supply a command.
 
 ### Source anchors
 
@@ -84,7 +146,7 @@ Resolve anchors in this order:
 
 ## Reuse and adapters
 
-Use a thin [agent-browser adapter](https://github.com/vercel-labs/agent-browser) first. Reuse existing Playwright journeys through artifact import; add a dedicated importer only with repeated demand. Keep [native trace viewing](https://playwright.dev/docs/trace-viewer).
+Use a thin [agent-browser adapter](https://github.com/vercel-labs/agent-browser) first. Existing Playwright tests run or import as imported checks, each labeled "Imported from Playwright". Keep [native trace viewing](https://playwright.dev/docs/trace-viewer).
 
 Evaluate [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp), [agent-react-devtools](https://github.com/callstackincubator/agent-react-devtools), and [React Doctor](https://github.com/millionco/react-doctor) for gaps demonstrated by real failures. Inspect pinned releases, compatibility, telemetry, and required data access before adoption. Do not run competing collectors merely to support more tools.
 
@@ -106,7 +168,43 @@ Project development skills live in .agents/skills with the Claude symlink. Produ
 
 A configured agent command can handle model choice and authentication. Add direct provider support only for an operation that needs it. Jev is an optional routing experiment, never the authority for measurements, permission, or a passing verdict. See [experiment gates](ROADMAP.md#optional-experiments).
 
+## Verifying Observed
+
+Observed's own pull requests run two observations. One captures the Request lab
+example with the pull request's build of Observed: one journey and one
+`request-count` check. The other uses the previous release to capture the
+report viewer on three journeys with six checks, rendered from one stored
+fixture. Neither exercises most comparator branches, the collectors for other
+evidence kinds, or delivery. Observed records a green self-observation. It never decides whether
+Observed is correct.
+
+Independent verification uses expectations that the code under test cannot
+change:
+
+- A gate corpus of base and candidate pairs with known outcomes, kept in
+  separate trial repositories. Write each expected outcome before the run.
+- A checker that compares `result.json` with the expected outcome and with the
+  raw producer output, such as the HAR. It imports nothing from the comparator.
+- Faults seeded into disposable copies of Observed, such as a missing capture
+  that counts as a pass. The unit tests and the gate corpus must fail on each.
+- Property-based tests of pure verdict logic with fast-check. State each
+  property without importing the constant it protects. A property that read
+  the precedence order from the code passed against a fault in that order.
+- For a small finite model of verdict logic, a proven model and a conformance
+  run. The model states the law and its proof; the conformance run executes
+  the model and the real function on the same inputs and lists every
+  disagreement. Seed a fault into the conformance script too. Its
+  first run reported 23 false disagreements from a wrong value encoding.
+
+[ROADMAP.md](ROADMAP.md#mvp-release-gates) lists the gates.
+
 ## Bounded repair, later
+
+Repair stays out of the first release. A repair loop drives a candidate toward
+passing checks, so it is only as sound as those checks. It starts once MVP
+gates 1 to 8 hold and does not wait for the pilot. Until then the evidence
+handoff prompt is the only repair aid. The same limits apply to recipe
+proposals. An agent that proposes a journey cannot also accept it.
 
 ```mermaid
 flowchart TD
@@ -126,4 +224,6 @@ Protect the comparator, expectations, baselines, and evidence writer from silent
 
 Rerun selected checks plus a small required smoke set. Widen for shared configuration, dependencies, schemas, or uncertain impact. Periodic full runs estimate what selection misses. Gate merge eligibility through repository policy, not report wording.
 
-A formal result must include its statement, assumptions, toolchain, dependencies, and implementation connection. Reject incomplete proofs and unexpected assumptions. Keep model proof and runtime evidence separate; neither substitutes for the other.
+A formal result must include its statement, assumptions, toolchain, dependencies, and implementation connection. Reject incomplete proofs and unexpected assumptions. Keep model proof and runtime evidence separate; neither substitutes for the other. The implementation connection is its own executed evidence, such as a conformance run of the code against the model's cases. Without it the result reads "model checked, implementation link open" and the overall verdict is unknown.
+
+Checker defaults differ, so a gate names what it rejects. Lean 4.34.1 exits 0 on a proof that uses `sorry` and only warns; the gate must read `#print axioms` and reject `sorryAx`. Bend 2.0.34 exits 1 on an open or missing proof. Its `--verdict` recheck needs Lean 4.34.0 installed, and `@unsafe` and foreign code fall outside it.
