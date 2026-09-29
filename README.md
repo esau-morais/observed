@@ -650,7 +650,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
+      - uses: esau-morais/observed@8b26814fe0bf890621400c752846357e6e9ec018 # v0.2.0-alpha.3
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
@@ -666,7 +666,7 @@ The action uses the workflow's own token by default, through its `github-token`
 input. It needs no GitHub App, secret or variable. The `concurrency` block
 cancels an older run, so it can't overwrite the comment with a stale result.
 
-- The full commit SHA pins the action to the `v0.2.0-alpha.1` prerelease; the
+- The full commit SHA pins the action to the `v0.2.0-alpha.3` prerelease; the
   comment names the tag. The action installs `@observed-software/cli` with the
   same version. To upgrade, use the commit of a newer
   [release](https://github.com/esau-morais/observed/releases) tag, or let
@@ -699,7 +699,7 @@ step before Observed's, with the version your project uses:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
+      - uses: esau-morais/observed@8b26814fe0bf890621400c752846357e6e9ec018 # v0.2.0-alpha.3
 ```
 
 Pin those actions by full commit SHA, as here.
@@ -748,7 +748,7 @@ A journey that signs in reads its secret from an environment variable, as in
 `{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
 
 ```yaml
-      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
+      - uses: esau-morais/observed@8b26814fe0bf890621400c752846357e6e9ec018 # v0.2.0-alpha.3
         env:
           LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
         with:
@@ -818,7 +818,7 @@ webhook: the job creates a short-lived token after capture finishes.
    `permissions:` for the check title:
 
 ```yaml
-      - uses: esau-morais/observed@5d5f5d5748776415104951226aadf2a4c8c275fd # v0.2.0-alpha.1
+      - uses: esau-morais/observed@8b26814fe0bf890621400c752846357e6e9ec018 # v0.2.0-alpha.3
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}
