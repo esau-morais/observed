@@ -17,7 +17,8 @@ severity.
 
 The person's own coding agent prepares the configuration, runs captures, and
 covers what a change touched. The person opens the result and decides only
-what is uncertain, risky, or needs permission.
+what is uncertain, risky, or needs permission. Test whether this saves people
+work before adding more features.
 
 ## First release
 
@@ -36,6 +37,7 @@ applications first, React or not.
 
 Viewing reports and evaluating checks need no model and no account. The
 project is open source, local by default, and suitable for self-hosting.
+Optional model integrations must not become a cloud dependency.
 Connecting another application requires no edits to Observed.
 
 ## Evidence views
@@ -84,6 +86,9 @@ Keep these dimensions separate:
 
 ## Change scope
 
+Planned for Phase 3a. Not built. Today a result covers its named checks and
+says nothing about the files a change touched.
+
 A saved journey checks the behavior it exercises. It does not check the
 change. Every comparison lists each file that differs between base and
 candidate with one relation:
@@ -99,12 +104,14 @@ Each relation records its basis, such as execution coverage, a stack frame, a
 component source, or a test location. Label a name match as a match. With no
 basis the relation is "not observed", never a guess. Coverage counts changed
 lines that ran and changed lines that did not, so a journey can exercise part
-of a file.
+of a file. A file that no collector can execute, such as a stylesheet, a type
+declaration, or code for a server runtime without a collector, is "not
+observed" with that reason, and the agent spends no budget on it.
 
 ### Generated journeys
 
-Files that are not observed are work for the agent before they are a report
-for the person.
+The agent writes journeys for files that are not observed. The report lists
+what is still not observed afterwards.
 
 1. The agent reads the scope and writes journeys aimed at the files that are
    not observed.
@@ -112,9 +119,14 @@ for the person.
    shows whether they reached the changed lines.
 3. Generated journeys carry baseline checks, which need no written
    expectation: no new browser errors, no new serious accessibility
-   violations, and no new server errors. Other differences are observations.
+   violations, and no new server errors. A new server error is a response of
+   500 or above that the base did not give for the same request. Other
+   differences are observations, so a fault that returns wrong data without
+   an error is listed as a difference and sets no verdict.
 4. A generated journey that reached changed code is proposed for saving, so
-   the next change starts with it.
+   the next change starts with it. A project that already has three saved
+   journeys gets the proposal as a replacement for one of them. Observed never
+   drops a saved journey itself.
 
 Generated journeys are labeled as generated, live outside `observed.json`, and
 never replace or alter a saved check. A run has a budget for them. What stays
@@ -136,6 +148,7 @@ the protected one.
 | Check removed | By the base's definition, when the evidence it needs was still captured. Otherwise unknown |
 | Check added | On the candidate, labeled "added by this change", with no baseline |
 | Journey steps altered | Every check in that journey is unknown, with both versions of the steps shown |
+| Imported test whose file changed | By the candidate's file, labeled as changed by this change. A failure is not called a regression, and a pass carries the label |
 
 A relaxed expectation cannot turn a fault into a pass. An intended contract
 change fails or stays unknown on the pull request that makes it, and resolves
@@ -184,11 +197,15 @@ output appears only where a finding has a source location.
   every pull request, forks and Dependabot included.
 - Every run states what it posted and what it skipped, with the reason. A
   skipped delivery never changes the verdict.
-- The PR line reads "N issues found · N checks passed · N unresolved",
-  counting failed, passed, and unknown named checks, then the change scope,
-  such as "2 of 7 changed files not observed". It names the head commit. It
-  leaves out "automatically fixed" until repair exists, and it never says
-  "behaviors verified".
+- The PR line names the head commit and leaves out "automatically fixed"
+  until repair exists. Today it reads "N issues found · N behaviors verified ·
+  N unresolved". The target is "N issues found · N checks passed · N
+  unresolved", counting failed, passed, and unknown named checks, then the
+  change scope, such as "2 of 7 changed files not observed".
+- Generated journeys run locally in the first release. A run in CI lists the
+  files that are not observed and adds them to the agent prompt.
+- Reuse established permissions for routine work. Ask when intent,
+  credentials, risk, or an unapproved action prevents progress.
 - Update an existing result instead of adding a message for every retry.
 
 Planned posting modes, set by the `comment` input:
@@ -200,9 +217,9 @@ Planned posting modes, set by the `comment` input:
 | `mention` | Run only when a PR comment starts with `/observed`. A slash command, because an @handle can notify a real user |
 
 Each result includes a deterministic prompt for the user's own agent: the
-values, commit SHAs, source locations, artifact paths, the files not
-observed, and the reminder that a changed value is not a regression by
-itself. Observed writes no model-generated fix. A suggestion block appears
+values, commit SHAs, source locations, artifact paths, and the reminder that a
+changed value is not a regression by itself. The files not observed join it
+with the change scope. Observed writes no model-generated fix. A suggestion block appears
 only for a mechanical fix.
 
 Mobile access needs an accessible report copy. Remote actions need a
@@ -219,11 +236,11 @@ visual changes remain observations. A requested baseline that cannot be
 captured remains unavailable.
 
 The first release that drops the alpha label must pass the
-[MVP release gates](ROADMAP.md#mvp-release-gates). Until a later phase these
-stay unsupported, and the README says so: automatic repair, generated
-journeys in CI, formal proof adapters, model routing, coverage for server
-runtimes other than Node and Bun, remote rerun actions, and database, job,
-and trace evidence.
+[MVP release gates](ROADMAP.md#mvp-release-gates). Until a later phase these stay unsupported, and the README lists them:
+automatic repair, generated journeys in CI, formal proof adapters, model
+routing, coverage for server runtimes other than Node and Bun, remote rerun
+actions, and database, job, and trace evidence. Bun coverage depends on
+mapping its offsets to source lines, which is untested.
 
 Also deferred: a new agent runtime, a mandatory daemon, a universal graph, a
 plugin marketplace, generic production observability, automatic merging,
@@ -231,8 +248,8 @@ billing, Kubernetes, and broad framework support.
 
 ## Background
 
-The maintainer supplied eight of the ten posts that motivated the project on
-2026-09-29. They show formal models written from code and turned into bug-fix
+The maintainer supplied eight screenshots of the posts that motivated the
+project. They show formal models written from code and turned into bug-fix
 pull requests, screenshots made for every pushed feature, parallel
 adversarial browser testing with a small fast model, live React tree and
 data-flow diagrams, and a before-and-after skill for pull requests. Their PR

@@ -71,30 +71,42 @@ Hashes detect changed artifacts; they do not establish collector honesty. A stac
 
 ### Change scope
 
+Planned for Phase 3a. Not built.
+
 The comparator writes the change scope to `result.json` with the result.
-Delivery adapters and the viewer render it; they never compute or adjust it.
+Delivery adapters and the viewer render it and never compute or adjust it.
 
 1. Changed files come from the two source snapshots, which already hash every
    captured file. Files that Git reports as changed outside `source.paths` are
    listed as outside the captured source. Without a base snapshot the scope is
    unavailable, with the reason.
-2. A file's relation comes only from recorded evidence: execution coverage,
-   an anchor's basis, or a collector record. The strongest recorded relation
-   wins. No record means "not observed".
+2. A file's relation comes only from recorded evidence. No record means "not
+   observed". A file that no collector can execute, such as a stylesheet or a
+   type declaration, is "not observed" with that reason.
 3. Recipe differences come from comparing the base and candidate
    `observed.json` by journey name and check ID.
 
-The relations, their wording, and the rules for altered checks are in
+Relations, strongest first:
+
+| Evidence on a changed file | Relation |
+| --- | --- |
+| An anchor from a stack frame, component source, or test location, on a finding that lists a check | Checked |
+| Coverage shows a changed line ran | Exercised |
+| An anchor on a finding that lists no check | Exercised |
+| A name match against the diff | Exercised at most, labeled as a match |
+| None | Not observed |
+
+The wording and the rules for altered checks are in
 [PRODUCT.md](PRODUCT.md#change-scope).
 
-Coverage collectors supply the "exercised" relation. Each was probed on
-2026-09-29, and none is built yet.
+Coverage collectors supply the "exercised" relation. None is built. Probes on
+2026-09-29 showed that each source below returns execution counts.
 
-| Runtime | How | Probe result |
+| Runtime | How | Known limit |
 | --- | --- | --- |
-| Browser | agent-browser 0.38.1 has no coverage command. It prints the browser's DevTools address (`get cdp-url`), and a second DevTools client takes [precise coverage](https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#method-startPreciseCoverage) on the page | On the bundled React example, coverage mapped through the source map to `App.tsx`, `base.ts` and `items.ts`. The click handler ran once and the error handler did not run. The HAR and the React render record were identical with and without the second client |
-| Node server | The same protocol through `--inspect` | The called function showed one call. `NODE_V8_COVERAGE` wrote nothing when the process was stopped with SIGTERM, so it does not fit a server Observed stops |
-| Bun server | Bun's inspector has no `Profiler` domain. `Runtime.enableControlFlowProfiler` and `Runtime.getBasicBlocks` report executed blocks | The handler's block was unexecuted before the request and executed after it. Offsets are in Bun's transpiled output, and mapping them to source lines is untested |
+| Browser | agent-browser 0.38.1 has no coverage command. It prints the browser's DevTools address (`get cdp-url`), and a second DevTools client takes [precise coverage](https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#method-startPreciseCoverage) on the page | On the bundled React example, ranges resolved through the source map to the original files. One run with the second client and one without recorded the same 7 HAR entries and 2 React renders |
+| Node server | The same protocol through `--inspect` | Probed on a small JavaScript server. TypeScript and source maps are untested. `NODE_V8_COVERAGE` wrote nothing when the process was stopped with SIGTERM |
+| Bun server | Bun's inspector has no `Profiler` domain. `Runtime.enableControlFlowProfiler` and `Runtime.getBasicBlocks` report executed blocks when the server starts with `--inspect-wait` | Offsets are in Bun's transpiled output. Mapping them to source lines is untested, and Bun stays in scope only if it works |
 | Other runtimes | A collector per runtime | Not probed. Their files stay "not observed", with that reason |
 
 - Start coverage before the journey's first navigation, or before the server
@@ -111,17 +123,20 @@ Coverage collectors supply the "exercised" relation. Each was probed on
 
 ### Generated journeys
 
+Planned for Phase 3a. Not built.
+
 An agent supplies generated journeys for one run in a file of their own.
 Observed validates them with the journey schema, runs them after the saved
 journeys, and records them in the result with their origin. They carry only
 baseline checks. They cannot add a check with a written expectation, change a
 saved journey, or write to `observed.json`.
 
-Locally the person's agent drives the loop by following `observed skill`: run,
-read the scope, write journeys for what is not observed, run again, and stop
-at the budget. In CI the same loop needs a configured agent command, which
-belongs to [Phase 4](ROADMAP.md#status). Observed treats the file as data. A
-journey cannot supply a command.
+Locally the person's agent drives the loop from the guide that
+`observed skill` prints, once the guide describes it: run, read the scope,
+write journeys for what is not observed, run again, and stop at the budget. In
+CI the same loop needs a configured agent command, which belongs to
+[Phase 4](ROADMAP.md#status). Observed treats the file as data. A journey
+cannot supply a command.
 
 ### Source anchors
 
@@ -156,9 +171,9 @@ GitHub and Slack adapters consume one normalized result. Bind remote actions to 
 
 On GitHub, delivery uses the job's own token, scoped by the workflow's `permissions:` and valid only while the job runs. Capture needs no write token, and the capture step's environment gets no GitHub token. Delivery writes only the job's own check run and one comment. An optional user App token is minted after capture and only signs the comment, since only the App that created a check run can update it. Exchanging an Actions OIDC token for an App token needs a hosted service, so any such exchange stays outside core and optional.
 
-On GitHub, every anchored finding becomes a check-run annotation. A review comment is reserved for a regression or new error anchored by a stack frame, component source, or test location; a name match never gets one. Post one review per run, find earlier comments through a hidden finding ID, and reply and resolve the thread when its finding clears instead of posting again.
+Line delivery is planned and not built. On GitHub, every anchored finding becomes a check-run annotation. A review comment is reserved for a regression or new error anchored by a stack frame, component source, or test location; a name match never gets one. Post one review per run, find earlier comments through a hidden finding ID, and reply and resolve the thread when its finding clears instead of posting again.
 
-The `/observed` trigger runs only for a comment from a user with write access on a pull request from the same repository. Untrusted pull request code must never run where the GitHub App key or Slack token can be read. If one workflow cannot guarantee that, split it: an unprivileged capture uploads the result, and a privileged delivery started by `workflow_run` reads only that upload. Never use `pull_request_target`. If neither design is safe, fall back to a label trigger on `pull_request`.
+The planned `/observed` trigger runs only for a comment from a user with write access on a pull request from the same repository. Untrusted pull request code must never run where the GitHub App key or Slack token can be read. If one workflow cannot guarantee that, split it: an unprivileged capture uploads the result, and a privileged delivery started by `workflow_run` reads only that upload. Never use `pull_request_target`. If neither design is safe, fall back to a label trigger on `pull_request`.
 
 ## Code, skills, and AI
 
@@ -166,7 +181,7 @@ Use code for arithmetic, assertions, hashing, permissions, process ownership, ti
 
 Project development skills live in .agents/skills with the Claude symlink. Product users do not need this collection. Keep saved checks executable without an assistant. Offer one optional, versioned Observed skill for an existing assistant when setup needs it. Do not silently alter user instructions or build another assistant runtime.
 
-A configured agent command can handle model choice and authentication. Add direct provider support only for an operation that needs it. Jev is an optional routing experiment, never the authority for measurements, permission, or a passing verdict. See [experiment gates](ROADMAP.md#optional-experiments).
+A configured agent command can handle model choice and authentication. Add direct provider support only for an operation that needs it. Jev is an optional experiment, never the authority for measurements, permission, or a passing verdict. See [experiment gates](ROADMAP.md#optional-experiments).
 
 ## Verifying Observed
 
@@ -174,9 +189,14 @@ Observed's own pull requests run two observations. One captures the Request lab
 example with the pull request's build of Observed: one journey and one
 `request-count` check. The other uses the previous release to capture the
 report viewer on three journeys with six checks, rendered from one stored
-fixture. Neither exercises most comparator branches, the collectors for other
-evidence kinds, or delivery. Observed records a green self-observation. It never decides whether
-Observed is correct.
+fixture. [tests/fixtures/self-observe](../tests/fixtures/self-observe) explains
+how to regenerate it. That job pins the previous release by commit SHA and
+never `./`, so the pull request's code is only ever the observed side. After
+each release, bump the pin.
+
+Neither job exercises most comparator branches, the collectors for other
+evidence kinds, or delivery. Observed records a green self-observation. It
+never decides whether Observed is correct.
 
 Independent verification uses expectations that the code under test cannot
 change:
@@ -187,14 +207,14 @@ change:
   raw producer output, such as the HAR. It imports nothing from the comparator.
 - Faults seeded into disposable copies of Observed, such as a missing capture
   that counts as a pass. The unit tests and the gate corpus must fail on each.
-- Property-based tests of pure verdict logic with fast-check. State each
-  property without importing the constant it protects. A property that read
-  the precedence order from the code passed against a fault in that order.
-- For a small finite model of verdict logic, a proven model and a conformance
-  run. The model states the law and its proof; the conformance run executes
-  the model and the real function on the same inputs and lists every
-  disagreement. Seed a fault into the conformance script too. Its
-  first run reported 23 false disagreements from a wrong value encoding.
+- Property-based tests of pure verdict logic, with fast-check once it is
+  added. State each property without importing the constant it protects. A
+  property that reads the precedence order from the code passes against a
+  fault in that order.
+- Optional, outside CI: for a small finite model of verdict logic, a proven
+  model and a conformance run. The conformance run executes the model and the
+  real function on the same inputs and lists every disagreement. Seed a fault
+  into the conformance script too, because the script can be wrong.
 
 [ROADMAP.md](ROADMAP.md#mvp-release-gates) lists the gates.
 

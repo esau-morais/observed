@@ -16,11 +16,14 @@ Details of the GitHub Action. The
 | `github-token` | `${{ github.token }}` | Token that titles the check and posts the comment |
 | `github-app-client-id`, `github-app-private-key` | empty | Sign the comment with your own GitHub App |
 | `slack-bot-token`, `slack-channel`, `slack-images` | empty, empty, `false` | Post failures to Slack |
+| `job-outcome` | empty | Deprecated. It has no effect and prints a warning |
 
 `fetch-depth: 0` in the checkout step fetches the history that contains
 `base`. The `concurrency` block cancels an older run, so it can't overwrite
 the comment with a stale result. On Linux the action installs packages with
-passwordless `sudo`, which GitHub-hosted runners provide.
+passwordless `sudo`, which GitHub-hosted runners provide. Each journey is its
+own capture of each revision, so raise `timeout-minutes` when you add
+journeys.
 
 ## Permissions
 
@@ -36,8 +39,9 @@ The full commit SHA pins the action to one release, and the comment beside it
 names the tag. The action installs `@observed-software/cli` at the same
 version. To upgrade, use the commit of a newer
 [release](https://github.com/esau-morais/observed/releases) tag, or let
-Dependabot's `github-actions` updates propose it. `@v0` follows the latest
-stable 0.x release. A tag can move, so prefer the SHA.
+Dependabot's `github-actions` updates propose it. `@v0` follows the latest stable 0.x release, currently 0.1.0, which lacks
+inputs such as `github-token` and `slack-images` and posts only through a
+GitHub App. A tag can move, so prefer the SHA.
 
 `uses:` works for any public repository. The GitHub Marketplace listing is
 only for finding the action.
@@ -228,24 +232,3 @@ summary says why.
    `OBSERVED_APP_PRIVATE_KEY` secret and `OBSERVED_APP_CLIENT_ID` variable.
 
 Earlier comments and check titles stay on old pull requests.
-
-## Releasing Observed
-
-Set the new `version` in `package.json`, add a `CHANGELOG.md` entry headed
-`## <version> (<date>)`, merge, and push the tag `v<version>` from a commit on
-`main`. [release.yml](../.github/workflows/release.yml) then:
-
-1. Installs the packed CLI on Linux x64 and on macOS with Intel and Apple
-   silicon, and runs the Request lab example through it.
-2. Publishes that tarball to npm with provenance, through
-   [trusted publishing](https://docs.npmjs.com/trusted-publishers/). npm
-   accepts the package only from that workflow and refuses tokens.
-3. Creates the GitHub release and, for a stable release, moves the major tag,
-   such as `v0`. A prerelease goes out under the dist-tag named after its
-   identifier, such as `alpha`.
-
-After each release, bump the `self-observe` pin in
-[observe.yml](../.github/workflows/observe.yml) and the workflow examples in
-the README and this file to the release commit. To check a published version
-on the same runners, run the workflow by hand with `published` set to the
-version.

@@ -131,7 +131,20 @@ and restart it at `.0` when the stage changes. Never go back a stage. `0.1.0`
 went stable without passing through these stages and is the only release that
 breaks the pattern; do not repeat it.
 
-To release, follow [Releasing Observed](../../../docs/GITHUB.md#releasing-observed):
+No release leaves the alpha stage until the
+[MVP release gates](../../../docs/ROADMAP.md#mvp-release-gates) hold.
+
+The tagged commit must be on `main`.
+[release.yml](../../../.github/workflows/release.yml) installs the packed CLI
+on Linux x64 and on macOS with Intel and Apple silicon, runs the Request lab
+example through it, and publishes that tarball to npm with provenance through
+[trusted publishing](https://docs.npmjs.com/trusted-publishers/). npm accepts
+the package only from that workflow and refuses tokens. A prerelease goes out
+under the dist-tag named after its identifier, such as `alpha`. To check a
+published version on the same runners, run the workflow by hand with
+`published` set to the version.
+
+To release:
 
 1. Open `chore(release): prepare <version>` with the `package.json` version and
    a `CHANGELOG.md` entry in the existing style: what changed for people using

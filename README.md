@@ -15,7 +15,8 @@ whole change or the whole app is correct.
 ## Install
 
 Observed needs [Bun](https://bun.sh/docs/installation) 1.4.2 or later, on Linux
-x64 or macOS. Windows and Linux arm64 are not supported.
+x64 or macOS, Intel or Apple silicon. Windows and Linux arm64 are not
+supported, because Chrome for Testing publishes no Linux arm64 build.
 
 ```bash
 bun add --global @observed-software/cli
@@ -26,7 +27,9 @@ observed setup
   In a container or another Linux machine without desktop libraries, run
   `observed setup --with-deps`, which also installs packages with `sudo apt`.
 - Bun reports one blocked postinstall, from agent-browser. Leave it blocked.
-- For the current alpha, install `@observed-software/cli@alpha`.
+- This README describes the current alpha. Install it with
+  `@observed-software/cli@alpha`. A plain install gets 0.1.0, which has no
+  guided setup, no `observed skill`, and fewer checks.
 - To run a pinned version without installing it, start each command with
   `bunx @observed-software/cli@<version>`.
 
@@ -45,7 +48,9 @@ missing, then previews the app:
    `observed.json`, the workflow and, if the default branch has none,
    `.github/dependabot.yml` to an `observed/setup` branch in a separate
    worktree, and pushes with your Git credentials. Your checkout stays as it
-   is. A no is remembered in `.observed/setup.json`.
+   is. With `gh` signed in, `gh` opens the pull request. Without it, Observed
+   opens GitHub's pull request page with the title and description filled in.
+   A no is remembered in `.observed/setup.json`.
 5. Links to the ruleset settings where you can require the **Observed** check.
    Observed never changes them.
 
@@ -72,7 +77,9 @@ Without a terminal, `observed` asks nothing and prints the next step.
 | `observed <command> --help` | List every option |
 
 Pass the app's directory as an argument to run from elsewhere. Without
-`--json`, `observe` opens the viewer and runs until you press Ctrl+C.
+`--json`, `observe` opens the viewer and runs until you press Ctrl+C. The JSON
+output's `directory` is the report, and `observed view <directory>` opens it
+again.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -92,9 +99,7 @@ default.
 ### Write observed.json
 
 The [project schema](src/project.ts) and
-[step and check schema](src/capture/recipe.ts) list every field. The
-[React example](examples/request-lab/observed.json) and the
-[plain browser example](examples/shop/observed.json) are complete files.
+[step and check schema](src/capture/recipe.ts) list every field.
 
 #### Source and commands
 
@@ -160,7 +165,7 @@ a single check. Set one or the other.
 
 | Kind | Passes when |
 | --- | --- |
-| `request-count` | The requests during `steps` that match its method, path and status number `expectedCount`. It counts the app's origin, or the check's `origin`. The path is compared without query string or fragment, so the check's `path` can't contain `?` or `#` |
+| `request-count` | The requests during `steps` that match its method and path number `expectedCount`, and all answered `status`. It counts the app's origin, or the check's `origin`. The path is compared without query string or fragment, so the check's `path` can't contain `?` or `#` |
 | `text` | Exactly one element matches its selector and its text equals `expectedText` |
 | `browser-errors` | No uncaught page error or `console.error` happened during `steps`. Optional `ignore` holds regular expressions matched against the first line of each error |
 | `accessibility` | The candidate has no axe-core violations at or above `impact` that base doesn't have. `impact` is `minor`, `moderate`, `serious` or `critical`, and defaults to `serious`. It needs a base, so it doesn't run in a preview |
@@ -184,9 +189,14 @@ regression.
   maps. Build with `build: { sourcemap: 'hidden' }` in Vite, or your bundler's
   equivalent. Without a map, Observed matches a name only where the diff
   defines it, and otherwise records why it has no line.
+- The conditions that make each check unknown, and the Playwright,
+  performance and API collectors, are described in `docs/CONFIGURATION.md` in
+  the Observed repository.
 
 ### Checks and collectors in detail
 
+The [React example](examples/request-lab/observed.json) and the
+[plain browser example](examples/shop/observed.json) are complete files.
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md) covers what each check counts
 and when it is unknown, the evidence every capture records, Playwright tests,
 browser performance, API operations, secrets, and importing results.
@@ -257,8 +267,13 @@ comments with your own GitHub App, Slack, and turning it off.
 ## The planned complete flow
 
 This is the intended final state. Browser capture, comparison, named checks,
-the report, GitHub and Slack delivery, and test import exist today. Repair,
-recipe proposals, and database, job, trace and formal adapters do not.
+API operations, the report, GitHub and Slack delivery, and test import exist
+today.
+
+Not built yet: relating checks to the files a change touched, protecting
+expectations from the change that edits them, generated journeys, repair,
+requested reruns, model routing, and database, job, trace and formal
+adapters.
 
 ```mermaid
 flowchart TD

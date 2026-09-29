@@ -46,10 +46,20 @@ Errors from the page load and `capture.ready` are listed and not checked.
 `ignore` patterns match the first line of each error only, so a stack frame
 can't hide an error. When comparing, a regression is an error on the candidate
 whose first line the base didn't have, even if the base had other errors.
-Without a usable base, the check still fails on the candidate's errors and
-claims no regression.
+Without a usable base, the check still fails on the candidate's errors. The
+failure is not called a regression.
 
 ### accessibility
+
+```json
+{
+  "kind": "accessibility",
+  "id": "no-new-a11y-violations",
+  "name": "No new accessibility violations",
+  "scope": "Shelf page after one click",
+  "impact": "serious"
+}
+```
 
 agent-browser reports impact per rule, so every element of a rule at that
 impact counts. Violations already on base don't fail the check. Only the same
@@ -357,7 +367,7 @@ from some array elements and present in others isn't listed as removed.
 
 ## Single steps and saved evidence
 
-`capture`, `compare` and `view` run one step each on saved evidence.
+`capture`, `compare` and `view` each run one step.
 `compare none <capture>` exports a preview and uses the same exit codes as
 `observe`. `view` opens a saved bundle as it was evaluated at export, and
 rejects evidence whose bytes changed afterward.
@@ -365,7 +375,7 @@ rejects evidence whose bytes changed afterward.
 From a checkout of this repository, `bun run report <manifest.json>
 <new-report.md>` renders a version 1 evidence bundle. The output parent must
 exist and the output file must be new. Behavior claims stay labeled imported,
-and missing evidence is unknown. Exit success means the report was written.
+and missing evidence is unknown. Exit success means the report was written, not that behavior was verified.
 See the [schema](../src/schema.ts), the
 [example manifest](../tests/fixtures/todomvc/manifest.json) and the
 [TodoMVC provenance](../tests/fixtures/todomvc/README.md).

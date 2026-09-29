@@ -19,7 +19,7 @@ Observed compares software changes using runtime evidence. Its core must work wi
 | Execution | Pinned Bun for application and tooling execution, using `@effect/platform-bun`. Vitest remains the test framework; invoke it through its local binary under Bun |
 | Viewer | React with Vite and the official React plugin |
 | Styling | StyleX, following DESIGN.md and its official Vite integration. No Tailwind or second component styling system |
-| Tests | Vitest for runtime contracts, with fast-check for properties of pure verdict logic. Existing browser journeys and agent-browser for real application checks |
+| Tests | Vitest for runtime contracts. Existing browser journeys and agent-browser for real application checks |
 | Evidence | Versioned JSON manifests and artifact files. Add SQLite when history or queue requirements justify it |
 | Capture | A thin agent-browser adapter first. Keep producer-specific details outside the comparator |
 | Distribution | One npm package, `@observed-software/cli`, holding the bundled CLI, action script, and built viewer. No install scripts; runtime dependencies stay limited to agent-browser. The tag-driven release workflow runs the npm CLI only for `npm publish`, because Bun cannot publish with provenance or trusted publishing. Contributors never install with npm. A standalone `bun build --compile` binary measured 62 to 82 MB per platform before agent-browser and is deferred until a participant cannot install Bun |

@@ -5,14 +5,14 @@ contracts, and this file owns sequence, status and decisions.
 
 ## Status
 
-| Phase | Deliverable | State |
+| Phase | Deliverable and exit condition | State |
 | --- | --- | --- |
-| 0. Validate | Reports from existing artifacts | Built. No developer has used the combined view yet |
-| 1. See a real project | One command previews or compares a running change. Two separate applications, one non-React, use the same runner without core edits | Complete |
-| 2. Repeatable use | Executed recipes, isolated runs, the GitHub Action, export. Failed, missing and stale captures never pass | Complete. An agent set up an unfamiliar app from the README. No person has |
-| 3. Extensions | Several checks and journeys, React renders, browser timing, accessibility, browser errors, API operations, Playwright import | Shipped in #26 to #33, before any pilot |
-| 3a. MVP | Change scope, protected expectations, generated journeys, and the independent gate corpus | Next. Every [MVP release gate](#mvp-release-gates) must hold |
-| 4. Bounded repair | Patch agent driven by the evidence handoff, isolated patches, protected checks, budgets, independent reruns. An agent command in CI for generated journeys | Starts once gates 1 to 8 hold |
+| 0. Validate | Reports from existing artifacts. Developers use the combined view and repeated verification pain is observed | Built. No developer has used the combined view yet |
+| 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, one non-React, use the same runner without core edits. Checks distinguish failed expectations from visual changes, and missing requested captures stay visible | Complete |
+| 2. Repeatable use | Executed recipes, isolated runs, one CI trigger, export. Fresh-checkout runs need no recurring setup help, and stale or failed captures never pass | Complete. An agent set up an unfamiliar app from the README. No person has |
+| 3. Extensions | Several checks and journeys, React renders, browser timing, accessibility, browser errors, API operations, Playwright import. The plan was one extension chosen from pilot demand | Shipped in #26 to #33, before any pilot |
+| 3a. MVP | Change scope, protected expectations, generated journeys, and the independent gate corpus. Every [MVP release gate](#mvp-release-gates) holds | Next |
+| 4. Bounded repair | Patch agent driven by the evidence handoff, isolated patches, protected checks, budgets, independent reruns, and an agent command in CI for generated journeys. Repair stops correctly and improves on handing the evidence to the user's agent | Starts once gates 1 to 8 hold |
 | Later | Database, jobs, traces, more frameworks, proof adapters, each tied to a recurring workflow | Not started |
 
 Phase 3a comes first because Observed runs saved journeys on base and
@@ -37,7 +37,7 @@ producer output, without importing the comparator.
 | --- | --- | --- | --- |
 | 1. Correct change | A change inside a saved journey that keeps its expectation | No regression, exit 0, and the scope lists the changed file as checked or exercised | Verdict holds. No change scope |
 | 2. Seeded fault | One fault per shipped evidence kind, inside a saved journey | Regression, values equal to the raw producer output, exit 2 | Holds for request count in #26's trial. Other kinds need pairs |
-| 3. Change outside saved journeys | A fault in captured source that no saved journey exercises | Without an agent, the scope lists the file as not observed. With one, a generated journey runs the changed lines and a baseline check reports the fault | Fails. The probe read "No regression" |
+| 3. Change outside saved journeys | Two faults in captured source that no saved journey exercises: one that raises an error, one that returns wrong data | Without an agent, the scope lists the file as not observed. With one, a generated journey runs the changed lines. A baseline check reports the error. The wrong data is listed as a difference and sets no verdict | Fails. The probe read "No regression" |
 | 4. Missing evidence | Failed base capture, deleted artifact, stale revision, older schema, unsupported collector | Unavailable or unknown, never a pass, exit 1 | Covered by unit tests. Needs pairs |
 | 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey | The result names each altered check and judges it by the base's expectation, with the proposed version beside it | Fails. The probe read "No regression" |
 | 6. Intentional change | A visual or copy change with passing checks | An observation, not a regression | Holds in tests. Needs a pair |
@@ -50,8 +50,9 @@ The counts in gates 9 and 10 are proposals. Those two gates need people, so an
 agent can prepare them and cannot pass them. Self-observation runs on every
 pull request and decides none of these gates.
 
-Probe results, seed diffs and test scripts are in
-`evidence/mvp-reconciliation-2026-09-29/`, which Git ignores.
+The probes behind the status column are kept in the maintainer's checkout
+under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The gate
+corpus replaces them with pairs anyone can run.
 
 ## Decisions
 
@@ -59,16 +60,17 @@ Probe results, seed diffs and test scripts are in
 | --- | --- | --- |
 | 2026-09-26 | GitHub and Slack delivery come before the pilot, so participants see results where they work | Maintainer |
 | 2026-09-27 | Delivery presents Observed as a proof-check, with source locations and an evidence handoff to the user's own agent | Maintainer |
-| 2026-09-28 | Setup needs no GitHub App. The action posts with the workflow token, the job's check carries the verdict, and bare `observed` opens the person's own agent with `observed skill`. An App setup command, a public App, fork comments through `workflow_run`, and installing the skill wait for pilot demand | Maintainer |
+| 2026-09-28 | Setup needs no GitHub App. The action posts with the workflow token and the job's check carries the verdict. Bare `observed` runs the missing setup steps, offers a setup pull request, and opens the person's own agent with `observed skill`. An App setup command, a public App, fork comments through `workflow_run`, and installing the skill wait for pilot demand | Maintainer |
 | 2026-09-29 | Keep every shipped evidence kind. The pilot removes kinds nobody uses | They are built and tested |
 | 2026-09-29 | The PR line reads "N checks passed", then the change scope | The original line said "affected behaviors". The count never was about the change |
-| 2026-09-29 | Files not observed are work for the agent, through generated journeys, before they are a report for the person | The stated intent is to avoid manual work. A person decides only what is uncertain, risky, or needs permission |
-| 2026-09-29 | Execution coverage is the basis for "exercised": the browser, Node servers and Bun servers | Probes ran on all three. See [ARCHITECTURE.md](ARCHITECTURE.md#change-scope) |
+| 2026-09-29 | The agent writes generated journeys for files that are not observed. The report lists what is still not observed afterwards | The stated intent is to avoid manual work. A person decides only what is uncertain, risky, or needs permission |
+| 2026-09-29 | Line delivery and posting modes, from the 2026-09-27 delivery refresh, follow the MVP gates | A verdict that says nothing about the change matters more than how it is posted |
+| 2026-09-29 | Execution coverage is the basis for "exercised", for the browser and for Node servers. Bun servers stay in scope only if their offsets map to source lines | Probes returned execution counts on all three. See [ARCHITECTURE.md](ARCHITECTURE.md#change-scope) |
 | 2026-09-29 | The base's expectation judges an altered check. The candidate's version is shown as proposed. Merging to base accepts it | Visual baselines work this way in [Chromatic](https://www.chromatic.com/docs/test). Observed has no hosted review step, so the merge is the acceptance |
-| 2026-09-29 | A pull request that alters a check fails or is unavailable on that check. Bypass is repository policy | ARCHITECTURE.md gates merges through repository policy. The pilot counts how often this happens |
+| 2026-09-29 | A pull request that alters a check fails or is unknown on that check. Bypass is repository policy | ARCHITECTURE.md gates merges through repository policy. The pilot counts how often this happens |
 | 2026-09-29 | With no captured change, capture anyway and say the checks describe unchanged behavior | The run still detects drift in the environment or a stale fixture |
-| 2026-09-29 | fast-check 4.10.2 is a dev dependency for properties of pure verdict logic | A property caught the seeded precedence fault that 360 unit tests missed |
-| 2026-09-29 | No proof tool is an MVP requirement or a CI dependency | See [optional experiments](#optional-experiments) |
+| 2026-09-29 | Add fast-check as an exact dev dependency with the first property tests, and name it in AGENTS.md in the same change | In a probe with 4.10.2, a property caught the seeded precedence fault that the unit tests missed |
+| 2026-09-29 | No proof tool is an MVP requirement or a CI dependency. Lean stays the default for a production proof adapter unless evidence favors another tool for a specific case | See [optional experiments](#optional-experiments) |
 | 2026-09-29 | Three developers for gate 10, then the pilot's six to eight | Enough to find wording that misleads before recruiting more |
 | 2026-09-29 | Repair starts when gates 1 to 8 hold, without waiting for the pilot | Repair depends on protected expectations and change scope, not on adoption |
 
@@ -104,22 +106,21 @@ None of these is an MVP requirement, and running one does not make a result
 more reliable. Each stays outside the release path and must beat the simpler
 method on the same cases.
 
-Proof tools, first pass on 2026-09-29. Two invariants, each with a correct
-model and a seeded fault. The first comes from Observed's code and
-says that a run with an unavailable journey never concludes no regression.
-The second is an ordering property. It says that a cancel arriving while a
-capture runs is never followed by completion.
+A first pass on 2026-09-29 tried two invariants, each with a correct model and
+a seeded fault. The first comes from Observed's code and says that a run with
+an unavailable journey never concludes no regression. The second is an
+ordering property. It says that a cancel arriving while a capture runs, with
+no finish before it, is never followed by completion.
 
-| | Lean 4.34 | Bend 2.0.34 | TLA+ with TLC 1.8.0 |
+| | Lean 4 | Bend 2.0.34 | TLA+ with TLC |
 | --- | --- | --- | --- |
-| Install | About 3 GB | 92 MB. `--verdict` also needs Lean 4.34.0 | 4.5 MB jar and Java |
-| Precedence invariant | Proved for any list of journeys, 1.3 s | Proved over presence flags, 0.1 s | Not modeled |
-| Cancellation invariant | Proved for any events before the cancel, 0.2 s | Proved for any events after the cancel, 0.1 s | Checked over 4 states, 0.4 s |
-| Seeded fault | Proof fails | Proof fails, naming the case and both terms | Counterexample trace of 3 states |
+| Precedence invariant | Proved for any list of journeys | Proved over presence flags | Not modeled |
+| Cancellation invariant | Proved for any events before the cancel that are not a finish | Proved only when the cancel comes first | Checked over every reachable state of the model |
+| Seeded fault | Proof fails | Proof fails, naming the case and both terms | Counterexample trace |
 | Open proof | Exit 0 with a warning. `#print axioms` shows `sorryAx` | Exit 1 | Does not apply |
-| Adding a verdict kind | 13 changed lines. Proofs untouched, one bound in the statement changed | 36 changed lines. The law and the proof both changed | Not tried |
-| Tie to TypeScript | None built in | `-o model.mjs` emits the model as JavaScript. It agreed with `summarizeJourneys` on all 47 cases | None built in |
-| Risk | Large install | Released 2026-09-17, and its site says to expect bugs. It asks bend-lang.com for the latest version daily unless `BEND_NO_TELEMETRY=1` is set. Linux and macOS only. `Kind`, `Event` and `State` are taken names | Bounded to the states in the model |
+| Adding a verdict kind | Proofs untouched, one bound in the statement changed | The law and the proof both changed | Not tried |
+| Tie to TypeScript | None built in | Emits the model as JavaScript, which ran against `summarizeJourneys` | None built in |
+| Risk | Large install | New in September 2026, and its site says to expect bugs. `--verdict` needs Lean. It checks bend-lang.com for a new version daily unless `BEND_NO_TELEMETRY=1` is set. Linux, macOS or WSL | Bounded to the states in the model |
 
 | Need | Tool |
 | --- | --- |
@@ -131,16 +132,22 @@ capture runs is never followed by completion.
 The cancellation models describe the property. Nobody has tied them to
 `src/capture/coordinator.ts`, so they say nothing about Observed's code yet.
 A proved model says nothing about an application until a conformance run ties
-it to the code.
+it to the code. The longer experiment still has to compare setup,
+specification effort, and proof maintenance on real changes.
 
-Jev: [Pydantic AI's documentation](https://pydantic.dev/docs/ai/models/typesafe.md)
-describes it as a model that answers typed questions with calibrated
-probabilities. Two uses are worth testing, both as proposal sources. One is
+[Jev](https://pydantic.dev/docs/ai/models/typesafe.md) answers typed questions
+with a probability. Measure its accuracy on Observed's own cases before
+relying on it. Two uses are worth testing, both as proposal sources. One is
 writing generated journeys for changes that are not observed, in parallel
-browser sessions. The other is routing, which needs roughly 150 to 300 labeled
-cases, split by repository or later time, to compare it with rules and the
-existing model on missed required checks, abstentions, latency and cost. Jev
-never decides a measurement, a permission or a verdict.
+browser sessions. The other is routing, which needs roughly 150 to 300
+labeled cases, split by repository or later time and including stale and
+adversarial inputs, to compare it with rules and the existing model on missed
+required checks, abstentions, latency and cost. That comparison is screening,
+not rare-event safety evidence. Jev never decides a measurement, a permission
+or a verdict.
+
+For existing TypeScript invariants, try property-based testing before
+translating code into another language.
 
 Revisit backend priority, a persistent runner, and native React
 instrumentation only when pilot evidence identifies a repeated need.
