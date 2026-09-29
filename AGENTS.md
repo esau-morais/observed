@@ -105,7 +105,7 @@ Edit canonical files in `.agents/skills`. `.claude/skills` points there. Do not 
 
 ## Finish the task
 
-Keep changes scoped and preserve unrelated work. Use implementation branches and focused commits in a connected repository. Apply [babysit-pr](.agents/skills/babysit-pr/SKILL.md) automatically for implementation and workflow changes, including review and feedback handling. Publishing, deploying, merging, messages, and destructive operations require task authorization. Reuse authorization already given.
+Keep changes scoped and preserve unrelated work. Use implementation branches and focused commits in a connected repository. Apply [babysit-pr](.agents/skills/babysit-pr/SKILL.md) automatically for implementation and workflow changes, including review and feedback handling. Publishing, deploying, merging, messages, and destructive operations require task authorization. Reuse authorization already given. Releases are the exception: decide and cut them under [babysit-pr](.agents/skills/babysit-pr/SKILL.md#decide-on-a-release) without waiting to be asked.
 
 Report what changed, checks run, their results, and what remains unverified. Include evidence locations when available. A plan, generated screenshot, or unexecuted test is not completed verification.
 
