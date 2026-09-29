@@ -115,8 +115,21 @@ ask for releases.
 - Wait when an open PR that belongs in the same release is ready or close to it.
   Name that PR, and release once it merges or when it stalls for a day.
 - Skip a release for changes limited to docs, tests, CI, or contributor skills.
-- Bump a prerelease's identifier, such as `0.2.0-alpha.2` to `0.2.0-alpha.3`,
-  until the maintainer decides to leave the prerelease.
+
+Choose the stage from the state of the version's scope, not from how the release
+feels:
+
+| Stage | When |
+| --- | --- |
+| `alpha` | Roadmap items for this version are still landing, or `observed.json`, the evidence format or action inputs may still change |
+| `beta` | The version's roadmap items have merged; only fixes and polish remain, and those contracts change only to fix a defect |
+| `rc` | No known release-blocking defect, and the beta ran on real projects without one |
+| stable | An `rc` went unchanged through real use. Only a stable release moves the major tag, such as `v0`, which every unpinned workflow follows |
+
+Increase the number within a stage, such as `0.2.0-alpha.2` to `0.2.0-alpha.3`,
+and restart it at `.0` when the stage changes. Never go back a stage. `0.1.0`
+went stable without passing through these stages and is the only release that
+breaks the pattern; do not repeat it.
 
 To release, follow the README's release section:
 
