@@ -1,6 +1,7 @@
 import { Cause, DateTime, Effect, Exit, FileSystem, Schema } from 'effect';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { ApplicationFailure, startApplication } from './application';
 import {
   captureBrowser,
@@ -13,7 +14,7 @@ import {
   type Capture,
   type CaptureArtifact,
 } from './model';
-import { processOutput } from './process';
+import { processOutput, type ProcessFailure } from './process';
 import { observedProvenance } from './provenance';
 import { json, sha256 } from '../encoding';
 import { conceal } from '../redact';
@@ -37,6 +38,28 @@ class CaptureFailure extends Schema.TaggedError<CaptureFailure>()(
     cause: Schema.Defect(),
   },
 ) {}
+
+const stderrTailLines = 3;
+const stderrTailLength = 400;
+
+function setupFailure(
+  step: number,
+  total: number,
+  failure: ProcessFailure,
+): string {
+  const lines = stripVTControlCharacters(failure.stderr)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  const tail = lines.slice(-stderrTailLines).join(' · ');
+  const quoted =
+    tail.length > stderrTailLength ? `…${tail.slice(-stderrTailLength)}` : tail;
+  const exited = `Setup step ${step} of ${total} (${failure.command}) exited with code ${failure.exitCode}`;
+
+  return quoted === ''
+    ? `${exited} and printed nothing to stderr; see transcript.jsonl`
+    : `${exited}: ${quoted}`;
+}
 
 export const captureApplication = Effect.fn('captureApplication')(
   function* (options: {
@@ -158,6 +181,7 @@ export const captureApplication = Effect.fn('captureApplication')(
     };
 
     let manifest: Capture | undefined;
+    let setupStep: string | null = null;
     let concealed: readonly string[] = [];
 
     const run = Effect.gen(function* () {
@@ -191,7 +215,10 @@ export const captureApplication = Effect.fn('captureApplication')(
         yield* fs.chmod(destination, file.executable === true ? 0o755 : 0o644);
       }
 
-      for (const [command, ...args] of options.project.setup) {
+      const setup = options.project.setup;
+
+      for (const [index, [command, ...args]] of setup.entries()) {
+        setupStep = `setup step ${index + 1} of ${setup.length} (${command})`;
         yield* processOutput({
           command,
           args,
@@ -204,8 +231,19 @@ export const captureApplication = Effect.fn('captureApplication')(
           },
           transcript: path.join(directory, 'transcript.jsonl'),
           timeoutMs: options.timeoutMs ?? 120_000,
-        });
+          concealed,
+        }).pipe(
+          Effect.catchTag('ProcessFailure', (failure) =>
+            Effect.fail(
+              new ApplicationFailure({
+                message: setupFailure(index + 1, setup.length, failure),
+              }),
+            ),
+          ),
+        );
       }
+
+      setupStep = null;
 
       const url = yield* startApplication({
         workspace,
@@ -268,7 +306,9 @@ export const captureApplication = Effect.fn('captureApplication')(
           return new CaptureFailure({
             category: 'timeout',
             message:
-              'Capture timed out before the saved journey completed; see failure.txt and transcript.jsonl',
+              setupStep === null
+                ? 'Capture timed out before the saved journey completed; see failure.txt and transcript.jsonl'
+                : `Capture timed out during ${setupStep}; see failure.txt and transcript.jsonl`,
             cause,
           });
         }

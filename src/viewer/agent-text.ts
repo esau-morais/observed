@@ -49,9 +49,23 @@ function journeyText(
           { label: 'Base', side: journey.base },
           { label: 'Candidate', side: journey.candidate },
         ];
-  const unresolved = sides.flatMap(({ label, side }) =>
-    side.unresolved.map((reason) => `- ${label}: ${reason}`),
+  const labels = new Map<string, string[]>();
+
+  for (const { label, side } of sides) {
+    for (const reason of side.unresolved) {
+      labels.set(reason, [...(labels.get(reason) ?? []), label]);
+    }
+  }
+
+  const unresolved = [...labels].map(
+    ([reason, named]) => `- ${named.join(' and ')}: ${reason}`,
   );
+  const restated = (text: string) =>
+    [...labels.keys()].some((reason) => text.endsWith(reason));
+  const reasons =
+    journey.comparison.kind === 'unavailable'
+      ? journey.comparison.reasons.filter((reason) => !restated(reason))
+      : [];
   const visual =
     journey.comparison.kind === 'available' &&
     journey.comparison.visual.kind === 'changed'
@@ -71,14 +85,16 @@ function journeyText(
               ? null
               : describeMeasure(check.measure, mode);
 
-          return `- ${verdictLabels[check.verdict]}: ${check.name}.${measure === null || check.detail.includes(measure) ? '' : ` ${measure}.`}${check.detail === conclusion ? '' : ` ${check.detail}`} Scope: ${check.scope}${location === null ? '' : ` Location: ${location.words} ${location.place}.`}`;
+          return `- ${verdictLabels[check.verdict]}: ${check.name}.${measure === null || check.detail.includes(measure) ? '' : ` ${measure}.`}${check.detail === conclusion || labels.has(check.detail) ? '' : ` ${check.detail}`} Scope: ${check.scope}${location === null ? '' : ` Location: ${location.words} ${location.place}.`}`;
         })),
     ...(unresolved.length === 0 ? [] : ['', '### Unresolved', ...unresolved]),
     ...(journey.comparison.kind === 'unavailable'
       ? [
           '',
           '### Comparison unavailable',
-          ...journey.comparison.reasons.map((reason) => `- ${reason}`),
+          ...(reasons.length === 0
+            ? ['- Because of the unresolved evidence above.']
+            : reasons.map((reason) => `- ${reason}`)),
         ]
       : []),
     '',

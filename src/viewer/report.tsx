@@ -211,7 +211,7 @@ const styles = stylex.create({
     display: 'grid',
     gridTemplateColumns: {
       default: '1.25rem minmax(0, 1fr)',
-      [media.desktop]: '1.25rem minmax(0, 1fr) auto',
+      [media.desktop]: '1.25rem minmax(0, 1fr) fit-content(45%)',
     },
     minHeight: geometry.target,
     paddingBlock: { default: 4, [media.desktop]: 0 },
@@ -232,7 +232,9 @@ const styles = stylex.create({
     fontFamily: fonts.mono,
     fontSize: '0.75rem',
     fontVariantNumeric: 'tabular-nums',
-    whiteSpace: 'nowrap',
+    minWidth: 0,
+    overflowWrap: 'anywhere',
+    textAlign: { default: 'start', [media.desktop]: 'end' },
   },
   railSymbol: { fontWeight: 500, textAlign: 'center' },
   hidden: {
@@ -436,7 +438,8 @@ const sectionStatusLabels = {
 } satisfies Record<SectionStatus, string>;
 
 function sectionId(prefix: string, key: SectionKey): string {
-  return key === 'checks' ||
+  return key === 'capture' ||
+    key === 'checks' ||
     key === 'screenshots' ||
     key === 'requests' ||
     key === 'provenance' ||
@@ -827,6 +830,94 @@ function Disclosure({
   );
 }
 
+const failureFiles = ['transcript', 'failure'];
+
+function CaptureFailure({
+  journey,
+  outline,
+  mode,
+}: {
+  journey: Journey;
+  outline: Outline;
+  mode: Comparison['mode'];
+}) {
+  const groups: { labels: string[]; side: Side }[] = [];
+
+  for (const { side, label } of journeySides(journey, mode)) {
+    if (side.execution === 'complete') {
+      continue;
+    }
+
+    const same = groups.find(
+      (group) =>
+        group.side.execution === side.execution &&
+        group.side.unresolved.join('\n') === side.unresolved.join('\n'),
+    );
+
+    if (same === undefined) {
+      groups.push({ labels: [label], side });
+    } else {
+      same.labels.push(label);
+    }
+  }
+
+  const [shared] = groups;
+  const both = groups.length === 1 && shared?.labels.length === 2;
+
+  return (
+    <>
+      {groups.map(({ labels, side }) => {
+        const files = side.artifacts.flatMap((artifact) =>
+          artifact.integrity === 'verified' &&
+          failureFiles.includes(artifact.id)
+            ? [artifact]
+            : [],
+        );
+        const name = labels.join(' and ');
+
+        return (
+          <section
+            key={name}
+            aria-label={`${name}: ${executionLabels[side.execution]}`}
+            {...stylex.props(styles.notice)}
+          >
+            <p {...stylex.props(styles.noticeTitle)}>{name}</p>
+            <ul {...stylex.props(styles.list)}>
+              {side.unresolved.map((reason, index) => (
+                <li key={index}>{reason}</li>
+              ))}
+            </ul>
+            {files.length === 0 ? null : (
+              <p {...stylex.props(styles.small)}>
+                Full output:{' '}
+                {files.map((artifact, index) => (
+                  <span key={artifact.id}>
+                    {index === 0 ? null : ' · '}
+                    <EvidenceLink href={artifact.path}>
+                      {artifact.path.split('/').at(-1)}
+                    </EvidenceLink>
+                  </span>
+                ))}
+              </p>
+            )}
+          </section>
+        );
+      })}
+      {both && shared.side.execution === 'capture-failed' ? (
+        <p {...stylex.props(styles.text)}>
+          The base capture failed with the same error. Both captures ran the
+          setup and journey from the candidate&apos;s observed.json.
+        </p>
+      ) : null}
+      {outline.unrecorded.length === 0 ? null : (
+        <p {...stylex.props(styles.small)}>
+          No evidence recorded for {outline.unrecorded.join(', ')}.
+        </p>
+      )}
+    </>
+  );
+}
+
 function journeySides(journey: Journey, mode: Comparison['mode']) {
   return mode === 'preview'
     ? [{ side: journey.candidate, label: 'Current capture' }]
@@ -836,20 +927,70 @@ function journeySides(journey: Journey, mode: Comparison['mode']) {
       ];
 }
 
-function journeyUnresolved(journey: Journey, mode: Comparison['mode']) {
+type Unresolved = { journey: string; side: string | null; reason: string };
+
+function journeyUnresolved(
+  journey: Journey,
+  mode: Comparison['mode'],
+): Unresolved[] {
   const sides = journeySides(journey, mode);
   const sideIssues = sides.flatMap(({ side }) => side.unresolved);
 
   return [
     ...sides.flatMap(({ side, label }) =>
-      side.unresolved.map((reason) => `${label}: ${reason}`),
+      side.unresolved.map((reason) => ({
+        journey: journey.title,
+        side: label,
+        reason,
+      })),
     ),
     ...(journey.comparison.kind === 'unavailable'
-      ? journey.comparison.reasons.filter(
-          (reason) => !sideIssues.some((issue) => reason.endsWith(issue)),
-        )
+      ? journey.comparison.reasons
+          .filter(
+            (reason) => !sideIssues.some((issue) => reason.endsWith(issue)),
+          )
+          .map((reason) => ({ journey: journey.title, side: null, reason }))
       : []),
   ];
+}
+
+function groupUnresolved(result: Comparison): string[] {
+  const groups = new Map<string, Map<string, string[]>>();
+
+  for (const journey of result.journeys) {
+    for (const entry of journeyUnresolved(journey, result.mode)) {
+      const journeys = groups.get(entry.reason) ?? new Map<string, string[]>();
+      const sides = journeys.get(entry.journey) ?? [];
+
+      if (entry.side !== null && !sides.includes(entry.side)) {
+        sides.push(entry.side);
+      }
+
+      journeys.set(entry.journey, sides);
+      groups.set(entry.reason, journeys);
+    }
+  }
+
+  const total = result.journeys.length;
+
+  return [...groups].map(([reason, journeys]) => {
+    const sideSets = [...journeys.values()].map((sides) => sides.join(' and '));
+    const [sides = ''] = sideSets;
+    const uniform = sideSets.every((set) => set === sides);
+    const scope =
+      uniform && journeys.size === total
+        ? [total === 1 ? '' : 'All journeys', sides]
+        : [...journeys].map(([journey, set]) =>
+            [total === 1 ? '' : journey, set.join(' and ')]
+              .filter((part) => part !== '')
+              .join(' · '),
+          );
+    const named = scope
+      .filter((part) => part !== '')
+      .join(uniform ? ', ' : '; ');
+
+    return named === '' ? reason : `${named}: ${reason}`;
+  });
 }
 
 function Screens({
@@ -1014,6 +1155,8 @@ function SectionBody({
   const sides = journeySides(journey, mode);
 
   switch (section.key) {
+    case 'capture':
+      return <CaptureFailure journey={journey} outline={outline} mode={mode} />;
     case 'checks':
       return (
         <ChecksList
@@ -1281,12 +1424,8 @@ function JourneyView({
 function Verdict({ result }: { result: Comparison }) {
   const tone = conclusionTones[result.conclusion.kind];
   const multiple = result.journeys.length > 1;
-  const { subject } = headlineParts(result);
-  const unresolved = result.journeys.flatMap((journey) =>
-    journeyUnresolved(journey, result.mode).map((reason) =>
-      multiple ? `${journey.title}: ${reason}` : reason,
-    ),
-  );
+  const { subject, restated } = headlineParts(result);
+  const unresolved = groupUnresolved(result);
   const [first] = result.journeys;
   const source = (side: Side) =>
     side.capture === null
@@ -1304,7 +1443,7 @@ function Verdict({ result }: { result: Comparison }) {
       <h1 id="report-title" {...stylex.props(styles.title)}>
         {result.title}
       </h1>
-      {subject === result.title ? null : (
+      {subject === result.title || restated ? null : (
         <p {...stylex.props(styles.values)}>{subject}</p>
       )}
       <p {...stylex.props(styles.lead)}>{result.conclusion.text}</p>

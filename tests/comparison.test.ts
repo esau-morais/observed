@@ -1436,6 +1436,82 @@ test.each(['failed', 'conditions', 'recipe'] as const)(
   },
 );
 
+async function failedSide(reason: string) {
+  const bundle = await syntheticBundle();
+  const written = new Set(['requests', 'errors', 'screenshot', 'observations']);
+
+  await saveManifest(bundle.directory, {
+    ...bundle.capture,
+    execution: { kind: 'failed', category: 'application', reason },
+    conditions: {
+      kind: 'unavailable',
+      reason: 'Browser conditions were not captured',
+    },
+    artifacts: bundle.capture.artifacts.filter(
+      (artifact) => !written.has(artifact.id),
+    ),
+  });
+
+  return inspect(bundle.directory);
+}
+
+test('a failed capture is one reason, and a base failing the same way is named once, never passed', async () => {
+  const stale = 'Setup step 2 of 2 (sh) exited with code 1: fixture is stale';
+  const base = await failedSide(stale);
+  const candidate = await failedSide(stale);
+
+  expect(candidate.execution).toBe('capture-failed');
+  expect(candidate.unresolved).toEqual([
+    `Capture failed (application): ${stale}`,
+  ]);
+
+  const journey = compareJourney({
+    visual: pixelsNotInspected,
+    base,
+    candidate,
+    evaluatedAt,
+  });
+
+  expect(journey.comparison).toEqual({
+    kind: 'unavailable',
+    reasons: [
+      `Base and candidate unavailable for the same reason: Capture failed (application): ${stale}`,
+    ],
+  });
+  expect(journey.conclusion.kind).toBe('unavailable');
+  expect(journey.conclusion.text).toMatch(/^Both captures failed/);
+  expect(journey.checks.every((check) => check.verdict === 'unknown')).toBe(
+    true,
+  );
+
+  const differs = compareJourney({
+    visual: pixelsNotInspected,
+    base: await failedSide('Setup step 1 of 2 (bun) exited with code 1: x'),
+    candidate,
+    evaluatedAt,
+  });
+
+  expect(differs.comparison).toMatchObject({
+    reasons: [
+      expect.stringMatching(/^Base unavailable: /),
+      expect.stringMatching(/^Candidate unavailable: /),
+    ],
+  });
+  expect(
+    summarizeJourneys({
+      journeys: [
+        { ...journey, title: 'One' },
+        { ...journey, title: 'Two' },
+      ],
+      evaluatedAt,
+      mode: 'comparison',
+    }).conclusion,
+  ).toEqual({
+    kind: 'unavailable',
+    text: 'Every capture failed, so no journey was compared. 2 checks are unknown.',
+  });
+});
+
 test('accepts the maximum age boundary and rejects stale or future captures', async () => {
   const bundle = await syntheticBundle();
 

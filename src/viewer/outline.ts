@@ -5,6 +5,7 @@ import { journeySections, type JourneySection } from '../report-sections';
 
 export type SectionKey =
   | EvidenceKind
+  | 'capture'
   | 'checks'
   | 'screenshots'
   | 'requests'
@@ -26,6 +27,8 @@ export type OutlineSection = {
 
 export type Outline = {
   readonly sections: readonly OutlineSection[];
+  // Sections left out because no side recorded their evidence.
+  readonly unrecorded: readonly string[];
   readonly lead: SectionKey;
   // The section that shows each check's evidence, when one does.
   readonly placement: ReadonlyMap<string, SectionKey>;
@@ -146,14 +149,20 @@ function missingOnSteps(
       ? []
       : [{ label: 'base ', side: journey.base, view: errors?.input.base }]),
   ];
+  // The capture section explains a side that did not complete.
   const missing: string[] =
     journey.comparison.kind !== 'preview' &&
+    journey.base.execution === 'complete' &&
     (baseSteps === undefined || baseSteps.status === 'unavailable')
       ? ['base steps unavailable']
       : [];
 
   for (const { label, side, view } of sides) {
     const record = view?.evidence;
+
+    if (side.execution !== 'complete') {
+      continue;
+    }
 
     if (
       errors !== undefined &&
@@ -166,10 +175,6 @@ function missingOnSteps(
       record.value.coverage.kind === 'incomplete'
     ) {
       missing.push(`${label}errors incomplete`);
-    }
-
-    if (side.execution !== 'complete') {
-      missing.push(`${label}requests unavailable`);
     }
   }
 
@@ -217,9 +222,69 @@ function requestCount(journey: Journey): string {
     : 'unavailable';
 }
 
+function recorded(section: JourneySection): boolean {
+  return (
+    section.input.candidate.evidence.status === 'recorded' ||
+    section.input.base?.evidence.status === 'recorded'
+  );
+}
+
+function captureSection(journey: Journey): OutlineSection | null {
+  const preview = journey.comparison.kind === 'preview';
+  const sides = preview
+    ? [{ name: 'capture', side: journey.candidate }]
+    : [
+        { name: 'base', side: journey.base },
+        { name: 'candidate', side: journey.candidate },
+      ];
+  const incomplete = sides.filter(({ side }) => side.execution !== 'complete');
+  const [only] = incomplete;
+
+  if (only === undefined) {
+    return null;
+  }
+
+  const outcome = incomplete.every(
+    ({ side }) => side.execution === 'capture-failed',
+  )
+    ? 'failed'
+    : 'unavailable';
+  const state = incomplete.length === 2 ? `both ${outcome}` : outcome;
+
+  return {
+    key: 'capture',
+    title: 'Capture',
+    status: 'unknown',
+    count: incomplete.length === 2 || preview ? state : `${only.name} ${state}`,
+    checks: [],
+    evidence: null,
+    open: true,
+  };
+}
+
+function checksCount(total: number, passed: number, unknown: number): string {
+  if (total === 0) {
+    return 'none';
+  }
+
+  return unknown === total ? `${unknown} unknown` : `${passed}/${total} passed`;
+}
+
 export function outlineJourney(journey: Journey): Outline {
-  const evidence = journeySections(journey);
+  const all = journeySections(journey);
+  const capture = captureSection(journey);
+  const evidence = capture === null ? all : all.filter(recorded);
+  const unrecorded = all
+    .filter((section) => !evidence.includes(section))
+    .map((section) =>
+      section.kind === 'timeline' ? 'Steps' : evidenceKinds[section.kind].title,
+    );
   const onSteps = evidence.some((section) => section.kind === 'timeline');
+  const requestsRecorded =
+    journey.candidate.execution === 'complete' ||
+    (journey.comparison.kind !== 'preview' &&
+      journey.base.execution === 'complete');
+  const withRequests = !onSteps && (capture === null || requestsRecorded);
   const byKey = new Map<SectionKey, CheckVerdict[]>();
   const placement = new Map<string, SectionKey>();
 
@@ -228,12 +293,14 @@ export function outlineJourney(journey: Journey): Outline {
     const present =
       key !== null &&
       (key === 'requests'
-        ? !onSteps
+        ? withRequests
         : evidence.some((section) => section.kind === key));
 
     if (present) {
       byKey.set(key, [...(byKey.get(key) ?? []), check]);
       placement.set(check.id, key);
+    } else if (capture !== null && verdictStatus[check.verdict] === 'unknown') {
+      placement.set(check.id, 'capture');
     }
   }
 
@@ -277,9 +344,18 @@ export function outlineJourney(journey: Journey): Outline {
   const passed = journey.checks.filter(
     (check) => check.verdict === 'passed',
   ).length;
+  const screenshotSection = screenshots(journey);
+  const withoutScreenshots =
+    capture !== null &&
+    journey.candidate.screenshot === null &&
+    journey.base.screenshot === null;
+  const unknown = journey.checks.filter(
+    (check) => verdictStatus[check.verdict] === 'unknown',
+  ).length;
   const sections: OutlineSection[] = [
+    ...(capture === null ? [] : [capture]),
     ...evidenceSections,
-    ...(onSteps
+    ...(!withRequests
       ? []
       : [
           {
@@ -296,24 +372,25 @@ export function outlineJourney(journey: Journey): Outline {
             open: false,
           },
         ]),
-    {
-      key: 'screenshots',
-      title: 'Screenshots',
-      ...screenshots(journey),
-      checks: [],
-      evidence: null,
-      open: false,
-    },
+    ...(withoutScreenshots
+      ? []
+      : [
+          {
+            key: 'screenshots' as const,
+            title: 'Screenshots',
+            ...screenshotSection,
+            checks: [],
+            evidence: null,
+            open: false,
+          },
+        ]),
     {
       key: 'checks',
       title: 'Checks',
       status: worst(
         journey.checks.map((check) => verdictStatus[check.verdict]),
       ),
-      count:
-        journey.checks.length === 0
-          ? 'none'
-          : `${passed}/${journey.checks.length} passed`,
+      count: checksCount(journey.checks.length, passed, unknown),
       checks: journey.checks,
       evidence: null,
       open: false,
@@ -377,6 +454,11 @@ export function outlineJourney(journey: Journey): Outline {
         evidence: null,
         open: false,
       },
+    ],
+    unrecorded: [
+      ...unrecorded,
+      ...(onSteps || withRequests ? [] : ['Requests']),
+      ...(withoutScreenshots ? ['Screenshots'] : []),
     ],
     lead,
     placement,

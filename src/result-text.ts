@@ -7,6 +7,7 @@ import type {
   Measure,
   Side,
 } from './comparison-model';
+import { everyCaptureFailed } from './comparison-model';
 
 type Kind = Comparison['conclusion']['kind'];
 
@@ -167,18 +168,34 @@ export function anchorLocation(
 export function headlineParts(result: Comparison): {
   label: string;
   subject: string;
+  // The conclusion text already states the subject.
+  restated: boolean;
 } {
   const kind = result.conclusion.kind;
   const [first, ...rest] = leadingChecks(result);
+  const captureFailed =
+    kind === 'unavailable' && everyCaptureFailed(result.journeys, result.mode);
   let subject = result.title;
 
-  if (first !== undefined) {
+  if (captureFailed) {
+    subject = captureFailure(result);
+  } else if (first !== undefined) {
     const measure = shownMeasure(first.check);
 
     subject = `${measure === null ? first.check.name : describeMeasure(measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
   }
 
-  return { label: conclusionLabels[kind], subject };
+  return { label: conclusionLabels[kind], subject, restated: captureFailed };
+}
+
+function captureFailure(result: Comparison): string {
+  if (result.journeys.length > 1) {
+    return 'Every capture failed';
+  }
+
+  return result.mode === 'preview'
+    ? 'The capture failed'
+    : 'Both captures failed';
 }
 
 // The checks whose verdict decided the result, in journey order.

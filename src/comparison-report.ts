@@ -247,11 +247,23 @@ function renderJourney(
         { side: journey.base, label: 'Before' },
         { side: journey.candidate, label: 'After' },
       ];
+  const shared = new Set(
+    preview
+      ? []
+      : journey.base.unresolved.filter((reason) =>
+          journey.candidate.unresolved.includes(reason),
+        ),
+  );
   const unresolved = [
+    ...[...shared].map((reason) => `Base and candidate: ${reason}`),
     ...(preview
       ? []
-      : journey.base.unresolved.map((reason) => `Base: ${reason}`)),
-    ...journey.candidate.unresolved.map((reason) => `Candidate: ${reason}`),
+      : journey.base.unresolved
+          .filter((reason) => !shared.has(reason))
+          .map((reason) => `Base: ${reason}`)),
+    ...journey.candidate.unresolved
+      .filter((reason) => !shared.has(reason))
+      .map((reason) => `Candidate: ${reason}`),
     ...journey.limitations,
   ];
   const single = result.journeys.length === 1;

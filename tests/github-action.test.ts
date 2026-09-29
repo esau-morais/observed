@@ -8,8 +8,16 @@ import {
   pageMatchesRun,
   summarize,
 } from '../scripts/github-action';
-import { compareCaptures, inspectSide } from '../src/comparison';
+import { Schema } from 'effect';
+import { readFile } from 'node:fs/promises';
+import {
+  compareCaptures,
+  inspectSide,
+  summarizeJourneys,
+} from '../src/comparison';
+import { comparisonSchema } from '../src/comparison-model';
 import { json } from '../src/encoding';
+import { failedJourney } from './support/failed-journey';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
 const root = path.resolve(import.meta.dirname, '..');
@@ -427,5 +435,47 @@ test("a check row shows its own finding's anchor and no other check's", async ()
   ).toHaveLength(1);
   expect(rows.find((row) => row.includes('One books request'))).not.toContain(
     'App.jsx',
+  );
+});
+
+test('a failure shared by every capture is one comment line that names the base', async () => {
+  const fixture = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(
+    await readFile(
+      path.join(root, 'tests/fixtures/report/errors-result.json'),
+      'utf8',
+    ),
+  );
+  const [journey] = fixture.journeys;
+
+  if (journey === undefined) {
+    throw new Error('The fixture has one journey');
+  }
+
+  const stale = 'Setup step 4 of 4 (sh) exited with code 1: fixture is stale';
+  const failed = failedJourney(journey, stale, evaluatedAt);
+  const result = summarizeJourneys({
+    journeys: [
+      { ...failed, title: 'Open the report' },
+      { ...failed, title: 'Find the request' },
+    ],
+    evaluatedAt,
+    mode: 'comparison',
+  });
+  const summary = summarize({
+    output: json({ directory: '/bundle', result }),
+    exitCode: 1,
+    artifact: 'observed-bundle',
+    page: null,
+    surface: { kind: 'comment' },
+  });
+  const [visible = ''] = summary.markdown.split('<details>');
+
+  expect(summary.title).toBe('Unavailable: Every capture failed');
+  expect(visible).toContain('> **Unavailable** · Every capture failed\n');
+  expect(visible.split(stale)).toHaveLength(2);
+  expect(visible).toContain(
+    `- ? **Unknown** · Open the report: No browser errors, Find the request: No browser errors\n\n- Every capture failed (application): ${stale}\n`,
   );
 });

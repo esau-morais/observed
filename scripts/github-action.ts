@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   comparisonSchema,
   conclusionExitCodes,
+  everyCaptureFailed,
   type CheckVerdict,
   type Comparison,
   type Journey,
@@ -210,6 +211,12 @@ function rowLocation(open: Open): string | null {
   return location === null ? null : `${location.words} ${code(location.place)}`;
 }
 
+function rowName(result: Comparison, open: Open): string {
+  return result.journeys.length === 1
+    ? open.check.name
+    : `${open.journey.title}: ${open.check.name}`;
+}
+
 function rowText(result: Comparison, open: Open): string {
   const { journey, check } = open;
   const where =
@@ -217,6 +224,24 @@ function rowText(result: Comparison, open: Open): string {
   const location = rowLocation(open);
 
   return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}`;
+}
+
+// Every check shares the capture failure, so the rows name the checks once
+// per verdict instead of repeating the failure under each.
+function groupedRows(result: Comparison, open: readonly Open[]): string[] {
+  return severity.flatMap((verdict) => {
+    const checks = open.filter((item) => item.check.verdict === verdict);
+    const listed = checks
+      .slice(0, listedChecks)
+      .map((item) => rowName(result, item));
+    const hidden = checks.length - listed.length;
+
+    return checks.length === 0
+      ? []
+      : [
+          `- ${toneSymbols[verdictTones[verdict]]} **${verdictLabels[verdict]}** · ${inlineText(listed.join(', '))}${hidden === 0 ? '' : `, and ${hidden} more in the report`}`,
+        ];
+  });
 }
 
 export function checkRows(result: Comparison, lead?: Open): string[] {
@@ -314,6 +339,44 @@ export function describeFailure(
     : [];
 }
 
+function groupedFailures(result: Comparison): string[] {
+  const labelled = result.journeys.flatMap((journey) =>
+    journeySides(result, journey),
+  );
+  const groups = new Map<
+    string,
+    {
+      labels: string[];
+      execution: Extract<Capture['execution'], { kind: 'failed' }>;
+    }
+  >();
+
+  for (const [label, side] of labelled) {
+    const execution = side.capture?.manifest.execution;
+
+    if (execution?.kind !== 'failed') {
+      continue;
+    }
+
+    const key = `${execution.category}\n${execution.reason}`;
+    const group = groups.get(key);
+
+    if (group === undefined) {
+      groups.set(key, { labels: [label], execution });
+    } else {
+      group.labels.push(label);
+    }
+  }
+
+  return [...groups.values()].flatMap(({ labels, execution }) =>
+    labels.length === labelled.length && labels.length > 1
+      ? [
+          `- Every capture failed (${execution.category}): ${inlineText(execution.reason)}`,
+        ]
+      : describeFailure(labels.join(', '), execution),
+  );
+}
+
 function formatExit(exitCode: number | null): string {
   return exitCode === null ? 'missing' : String(exitCode);
 }
@@ -375,9 +438,15 @@ function agentPrompt(
   const full = (source: Source | null) =>
     source === null ? 'unavailable' : describeRevision(source.revision);
   const open = openChecks(result);
-  const unavailable = result.journeys.flatMap((journey) =>
-    journey.comparison.kind === 'unavailable' ? journey.comparison.reasons : [],
-  );
+  const unavailable = [
+    ...new Set(
+      result.journeys.flatMap((journey) =>
+        journey.comparison.kind === 'unavailable'
+          ? journey.comparison.reasons
+          : [],
+      ),
+    ),
+  ];
 
   return [
     `Observed ran the saved journey "${result.title}" on ${result.mode === 'preview' ? '' : `base ${full(base)} and `}head ${full(head)}: ${resultCounts(result)}.`,
@@ -493,12 +562,8 @@ function untrustedSummary(frame: Frame, reason: string): Summary {
 function resultSummary(frame: Frame, result: Comparison): Summary {
   const { options, page, repository, bundle } = frame;
   const kind = result.conclusion.kind;
-  const labelled = result.journeys.flatMap((journey) =>
-    journeySides(result, journey),
-  );
-  const failures = labelled.flatMap(([label, side]) =>
-    describeFailure(label, side.capture?.manifest.execution),
-  );
+  const failures = groupedFailures(result);
+  const allFailed = everyCaptureFailed(result.journeys, result.mode);
   const unavailableReasons = result.journeys.flatMap((journey) =>
     journey.comparison.kind === 'unavailable'
       ? journey.comparison.reasons.map(
@@ -533,10 +598,11 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
   const [first] = open;
   const lead =
     options.surface.kind !== 'check' &&
+    !allFailed &&
     first?.check.verdict === leadingVerdicts[kind]
       ? first
       : undefined;
-  const rows = checkRows(result, lead);
+  const rows = allFailed ? groupedRows(result, open) : checkRows(result, lead);
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -574,7 +640,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     collapsed(
       'Run details and limits',
       [
-        ...(failures.length > 0 ? unavailableReasons : []),
+        ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
         ...limitations.map(inlineText),
         ...(page === null
           ? []

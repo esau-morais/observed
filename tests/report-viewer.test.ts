@@ -5,6 +5,8 @@ import { expect, test } from 'vitest';
 import { comparisonSchema, type Comparison } from '../src/comparison-model';
 import { agentText } from '../src/viewer/agent-text';
 import { outlineJourney } from '../src/viewer/outline';
+import { failedJourney } from './support/failed-journey';
+import { recipe } from './support/request-recipe';
 
 async function errorsResult(): Promise<Comparison> {
   return Schema.decodeUnknownSync(Schema.fromJsonString(comparisonSchema))(
@@ -165,4 +167,58 @@ test('steps turn unknown when the base recorded no timeline', async () => {
 
   expect(steps?.status).toBe('unknown');
   expect(steps?.count).toContain('base steps unavailable');
+});
+
+test('failed captures lead with one capture section instead of empty evidence sections', async () => {
+  const result = await errorsResult();
+  const journey = onlyJourney(result);
+  const failed = failedJourney(
+    journey,
+    'Setup step 4 of 4 (sh) exited with code 1: fixture is stale',
+    result.evaluatedAt,
+  );
+  const [check] = failed.checks;
+
+  if (check === undefined) {
+    throw new Error('The fixture has a check');
+  }
+
+  const outline = outlineJourney({
+    ...failed,
+    base: { ...failed.base, recipe },
+    candidate: { ...failed.candidate, recipe },
+    checks: [
+      ...failed.checks,
+      {
+        ...check,
+        id: 'one-items-request',
+        name: 'One request per load action',
+      },
+    ],
+  });
+
+  expect(outline.lead).toBe('capture');
+  expect(outline.sections.map((section) => section.key)).toEqual([
+    'capture',
+    'checks',
+    'provenance',
+    'limits',
+  ]);
+  expect(outline.sections[0]).toMatchObject({
+    status: 'unknown',
+    count: 'both failed',
+    open: true,
+  });
+  expect(outline.unrecorded).toEqual([
+    'Accessibility',
+    'Steps',
+    'Browser errors',
+    'Requests',
+    'Screenshots',
+  ]);
+  expect(outline.placement.get('no-browser-errors')).toBe('capture');
+  expect(outline.placement.get('one-items-request')).toBe('capture');
+  expect(
+    outline.sections.find((section) => section.key === 'checks'),
+  ).toMatchObject({ count: '2 unknown', open: false });
 });

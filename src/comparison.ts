@@ -45,7 +45,11 @@ import type {
   UnknownCheck,
   Visual,
 } from './comparison-model';
-import { conclusionKinds, resultSchemaVersion } from './comparison-model';
+import {
+  conclusionKinds,
+  everyCaptureFailed,
+  resultSchemaVersion,
+} from './comparison-model';
 import {
   inspectArtifact,
   readVerifiedArtifact,
@@ -529,9 +533,7 @@ function captureProblems(
     reasons.push(
       `Capture failed (${capture.execution.category}): ${capture.execution.reason}`,
     );
-  }
-
-  if (capture.conditions.kind === 'unavailable') {
+  } else if (capture.conditions.kind === 'unavailable') {
     reasons.push(
       `Capture conditions unavailable: ${capture.conditions.reason}`,
     );
@@ -710,7 +712,10 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       return describeArtifact(item, prefix);
     });
 
-    for (const id of requiredArtifacts) {
+    // A failed capture stops before writing these; its failure is the reason.
+    for (const id of capture.execution.kind === 'failed'
+      ? []
+      : requiredArtifacts) {
       if (!byId.has(id)) {
         reasons.push(`Required artifact is missing: ${id}`);
       }
@@ -914,15 +919,26 @@ function evidenceIdentity(entry: Capture['evidence'][number]) {
 function comparisonProblems(base: Side, candidate: Side): string[] {
   const reasons: string[] = [];
 
-  for (const [name, side] of [
-    ['Base', base],
-    ['Candidate', candidate],
-  ] as const) {
-    if (
-      side.execution !== 'complete' ||
-      side.artifacts.some((artifact) => artifact.integrity !== 'verified')
-    ) {
-      reasons.push(`${name} unavailable: ${sideDetail(side)}`);
+  const unusable = (side: Side) =>
+    side.execution !== 'complete' ||
+    side.artifacts.some((artifact) => artifact.integrity !== 'verified');
+
+  if (
+    unusable(base) &&
+    unusable(candidate) &&
+    sideDetail(base) === sideDetail(candidate)
+  ) {
+    reasons.push(
+      `Base and candidate unavailable for the same reason: ${sideDetail(base)}`,
+    );
+  } else {
+    for (const [name, side] of [
+      ['Base', base],
+      ['Candidate', candidate],
+    ] as const) {
+      if (unusable(side)) {
+        reasons.push(`${name} unavailable: ${sideDetail(side)}`);
+      }
     }
   }
 
@@ -1095,6 +1111,49 @@ function sentences(
   ].join(' ');
 }
 
+function notComparedLead(base: Side, candidate: Side): string {
+  const baseFailed = base.execution === 'capture-failed';
+  const candidateFailed = candidate.execution === 'capture-failed';
+
+  if (baseFailed && candidateFailed) {
+    return 'Both captures failed, so the revisions were not compared.';
+  }
+
+  if (baseFailed || candidateFailed) {
+    return `The ${baseFailed ? 'base' : 'candidate'} capture failed, so the revisions were not compared.`;
+  }
+
+  return 'The revisions were not compared.';
+}
+
+function runConclusionText(
+  journeys: Comparison['journeys'],
+  deciding: readonly Journey[],
+  mode: 'preview' | 'comparison',
+): string {
+  const [first] = journeys;
+
+  if (journeys.length === 1 && first !== undefined) {
+    return first.conclusion.text;
+  }
+
+  if (everyCaptureFailed(journeys, mode)) {
+    const unknown = journeys
+      .flatMap((journey) => journey.checks)
+      .filter((item) => item.verdict === 'unknown').length;
+    const checks =
+      unknown === 0
+        ? ''
+        : ` ${unknown} ${unknown === 1 ? 'check is' : 'checks are'} unknown.`;
+
+    return `Every capture failed, so no journey was ${mode === 'preview' ? 'checked' : 'compared'}.${checks}`;
+  }
+
+  return deciding
+    .map((journey) => `${journey.title}: ${journey.conclusion.text}`)
+    .join(' ');
+}
+
 function journeyConclusion(
   base: Side,
   candidate: Side,
@@ -1173,17 +1232,22 @@ function journeyConclusion(
   if (mode === 'preview' && candidate.execution !== 'complete') {
     return {
       kind: 'unavailable',
-      text: 'The capture is unavailable. Nothing was checked.',
+      text:
+        candidate.execution === 'capture-failed'
+          ? 'The capture failed. Nothing was checked.'
+          : 'The capture is unavailable. Nothing was checked.',
     };
   }
 
   if (comparison.kind === 'unavailable') {
+    const lead = notComparedLead(base, candidate);
+
     return {
       kind: 'unavailable',
       text:
         unknown.length > 0
-          ? `The revisions were not compared. Unknown: ${names(unknown)}.`
-          : `The revisions were not compared.${verdicts.length === 0 ? '' : ` ${passed.length} of ${verdicts.length} candidate checks passed.`}${notRunText}`,
+          ? `${lead} Unknown: ${names(unknown)}.`
+          : `${lead}${verdicts.length === 0 ? '' : ` ${passed.length} of ${verdicts.length} candidate checks passed.`}${notRunText}`,
     };
   }
 
@@ -1378,12 +1442,7 @@ export function summarizeJourneys({
     },
     conclusion: {
       kind,
-      text:
-        journeys.length === 1
-          ? first.conclusion.text
-          : deciding
-              .map((journey) => `${journey.title}: ${journey.conclusion.text}`)
-              .join(' '),
+      text: runConclusionText(journeys, deciding, mode),
     },
   };
 }

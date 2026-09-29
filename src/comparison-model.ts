@@ -344,6 +344,17 @@ export type Side = typeof sideSchema.Type;
 
 export type Check = Side['checks'][number];
 
+export function everyCaptureFailed(
+  journeys: Comparison['journeys'],
+  mode: Comparison['mode'],
+): boolean {
+  return journeys.every(
+    (journey) =>
+      journey.candidate.execution === 'capture-failed' &&
+      (mode === 'preview' || journey.base.execution === 'capture-failed'),
+  );
+}
+
 export type UnknownCheck = typeof unknownCheck.Type;
 
 export type SideArtifact = Side['artifacts'][number];
