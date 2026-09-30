@@ -122,6 +122,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
       # Publishes the tarball the Linux x64 package job installed and ran.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -152,15 +155,14 @@ jobs:
             echo "$version is already on npm"
             exit 0
           fi
-          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" \
+          bun -e 'process.exit(Bun.semver.satisfies(process.argv[1], ">=11.5.1") ? 0 : 1)' "$(npm --version)" \
             || { echo "::error::npm $(npm --version) is older than 11.5.1"; exit 1; }
           # A stable version gets no --tag, so npm still refuses to move
           # `latest` below a higher release.
           tag=()
           if [[ "$version" == *-* ]]; then
             latest="$(npm view "$(jq -r .name package.json)" dist-tags.latest)"
-            highest="$(printf '%s\n' "$latest" "$version" | sort -V | tail -n 1)"
-            if [[ "$latest" == *-* && "$highest" == "$version" ]]; then
+            if [[ "$latest" == *-* ]] && bun -e 'process.exit(Bun.semver.order(process.argv[1], process.argv[2]) > 0 ? 0 : 1)' "$version" "$latest"; then
               tag=(--tag latest)
             else
               prerelease="${version#*-}"
