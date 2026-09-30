@@ -2,6 +2,7 @@ import { BunRuntime, BunServices } from '@effect/platform-bun';
 import { Cause, Console, Effect, FileSystem } from 'effect';
 import { Argument, Command } from 'effect/unstable/cli';
 import path from 'node:path';
+import { observedVersion } from './capture/provenance';
 import { inspectEvidence } from './evidence';
 import { renderReport } from './report';
 import { parseManifestJson } from './schema';
@@ -48,8 +49,10 @@ const command = Command.make(
   ),
 );
 
-command.pipe(
-  Command.run({ version: '0.1.0', renderErrors: false }),
+observedVersion(path.resolve(import.meta.dirname, '..')).pipe(
+  Effect.flatMap((version) =>
+    command.pipe(Command.run({ version, renderErrors: false })),
+  ),
   Effect.provide(BunServices.layer),
   Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
   BunRuntime.runMain({ disableErrorReporting: true }),
