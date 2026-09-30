@@ -139,8 +139,10 @@ jobs:
       # Trusted publishing (OIDC) needs npm 11.5.1 or later and attaches
       # provenance. The package refuses tokens.
       # Skips a version npm already has, so a failed later step can be re-run.
-      # A prerelease such as 0.2.0-alpha.0 goes to the dist-tag named by its
-      # identifier, so `latest` keeps the last release.
+      # While `latest` points at a prerelease, a higher prerelease moves it.
+      # Once `latest` is stable, a prerelease such as 0.3.0-alpha.0 goes to the
+      # dist-tag named by its identifier. Trusted publishing cannot run
+      # `npm dist-tag`, so the tag is chosen at publish time.
       - name: Publish to npm
         run: |
           set -- "$RUNNER_TEMP"/verified/package/*.tgz
@@ -156,8 +158,14 @@ jobs:
           # `latest` below a higher release.
           tag=()
           if [[ "$version" == *-* ]]; then
-            prerelease="${version#*-}"
-            tag=(--tag "${prerelease%%.*}")
+            latest="$(npm view "$(jq -r .name package.json)" dist-tags.latest)"
+            highest="$(printf '%s\n' "$latest" "$version" | sort -V | tail -n 1)"
+            if [[ "$latest" == *-* && "$highest" == "$version" ]]; then
+              tag=(--tag latest)
+            else
+              prerelease="${version#*-}"
+              tag=(--tag "${prerelease%%.*}")
+            fi
           fi
           npm publish "$1" --access public --provenance "${tag[@]}"
       # A prerelease leaves the major tag on the last release.

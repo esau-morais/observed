@@ -27,9 +27,6 @@ observed setup
   In a container or another Linux machine without desktop libraries, run
   `observed setup --with-deps`, which also installs packages with `sudo apt`.
 - Bun reports one blocked postinstall, from agent-browser. Leave it blocked.
-- This README describes the current alpha. Install it with
-  `@observed-software/cli@alpha`. A plain install gets 0.1.0, which has no
-  guided setup, no `observed skill`, and fewer checks.
 - To run a pinned version without installing it, start each command with
   `bunx @observed-software/cli@<version>`.
 
