@@ -41,7 +41,7 @@ version. To upgrade, use the commit of a newer
 [release](https://github.com/esau-morais/observed/releases) tag, or let
 Dependabot's `github-actions` updates propose it. `@v0` follows the latest
 stable 0.x release and can move, so pin a SHA. 0.1.0 lacks inputs such as
-`github-token` and `slack-images`.
+`github-token` and `slack-images` and posts only through a GitHub App.
 
 `uses:` works for any public repository. The GitHub Marketplace listing is
 only for finding the action.
