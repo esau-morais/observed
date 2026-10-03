@@ -2377,9 +2377,7 @@ test('GitHub counts the passing tests of a large imported suite and lists only t
     }),
   );
   expect(result.summary).toEqual({ passed: 399, total: 400 });
-  expect(resultCounts(result)).toBe(
-    '1 issue found · 399 behaviors verified · 0 unresolved',
-  );
+  expect(resultCounts(result)).toBe('399 checks passed · 1 regression');
   expect(checkRows(result)).toEqual([
     expect.stringMatching(/^- ! \*\*Regression\*\* · case 0 · /),
   ]);

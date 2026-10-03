@@ -275,7 +275,7 @@ test('the verdict line carries the values once and passing checks become a count
     'Regression: Median LCP 52 ms → 452 ms, at most 250 ms',
   );
   expect(visible).toContain(
-    '> **Regression** · Largest contentful paint stays fast · Median LCP 52 ms → 452 ms, at most 250 ms\n>\n> 1 issue found · 1 behavior verified · 0 unresolved',
+    '> **Regression** · Largest contentful paint stays fast · Median LCP 52 ms → 452 ms, at most 250 ms\n>\n> 1 check passed · 1 regression',
   );
   expect(visible.split('52 ms → 452 ms')).toHaveLength(2);
   expect(visible).not.toContain(detail);
@@ -311,7 +311,7 @@ test('captured text cannot close the agent prompt fence, and the artifact name c
 
   expect(prompt?.[2]).toContain(`- Evidence: ${detail}`);
   expect(prompt?.[2]).toContain(
-    'A changed value is not a regression by itself; verify against the artifacts',
+    '- Compare each value with its artifact before you change code.',
   );
   expect(block?.[1]).toContain('artifact: bundle--x');
   expect(block?.[1]).toContain('conclusion: regression');

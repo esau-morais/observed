@@ -41,6 +41,7 @@ function journeyText(
   journey: Journey,
   mode: Comparison['mode'],
   conclusion: string,
+  level: string,
 ): string[] {
   const sides =
     mode === 'preview'
@@ -75,9 +76,9 @@ function journeyText(
   return [
     ...sides.map(({ label, side }) => identity(label, side)),
     '',
-    '### Checks',
+    `${level} Checks`,
     ...(journey.checks.length === 0
-      ? ['No named checks are configured, so nothing was verified.']
+      ? ['No named check is configured, so no behavior was checked.']
       : journey.checks.map((check) => {
           const location = anchorLocation(journey, check);
           const measure =
@@ -87,46 +88,61 @@ function journeyText(
 
           return `- ${verdictLabels[check.verdict]}: ${check.name}.${measure === null || check.detail.includes(measure) ? '' : ` ${measure}.`}${check.detail === conclusion || labels.has(check.detail) ? '' : ` ${check.detail}`} Scope: ${check.scope}${location === null ? '' : ` Location: ${location.words} ${location.place}.`}`;
         })),
-    ...(unresolved.length === 0 ? [] : ['', '### Unresolved', ...unresolved]),
+    ...(unresolved.length === 0
+      ? []
+      : ['', `${level} Unresolved`, ...unresolved]),
     ...(journey.comparison.kind === 'unavailable'
       ? [
           '',
-          '### Comparison unavailable',
+          `${level} Comparison unavailable`,
           ...(reasons.length === 0
             ? ['- Because of the unresolved evidence above.']
             : reasons.map((reason) => `- ${reason}`)),
         ]
       : []),
     '',
-    '### Evidence files',
+    `${level} Evidence files`,
     ...sides.flatMap(({ label, side }) => files(label, side)),
     ...visual,
     '',
-    '### Limits',
+    `${level} Limits`,
     ...journey.limitations.map((limit) => `- ${limit}`),
   ];
 }
 
-// Deterministic text for a coding agent: the verdict, identities, checks and
-// the bundle files that hold the raw evidence. It never adds a suggestion.
+// Deterministic text for a coding agent: the facts first, then the next
+// steps, one instruction each. It never adds a suggestion about the code.
 export function agentText(result: Comparison): string {
   const multiple = result.journeys.length > 1;
 
   return [
     `## Observed: ${conclusionLabels[result.conclusion.kind]} · ${result.title}`,
     '',
+    '### Facts',
+    '',
     result.conclusion.text,
     '',
-    `Evaluated at ${result.evaluatedAt}. Paths are relative to the report directory, next to result.json, which holds the full result.`,
+    `Evaluated at ${result.evaluatedAt}. Paths are relative to the report directory. result.json in that directory holds the full result.`,
     '',
     ...result.journeys.flatMap((journey) => [
       ...(multiple
-        ? [`## ${journey.title}`, '', journey.conclusion.text, '']
+        ? [`#### ${journey.title}`, '', journey.conclusion.text, '']
         : []),
-      ...journeyText(journey, result.mode, result.conclusion.text),
+      ...journeyText(
+        journey,
+        result.mode,
+        result.conclusion.text,
+        multiple ? '#####' : '####',
+      ),
       '',
     ]),
-    'A changed value is not a regression by itself; verify against the artifacts before changing code.',
+    'A changed value is not a regression by itself.',
+    '',
+    '### Next steps',
+    '',
+    '- Read result.json and the evidence files listed above.',
+    '- Compare each value with its artifact before you change code.',
+    '- Name the evidence that your change addresses.',
     '',
   ].join('\n');
 }

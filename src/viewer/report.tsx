@@ -573,8 +573,10 @@ function SectionChecks({
 function sideOutcome(side: Side, id: string): string {
   const check = side.checks.find((item) => item.id === id);
 
+  // A capture that recorded nothing is missing the evidence. A complete
+  // capture whose journey lacks the check never ran it.
   if (check === undefined) {
-    return 'not configured';
+    return checkLabels[side.execution === 'complete' ? 'not-run' : 'unknown'];
   }
 
   return check.actual === null
@@ -596,8 +598,8 @@ function ChecksList({
   if (journey.checks.length === 0) {
     return (
       <p {...stylex.props(styles.text)}>
-        No named check is configured, so nothing was verified. The captures show
-        the application only.
+        No named check is configured, so no behavior was checked. The captures
+        show the application only.
       </p>
     );
   }
@@ -1449,7 +1451,7 @@ function Verdict({ result }: { result: Comparison }) {
       <p {...stylex.props(styles.lead)}>{result.conclusion.text}</p>
       <p {...stylex.props(styles.text)}>
         {result.summary.total === 0
-          ? 'No named checks configured, so nothing was verified.'
+          ? 'No named check is configured, so no behavior was checked.'
           : resultCounts(result)}
       </p>
       {first === undefined || multiple ? null : (

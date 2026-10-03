@@ -1274,8 +1274,8 @@ function journeyConclusion(
       kind: 'not-checked',
       text:
         notRun.length === 0
-          ? 'Before and after captured. No named check is configured, so no behavior was verified.'
-          : `Before and after captured. No named check ran, so no behavior was verified.${notRunText}`,
+          ? 'Before and after captured. No named check is configured, so no behavior was checked.'
+          : `Before and after captured. No named check ran, so no behavior was checked.${notRunText}`,
     };
   }
 

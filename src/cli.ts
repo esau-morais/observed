@@ -45,7 +45,7 @@ const command = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    'Generate a Phase 0 Markdown report from imported evidence. Exit success means written, not behavior verified.',
+    'Generate a Phase 0 Markdown report from imported evidence. Exit success means the report was written. It does not mean that a check passed.',
   ),
 );
 

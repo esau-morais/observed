@@ -177,7 +177,7 @@ test('retains real supplied results without converting imported PASS text into i
   );
 
   expect(markdown).toContain(
-    'Behavior was not independently verified by Observed.',
+    'Observed did not run these checks. It imported their results.',
   );
 
   expect(markdown).toContain('Base: Unknown: No baseline captured');
