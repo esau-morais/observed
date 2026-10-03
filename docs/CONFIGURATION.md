@@ -13,7 +13,8 @@ collectors work. The [README](../README.md#write-observedjson) covers writing
 | Errors | Page and console errors, with the step after which each was read |
 | Accessibility | The accessibility tree after the last step, and axe-core findings with each failing element's role, name and states |
 | Screenshot | The page after `steps` |
-| Source maps | The map of each script that an error's stack frame or a React component names |
+| Coverage | Which lines of the captured source ran, from a second run of the journey. See [browser coverage](#browser-coverage) |
+| Source maps | The map of each script that an error's stack frame or a React component names, or that coverage counted |
 
 Limits:
 
@@ -201,6 +202,55 @@ import shows one run. It doesn't capture the app or compare revisions.
   one it can't read.
 - Observed keeps a copy of the HTML report's `index.html` without redacting
   it, because its data is compressed inside the page.
+
+## Browser coverage
+
+Every journey records which lines of the captured source ran. To turn it off
+for a journey, list the collector with `enabled` set to `false`:
+
+```json
+"collectors": [{ "kind": "coverage", "enabled": false }]
+```
+
+After the journey's capture and any other browser sessions, such as React
+renders and performance samples, Observed opens one more browser session. It
+starts V8 precise coverage through DevTools before the page loads, then runs
+`path`, `ready` and `steps` again. It writes `evidence/coverage.json` and keeps
+the DevTools output as `coverage-raw.json`.
+
+How lines are counted:
+
+- Observed fetches each script's source map from the app's own origin:
+  first `<script>.map`, then the script's `sourceMappingURL`. Each counted
+  block maps to a line of a file in the source snapshot. Files under
+  `node_modules` are left out.
+- A line ran when any code mapped to it ran. A line whose mapped code never
+  ran is listed as not run. A line with no generated code, such as a type or
+  a comment, is in neither list.
+- A script without a usable map, or from another origin, is listed with the
+  reason and gives no lines.
+- A map can embed a copy of each file. When that copy differs from the
+  snapshot, the file is left out with the reason, because the map's line
+  numbers count the lines of a different text. A build step that drops its
+  own source map causes this. StyleX's Vite plugin 0.19.1 does, so the
+  Request lab example records no lines for `App.tsx`. A map without embedded
+  copies can't be checked this way, and its lines are used as the map gives
+  them.
+- A line that ran was executed. That says nothing about whether it was
+  correct.
+
+Limits:
+
+- The second run repeats whatever the journey changes on the server. If a
+  step fails in that run, coverage is unavailable and the capture still
+  completes.
+- Coverage runs in its own session after the performance samples, so it
+  doesn't change them.
+- Workers, iframes and scripts from other origins were not tested.
+- At most 100 scripts are mapped, and map fetching stops after 20 seconds.
+- agent-browser 0.38.1 has no coverage command, and neither does 0.38.2
+  (checked 2026-10-03). Observed connects its own DevTools client to the
+  address that `agent-browser get cdp-url` prints.
 
 ## Browser performance
 

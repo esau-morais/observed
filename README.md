@@ -147,6 +147,8 @@ The [project schema](src/project.ts) and
 - A journey's optional `collectors` list records more evidence after `steps`.
   Checks add the collectors they need. The
   [evidence kinds](src/evidence-kinds/index.ts) list what can be collected.
+  Every journey records which source lines ran, through a second run of the
+  journey; `{ "kind": "coverage", "enabled": false }` turns that off.
 - Sign in with a disposable account from committed seed data. `setup` doesn't
   receive fill variables, so commit the account with its password hash and
   pass the password through a fill variable, such as
@@ -188,12 +190,12 @@ regression.
   names. Vite 8 keeps them with
   `build: { rolldownOptions: { output: { keepNames: true } } }`, and Vite 7
   with `esbuild: { keepNames: true }`.
-- Observed points errors and React findings at source lines through source
-  maps. Build with `build: { sourcemap: 'hidden' }` in Vite, or your bundler's
+- Observed points errors and React findings at source lines, and counts
+  the lines that ran, through source maps. Build with `build: { sourcemap: 'hidden' }` in Vite, or your bundler's
   equivalent. Without a map, Observed matches a name only where the diff
   defines it, and otherwise records why it has no line.
 - The conditions that make each check unknown, and the Playwright,
-  performance and API collectors, are described in `docs/CONFIGURATION.md` in
+  performance, coverage and API collectors, are described in `docs/CONFIGURATION.md` in
   the Observed repository.
 
 ### Checks and collectors in detail

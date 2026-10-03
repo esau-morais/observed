@@ -102,12 +102,13 @@ Relations, strongest first:
 The wording and the rules for altered checks are in
 [PRODUCT.md](PRODUCT.md#change-scope).
 
-Coverage collectors supply the "exercised" relation. None is built. Probes on
-2026-09-29 showed that each source below returns execution counts.
+Coverage collectors supply the "exercised" relation. The browser collector is
+built, as [CONFIGURATION.md](CONFIGURATION.md#browser-coverage) describes.
+Probes on 2026-09-29 showed that each source below returns execution counts.
 
 | Runtime | How | Known limit |
 | --- | --- | --- |
-| Browser | agent-browser 0.38.1 has no coverage command. It prints the browser's DevTools address (`get cdp-url`), and a second DevTools client takes [precise coverage](https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#method-startPreciseCoverage) on the page | On the bundled React example, ranges resolved through the source map to the original files. One run with the second client and one without recorded the same 7 HAR entries and 2 React renders |
+| Browser | agent-browser 0.38.1 and 0.38.2 have no coverage command (checked 2026-10-03). It prints the browser's DevTools address (`get cdp-url`), and a second DevTools client takes [precise coverage](https://chromedevtools.github.io/devtools-protocol/tot/Profiler/#method-startPreciseCoverage) on the page | On the bundled React example, ranges resolved through the source map to the original files. One run with the second client and one without recorded the same 7 HAR entries and 2 React renders |
 | Node server | The same protocol through `--inspect` | Probed on a small JavaScript server. TypeScript and source maps are untested. `NODE_V8_COVERAGE` wrote nothing when the process was stopped with SIGTERM |
 | Bun server | Bun's inspector has no `Profiler` domain. `Runtime.enableControlFlowProfiler` and `Runtime.getBasicBlocks` report executed blocks when the server starts with `--inspect-wait` | Offsets are in Bun's transpiled output. Mapping them to source lines is untested, and Bun stays in scope only if it works |
 | Other runtimes | A collector per runtime | Not probed. Their files stay "not observed", with that reason |
@@ -117,8 +118,9 @@ Coverage collectors supply the "exercised" relation. None is built. Probes on
 - Attach to the page target by its address. The first page target can be the
   browser's own new-tab page.
 - Map ranges to source lines through source maps, then intersect them with the
-  changed lines. Today the capture fetches maps only for scripts that an error
-  frame or a React component names.
+  changed lines. A map that embeds a copy of a file different from the
+  snapshot gives no lines for that file, because its line numbers count the
+  lines of another text.
 - Run coverage in the separate browser session, never in the one that takes
   timing samples, because instrumentation changes timing.
 - Server coverage changes how the app starts. It applies only when the
