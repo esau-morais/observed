@@ -12,7 +12,11 @@ import {
   type CoverageRecord,
   type ScopeJourney,
 } from '../src/change-scope';
-import { scopeFileLines, scopeLine } from '../src/change-scope-text';
+import {
+  capturedFiles,
+  scopeFileLines,
+  scopeLine,
+} from '../src/change-scope-text';
 import {
   comparisonSchema,
   resultVersionProblem,
@@ -566,7 +570,11 @@ test('passing checks with a file not observed read as no regression in the named
         },
       ),
     ],
-    { kind: 'listed', projectDirectory: '.', files: [{ path: 'README.md', change: 'modified' }] },
+    {
+      kind: 'listed',
+      projectDirectory: '.',
+      files: [{ path: 'README.md', change: 'modified' }],
+    },
   );
   const passing = {
     ...result,
@@ -644,7 +652,9 @@ afterEach(async () => {
   );
 });
 
-test('Git lists working tree and untracked changes relative to the project directory', async () => {
+// A project in a subdirectory once showed `../DESIGN.md` and project-relative
+// paths; people read paths from the repository root.
+test('Git lists working tree and untracked changes relative to the project directory, and people read them from the repository root', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'observed-changes-'));
   directories.push(root);
   const git = (...args: string[]) =>
@@ -676,13 +686,28 @@ test('Git lists working tree and untracked changes relative to the project direc
 
   expect(changes).toEqual({
     kind: 'listed',
-    projectDirectory: '.',
+    projectDirectory: 'app',
     files: [
       { path: '../README.md', change: 'modified' },
       { path: 'new.ts', change: 'added' },
       { path: 'server.ts', change: 'modified' },
     ],
   });
+
+  const computed = scope(
+    [scenario({ 'server.ts': app }, { 'server.ts': changedApp })],
+    changes,
+  );
+  const scoped = { ...result, changeScope: computed };
+
+  expect(
+    scopeFileLines(scoped)
+      .slice(0, 3)
+      .map((line) => line.split(' ')[0]),
+  ).toEqual(['README.md', 'app/new.ts', 'app/server.ts']);
+  expect(capturedFiles(scoped).map((item) => item.path)).toEqual([
+    'app/server.ts',
+  ]);
 });
 
 test('an unknown base revision leaves the outside names unavailable', async () => {

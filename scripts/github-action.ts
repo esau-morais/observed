@@ -26,11 +26,12 @@ import {
   failing,
   permissionLines,
   titleJobCheck,
+  uploadImage,
   writeComment,
 } from './github-delivery';
+import { screenshotCrops } from './screenshot-crops';
 import {
   callSlack,
-  diffCrop,
   readSlackState,
   slackAction,
   slackMessage,
@@ -40,13 +41,14 @@ import {
   writeSlackState,
 } from './slack-delivery';
 import { describeRevision, shortSource } from '../src/provenance-text';
-import { describeVisual } from '../src/visual-text';
+import { visualChange } from '../src/visual-text';
 import {
+  capturedFiles,
   recipeLabels,
   recipeLine,
   recipeLines,
-  scopeFileLines,
   scopeLine,
+  scopeNotes,
 } from '../src/change-scope-text';
 import {
   checkSummary,
@@ -297,7 +299,7 @@ function passedChecks(result: Comparison): string | null {
   }
 
   return collapsed(
-    `${toneSymbols.checked} ${passed.length} ${passed.length === 1 ? 'check' : 'checks'} passed`,
+    `${toneSymbols.checked} What the passing checks covered`,
     [
       ...passed.slice(0, listedChecks).map(({ journey, check }) => {
         const where =
@@ -327,19 +329,69 @@ function recipeList(result: Comparison): string | null {
     : lines.map((line) => `- ${inlineText(line)}`).join('\n');
 }
 
+// Only files inside the captured source, by their path from the repository
+// root. The scope line counts the rest.
 function scopeFiles(result: Comparison): string | null {
-  const lines = scopeFileLines(result);
+  const files = capturedFiles(result);
+  const notes = scopeNotes(result);
+
+  if (files.length + notes.length === 0) {
+    return null;
+  }
+
+  return [
+    ...files
+      .slice(0, listedFiles)
+      .map(
+        (file) =>
+          `- ${code(file.path)}${file.change === 'modified' ? '' : ` (${file.change})`} · ${inlineText(`${file.relation}. ${file.detail}`)}`,
+      ),
+    ...(files.length > listedFiles
+      ? [`- ${files.length - listedFiles} more in the report.`]
+      : []),
+    ...notes.map((note) => `- ${inlineText(note)}`),
+  ].join('\n');
+}
+
+// Where the before, after and difference crops can be seen. An image is
+// shown inline; a link opens the uploaded file.
+export type Screenshots = {
+  image: string | null;
+  link: string | null;
+  note: string | null;
+};
+
+const cropsAlt = 'Before, after and changed pixels, left to right';
+
+function screenshotSection(
+  result: Comparison,
+  screenshots: Screenshots | null,
+): string | null {
+  const lines = result.journeys.flatMap((journey) => {
+    const change =
+      journey.comparison.kind === 'available'
+        ? visualChange(journey.comparison.visual)
+        : null;
+
+    return change === null
+      ? []
+      : [
+          `**Screenshots${result.journeys.length === 1 ? '' : ` · ${inlineText(journey.title)}`}** · ${inlineText(change)} An observation, not a check.`,
+        ];
+  });
+  const image = httpsUrl(screenshots?.image);
+  const file = httpsUrl(screenshots?.link);
 
   if (lines.length === 0) {
     return null;
   }
 
   return [
-    ...lines.slice(0, listedFiles).map((line) => `- ${inlineText(line)}`),
-    ...(lines.length > listedFiles
-      ? [`- ${lines.length - listedFiles} more in the report.`]
-      : []),
-  ].join('\n');
+    ...lines,
+    ...(image === null
+      ? extra(file === null ? null : `[${cropsAlt}](${file})`)
+      : [`![${cropsAlt}](${image})`]),
+  ].join('\n\n');
 }
 
 function unchanged(result: Comparison): string | null {
@@ -365,7 +417,7 @@ function unchanged(result: Comparison): string | null {
       : []),
   ];
 
-  return items.length === 0 ? null : `Unchanged: ${items.join(', ')}.`;
+  return items.length === 0 ? null : `Unchanged: ${items.join(', ')}`;
 }
 
 export function describeFailure(
@@ -440,6 +492,10 @@ export function pageMatchesRun(page: string, output: string | null): boolean {
 const httpsUrlSchema = Schema.String.check(
   Schema.isPattern(/^https:\/\/[^\s()<>[\]]+$/),
 );
+
+function httpsUrl(value: string | null | undefined): string | null {
+  return Option.getOrNull(Schema.decodeUnknownOption(httpsUrlSchema)(value));
+}
 
 export type Summary = {
   markdown: string;
@@ -572,6 +628,7 @@ export type SummaryOptions = {
   surface: Surface;
   repository?: string | null;
   delivery?: string | null;
+  screenshots?: Screenshots | null;
   run?: string | null;
   download?: string | null;
   sourceBuild?: { commit: string | null } | null;
@@ -623,15 +680,6 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         )
       : [],
   );
-  const visuals = result.journeys.flatMap((journey) =>
-    journey.comparison.kind === 'available' &&
-    (journey.comparison.visual.kind === 'changed' ||
-      journey.comparison.visual.kind === 'size-differs')
-      ? [
-          `Screenshots${result.journeys.length === 1 ? '' : ` (${inlineText(journey.title)})`}: ${inlineText(describeVisual(journey.comparison.visual))} An observation, not a check.`,
-        ]
-      : [],
-  );
   const limitations = [
     ...new Set(result.journeys.flatMap((journey) => journey.limitations)),
   ];
@@ -673,16 +721,15 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
-    ...extra(scopeFiles(result)),
-    ...extra(recipeList(result)),
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
-    ...extra(unchanged(result)),
-    ...visuals,
-    ...extra(passedChecks(result)),
+    ...extra(screenshotSection(result, options.screenshots ?? null)),
+    ...extra(scopeFiles(result)),
+    ...extra(recipeList(result)),
     page === null
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
+    ...extra(passedChecks(result)),
     ...(open.length === 0 && kind !== 'unavailable'
       ? []
       : [
@@ -700,6 +747,13 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       'Run details and limits',
       [
         ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
+        ...extra(unchanged(result)),
+        ...extra(
+          options.screenshots?.note === undefined ||
+            options.screenshots.note === null
+            ? null
+            : inlineText(options.screenshots.note),
+        ),
         ...limitations.map(inlineText),
         ...(page === null
           ? []
@@ -1043,52 +1097,67 @@ export function candidateIdentity(
 }
 
 const imageNotes = {
-  uploaded: 'Slack: added the changed pixels to the thread',
+  uploaded: 'Slack: added the screenshot crops to the thread',
   'missing-scope': 'Slack: no image, because the Slack app lacks files:write',
   mismatch:
-    'Slack: no image, because the diff image does not match its recorded hash',
+    'Slack: no image, because a screenshot does not match its recorded hash',
   none: null,
 } satisfies Record<string, string | null>;
 
-// The largest changed region of the first journey whose screenshots changed,
-// cut from the diff image only when its bytes still match the result's hash.
-async function changedPixels(run: {
-  directory: string;
-  result: Comparison;
-}): Promise<
-  | { kind: 'crop'; bytes: Uint8Array; altText: string }
-  | { kind: 'mismatch' }
-  | { kind: 'none' }
-> {
-  for (const journey of run.result.journeys) {
-    const visual =
-      journey.comparison.kind === 'available'
-        ? journey.comparison.visual
-        : null;
-
-    if (visual?.kind === 'changed') {
-      const bytes = await readFile(path.join(run.directory, visual.diff.path));
-      const [largest] = visual.regions;
-
-      if (sha256(bytes) !== visual.diff.sha256) {
-        return { kind: 'mismatch' };
-      }
-
-      const crop = diffCrop(bytes, largest);
-
-      if (crop === null) {
-        return { kind: 'none' };
-      }
-
-      return {
-        kind: 'crop',
-        bytes: crop,
-        altText: `Changed pixels: the largest of ${visual.regionCount} ${visual.regionCount === 1 ? 'region' : 'regions'}, ${largest.width} by ${largest.height} pixels`,
-      };
-    }
+// The `comment` input. The modes docs/PRODUCT.md plans next, quiet and
+// mention, are not accepted yet.
+export function commentMode(value: string): {
+  mode: 'always' | 'off';
+  problem: string | null;
+} {
+  if (value === '' || value === 'always' || value === 'off') {
+    return { mode: value === 'off' ? 'off' : 'always', problem: null };
   }
 
-  return { kind: 'none' };
+  return {
+    mode: 'always',
+    problem: `The comment input accepts always or off, not ${JSON.stringify(value.slice(0, 40))}. The comment is posted.`,
+  };
+}
+
+// An earlier step uploaded the crops as a workflow artifact. A user token
+// also uploads them for the comment to show; any failure keeps the link and
+// says why.
+async function deliveredScreenshots(options: {
+  trusted: boolean;
+  path: string;
+  link: string;
+  token: string;
+}): Promise<Screenshots | null> {
+  if (!options.trusted || options.path === '') {
+    return null;
+  }
+
+  const link = options.link === '' ? null : options.link;
+
+  if (options.token === '') {
+    return { image: null, link, note: null };
+  }
+
+  try {
+    return {
+      image: await uploadImage({
+        server: environment('GITHUB_SERVER_URL'),
+        token: options.token,
+        repositoryId: environment('GITHUB_REPOSITORY_ID'),
+        name: path.basename(options.path),
+        bytes: await readFile(options.path),
+      }),
+      link,
+      note: null,
+    };
+  } catch (error) {
+    return {
+      image: null,
+      link,
+      note: `The comment does not show the screenshot crops. ${error instanceof DeliveryError ? `${error.message}.` : 'An unexpected error.'}`,
+    };
+  }
 }
 
 function link(label: string, url: string | null): string | null {
@@ -1107,6 +1176,10 @@ async function writeOutput(name: string, value: string) {
 
 function environment(name: string): string {
   return process.env[name] ?? '';
+}
+
+function emptyAsNull(value: string): string | null {
+  return value === '' ? null : value;
 }
 
 function repositoryUrl(): string | null {
@@ -1283,11 +1356,6 @@ if (import.meta.main) {
     const output = await readOptional(resultFile);
     const repository = repositoryUrl();
     const context = runContext({ exitCode, artifact, page });
-    const summary = summarize({
-      output,
-      ...context,
-      surface: { kind: 'comment' },
-    });
     const headSha = environment('OBSERVED_HEAD_SHA');
     const decoded =
       output === null
@@ -1336,6 +1404,19 @@ if (import.meta.main) {
         ? { ...workflow, token: signer.token, botLogin: signer.login }
         : workflow;
     const notes: string[] = [];
+    const comment = commentMode(environment('OBSERVED_COMMENT'));
+    const commenting = pullRequestNumber !== null && comment.mode === 'always';
+
+    if (comment.problem !== null) {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(comment.problem)}\n`,
+      );
+      notes.push(comment.problem);
+    }
+
+    if (pullRequestNumber !== null && comment.mode === 'off') {
+      notes.push('No comment, because the comment input is off');
+    }
 
     if (signer.kind === 'workflow' && signer.problem !== null) {
       process.stdout.write(
@@ -1354,14 +1435,41 @@ if (import.meta.main) {
       await finish(
         [
           { name: 'check title', outcome: mismatch },
-          ...(pullRequestNumber === null
-            ? []
-            : [{ name: 'comment', outcome: mismatch }]),
+          ...(commenting ? [{ name: 'comment', outcome: mismatch }] : []),
         ],
         notes,
       );
       process.exit(0);
     }
+
+    const screenshots = await deliveredScreenshots({
+      trusted:
+        Option.isSome(decoded) &&
+        context.exitCode ===
+          conclusionExitCodes[decoded.value.result.conclusion.kind],
+      path: environment('OBSERVED_CROPS_PATH'),
+      link: environment('OBSERVED_CROPS_URL'),
+      token: source === 'fork' ? '' : environment('OBSERVED_IMAGE_TOKEN'),
+    });
+
+    if (screenshots?.note !== null && screenshots?.note !== undefined) {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(screenshots.note)}\n`,
+      );
+      notes.push(screenshots.note);
+    } else if (screenshots?.image !== null && screenshots?.image !== undefined) {
+      notes.push('Showed the screenshot crops in the comment');
+    }
+
+    await writeOutput('image', screenshots?.image ?? '');
+    await writeOutput('image-note', screenshots?.note ?? '');
+
+    const summary = summarize({
+      output,
+      ...context,
+      screenshots,
+      surface: { kind: 'comment' },
+    });
 
     // Slack failures are notes, not items.
     const attempt = async <A>(
@@ -1413,8 +1521,7 @@ if (import.meta.main) {
 
     const name = checkName(artifact);
     const marker = commentMarker(artifact);
-    const canComment =
-      pullRequestNumber !== null && source !== 'fork' && commenter.token !== '';
+    const canComment = commenting && source !== 'fork' && commenter.token !== '';
     const lookup = canComment
       ? await (async () => {
           try {
@@ -1524,14 +1631,14 @@ if (import.meta.main) {
 
           if (posted && trusted !== null && slackImages) {
             const uploaded = await attempt('The Slack image', async () => {
-              const image = await changedPixels(trusted);
+              const image = await screenshotCrops(trusted);
 
-              return image.kind === 'crop'
+              return image.kind === 'image'
                 ? uploadSlackImage(slackToken, {
                     channel: sent.channel,
                     threadTs: sent.ts,
-                    filename: 'observed-changed-pixels.png',
-                    title: 'Changed pixels',
+                    filename: 'observed-screenshots.png',
+                    title: 'Before, after and changed pixels',
                     altText: image.altText,
                     bytes: image.bytes,
                   })
@@ -1548,7 +1655,7 @@ if (import.meta.main) {
 
     const items: DeliveryItem[] = [];
 
-    if (pullRequestNumber !== null) {
+    if (commenting) {
       items.push({
         name: 'comment',
         outcome:
@@ -1587,6 +1694,7 @@ if (import.meta.main) {
             markdown: summarize({
               output,
               ...context,
+              screenshots,
               surface: { kind: 'check' },
               delivery: deliveryLine(
                 titled({ kind: 'posted', url: null }),
@@ -1602,11 +1710,39 @@ if (import.meta.main) {
         } satisfies Delivered);
 
     await finish(titled(title), notes);
+  } else if (command === 'crops' && args.length === 2) {
+    const [resultFile = '', output = ''] = args;
+    const decoded = Schema.decodeUnknownOption(runOutputSchema)(
+      await readOptional(resultFile),
+    );
+    const crops = Option.isNone(decoded)
+      ? ({ kind: 'none' } as const)
+      : await screenshotCrops(decoded.value);
+
+    if (crops.kind === 'mismatch') {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand('No screenshot crops: a screenshot does not match its recorded hash.')}\n`,
+      );
+    }
+
+    if (crops.kind === 'image') {
+      await writeFile(output, crops.bytes, { flag: 'wx' });
+      await writeOutput('path', output);
+    }
   } else if (command === 'summary' && args.length === 4) {
     const [resultFile = '', exitCode = '', artifact = '', page = ''] = args;
+    const crops = environment('OBSERVED_CROPS_PATH');
     const summary = summarize({
       output: await readOptional(resultFile),
       ...runContext({ exitCode, artifact, page }),
+      screenshots:
+        crops === ''
+          ? null
+          : {
+              image: emptyAsNull(environment('OBSERVED_IMAGE')),
+              link: emptyAsNull(environment('OBSERVED_CROPS_URL')),
+              note: emptyAsNull(environment('OBSERVED_IMAGE_NOTE')),
+            },
       surface: { kind: 'job' },
       delivery: jobDelivery(environment('OBSERVED_DELIVERY_NOTE')),
     });
@@ -1621,7 +1757,7 @@ if (import.meta.main) {
     await writeOutput('trusted', String(summary.trusted));
   } else {
     process.stderr.write(
-      'Usage: github-action.ts preflight <project> | page <report-directory> <result.json> <output.html> | summary|deliver <result.json> <exit-code> <artifact-name> <page-url>\n',
+      'Usage: github-action.ts preflight <project> | page <report-directory> <result.json> <output.html> | crops <result.json> <output.png> | summary|deliver <result.json> <exit-code> <artifact-name> <page-url>\n',
     );
     process.exit(64);
   }

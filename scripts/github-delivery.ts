@@ -214,3 +214,78 @@ export async function writeComment(
 
   return written.html_url;
 }
+
+const uploadedAsset = Schema.Struct({
+  url: Schema.String.check(Schema.isPattern(/^https:\/\/[^\s()<>[\]]+$/)),
+});
+
+// GitHub documents no API that adds an image to a comment. This is the
+// endpoint behind gh's --attach (cli/cli v2.99.0 and later,
+// internal/attachments/client.go, checked 2026-10-03). It accepts OAuth,
+// personal access and user-to-server tokens with write access, and answers
+// 404 to installation tokens and GITHUB_TOKEN (cli/cli#14309).
+export async function uploadImage(image: {
+  server: string;
+  token: string;
+  repositoryId: string;
+  name: string;
+  bytes: Uint8Array;
+}): Promise<string> {
+  const fail = (message: string, status: number | null) =>
+    new DeliveryError({ message, status, permissions: null });
+
+  if (image.server !== 'https://github.com') {
+    throw fail('Inline images need github.com', null);
+  }
+
+  if (!/^\d+$/.test(image.repositoryId)) {
+    throw fail('The runner gave no repository ID', null);
+  }
+
+  const url = new URL('https://uploads.github.com/user-attachments/assets');
+
+  url.searchParams.set('name', image.name);
+  url.searchParams.set('content_type', 'image/png');
+  url.searchParams.set('repository_id', image.repositoryId);
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${image.token}`,
+        'Content-Type': 'application/octet-stream',
+      },
+      body: new Blob([Buffer.from(image.bytes)]),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    throw fail('The image upload did not answer', null);
+  }
+
+  if (response.status === 404) {
+    throw fail(
+      'GitHub refused the image upload with HTTP 404. It accepts only a user token with write access to this repository',
+      404,
+    );
+  }
+
+  if (!response.ok) {
+    throw fail(
+      `The image upload answered HTTP ${String(response.status)}`,
+      response.status,
+    );
+  }
+
+  const decoded = Schema.decodeUnknownOption(uploadedAsset)(
+    await response.json().catch(() => null),
+  );
+
+  if (Option.isNone(decoded)) {
+    throw fail('The image upload answered unexpectedly', response.status);
+  }
+
+  return decoded.value.url;
+}

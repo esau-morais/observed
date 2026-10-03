@@ -28,6 +28,12 @@ inputs:
   github-token:
     description: Token that titles this job's check with the result and posts the pull request comment. The workflow needs checks write and pull-requests write permissions.
     default: ${{ github.token }}
+  comment:
+    description: always posts or updates one comment on the pull request. off posts none; the job's check and summary still carry the result, and Slack, which keeps its message ID in the comment, posts a new message for each failing run.
+    default: always
+  image-upload-token:
+    description: "Optional. A personal access token or OAuth token of a user with write access to the repository. With it, the comment shows the screenshot crops instead of linking them. GitHub refuses this upload for github-token and GitHub App tokens. The image shows page content and is uploaded as that user. Pass it from a repository secret."
+    default: ''
   github-app-client-id:
     description: Optional. Client ID of a GitHub App with Pull requests write access. With github-app-private-key, the App signs the pull request comment instead of github-actions.
     default: ''
@@ -41,7 +47,7 @@ inputs:
     description: ID of the Slack channel to post to, such as C0123456789. Invite the bot to it first.
     default: ''
   slack-images:
-    description: 'true posts the largest changed screenshot region in the thread of a failing Slack message. The image shows page content, including text. Needs the files:write scope; without it the message is posted without the image.'
+    description: 'true posts the screenshot crops, before, after and changed pixels around the largest changed region, in the thread of a failing Slack message. The image shows page content, including text. Needs the files:write scope; without it the message is posted without the image.'
     default: 'false'
   job-outcome:
     description: Deprecated and ignored. The job's own check carries the result, so the job fails whenever the result fails or is unavailable.
@@ -150,6 +156,30 @@ runs:
         archive: false
         retention-days: ${{ inputs.retention-days }}
 
+    - name: Crop the changed screenshots
+      id: crops
+      if: always() && steps.observe.outputs.bundle != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        OBSERVED_BUNDLE: ${{ steps.observe.outputs.bundle }}
+        OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
+        OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
+      run: |
+        crops="$(mktemp -d "$RUNNER_TEMP/observed-crops-XXXXXX")/$OBSERVED_ARTIFACT-screenshots.png"
+        bun "$OBSERVED_SCRIPT" crops "$OBSERVED_BUNDLE/result.json" "$crops"
+
+    # One file, so GitHub opens the PNG in the browser instead of a zip.
+    - name: Upload the screenshot crops
+      id: upload-crops
+      if: always() && steps.crops.outputs.path != ''
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        path: ${{ steps.crops.outputs.path }}
+        archive: false
+        retention-days: ${{ inputs.retention-days }}
+
     - name: Upload the evidence bundle
       if: always() && steps.observe.outputs.bundle != ''
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -194,6 +224,10 @@ runs:
         OBSERVED_SLACK_BOT_TOKEN: ${{ inputs.slack-bot-token }}
         OBSERVED_SLACK_CHANNEL: ${{ inputs.slack-channel }}
         OBSERVED_SLACK_IMAGES: ${{ inputs.slack-images }}
+        OBSERVED_COMMENT: ${{ inputs.comment }}
+        OBSERVED_CROPS_PATH: ${{ steps.crops.outputs.path }}
+        OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}
+        OBSERVED_IMAGE_TOKEN: ${{ inputs.image-upload-token }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: bun "$OBSERVED_SCRIPT" deliver "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 
@@ -207,6 +241,10 @@ runs:
         OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
         OBSERVED_PAGE_URL: ${{ steps.upload-page.outputs.artifact-url }}
         OBSERVED_DELIVERY_NOTE: ${{ steps.deliver.outputs.note }}
+        OBSERVED_CROPS_PATH: ${{ steps.crops.outputs.path }}
+        OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}
+        OBSERVED_IMAGE: ${{ steps.deliver.outputs.image }}
+        OBSERVED_IMAGE_NOTE: ${{ steps.deliver.outputs.image-note }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: bun "$OBSERVED_SCRIPT" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 
