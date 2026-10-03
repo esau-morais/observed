@@ -10,7 +10,7 @@ import type {
   MapEvidence,
   Side,
 } from './comparison-model';
-import { addedLines, type CoverageRecord } from './change-scope';
+import { addedLines, ranges, type CoverageRecord } from './change-scope';
 
 // The verified text of a snapshot's files and the directory that holds them
 // on disk, which import resolution reads.
@@ -80,52 +80,95 @@ const configSchema = Schema.Struct({
 
 type Aliases = { exact: Set<string>; prefixes: string[] };
 
-// The `paths` aliases in the snapshot's tsconfig and jsconfig files. A bare
-// specifier is resolved only when it matches one: resolving a package name
-// makes Bun install a package it cannot find (Bun 1.4.2, checked 2026-10-03).
-function aliasesOf(files: ReadonlyMap<string, string>): Aliases {
+const configName = /(?:^|\/)(tsconfig|jsconfig)\.json$/;
+
+function configAliases(text: string): Aliases {
   const aliases: Aliases = { exact: new Set(), prefixes: [] };
+  let parsed: unknown;
 
-  for (const [file, text] of files) {
-    if (!/(?:^|\/)[tj]sconfig(?:\.[^/]*)?\.json$/.test(file)) {
-      continue;
-    }
+  try {
+    parsed = Bun.JSONC.parse(text);
+  } catch {
+    return aliases;
+  }
 
-    let parsed: unknown;
+  const config = Schema.decodeUnknownOption(configSchema)(parsed);
+  const keys = Option.match(config, {
+    onNone: () => [],
+    onSome: (value) => Object.keys(value.compilerOptions?.paths ?? {}),
+  });
 
-    try {
-      parsed = Bun.JSONC.parse(text);
-    } catch {
-      continue;
-    }
+  for (const key of keys) {
+    const star = key.indexOf('*');
 
-    const config = Schema.decodeUnknownOption(configSchema)(parsed);
-    const keys = Option.match(config, {
-      onNone: () => [],
-      onSome: (value) => Object.keys(value.compilerOptions?.paths ?? {}),
-    });
-
-    for (const key of keys) {
-      const star = key.indexOf('*');
-
-      // A wildcard alias counts only up to a slash, so a key such as `@*`
-      // cannot send scoped package names to the resolver.
-      if (star === -1) {
-        aliases.exact.add(key);
-      } else if (star > 1 && key[star - 1] === '/') {
-        aliases.prefixes.push(key.slice(0, star));
-      }
+    // A wildcard alias counts only when `*` follows a slash, as in `@/*`, so
+    // a key such as `@*` cannot send scoped package names to the resolver.
+    if (star === -1) {
+      aliases.exact.add(key);
+    } else if (star > 1 && key[star - 1] === '/') {
+      aliases.prefixes.push(key.slice(0, star));
     }
   }
 
   return aliases;
 }
 
-function isAlias(aliases: Aliases, specifier: string): boolean {
-  return (
-    aliases.exact.has(specifier) ||
-    aliases.prefixes.some((prefix) => specifier.startsWith(prefix))
-  );
+// The `paths` aliases of each directory's tsconfig.json, or jsconfig.json
+// when it has none. A bare specifier is resolved only when it matches an
+// alias of the config nearest the importing file, the one Bun reads:
+// resolving a package name makes Bun install a package it cannot find (Bun
+// 1.4.2, checked 2026-10-03).
+function aliasesOf(files: ReadonlyMap<string, string>): Map<string, Aliases> {
+  const configs = new Map<string, Aliases>();
+
+  for (const [file, text] of [...files].sort(([left], [right]) =>
+    left < right ? -1 : Number(left > right),
+  )) {
+    const match = configName.exec(file);
+
+    if (match === null) {
+      continue;
+    }
+
+    const directory = directoryOf(file);
+
+    if (!configs.has(directory) || match[1] === 'tsconfig') {
+      configs.set(directory, configAliases(text));
+    }
+  }
+
+  return configs;
+}
+
+function directoryOf(file: string): string {
+  const index = file.lastIndexOf('/');
+
+  return index === -1 ? '' : file.slice(0, index);
+}
+
+function isAlias(
+  configs: ReadonlyMap<string, Aliases>,
+  file: string,
+  specifier: string,
+): boolean {
+  let directory = directoryOf(file);
+
+  for (;;) {
+    const aliases = configs.get(directory);
+
+    if (aliases !== undefined) {
+      return (
+        aliases.exact.has(specifier) ||
+        aliases.prefixes.some((prefix) => specifier.startsWith(prefix))
+      );
+    }
+
+    if (directory === '') {
+      return false;
+    }
+
+    directory = directoryOf(directory);
+  }
 }
 
 function resolveIn(
@@ -190,7 +233,7 @@ export function snapshotImports(
     const unresolved: string[] = [];
 
     for (const specifier of new Set(specifiers)) {
-      const local = isRelative(specifier) || isAlias(aliases, specifier);
+      const local = isRelative(specifier) || isAlias(aliases, file, specifier);
       const resolved = local ? resolveIn(real, file, specifier) : null;
 
       if (resolved !== null) {
@@ -218,6 +261,10 @@ function blockImports(
   return read.kind === 'scanned'
     ? { kind: 'scanned', unresolved: read.unresolved }
     : read;
+}
+
+function lineRanges(lines: readonly number[] | null | undefined) {
+  return lines === null || lines === undefined ? null : ranges(lines);
 }
 
 const fileId = (file: string) => `file:${file}`;
@@ -563,6 +610,9 @@ export function changeMap({
       kind: 'file',
       path: file,
       changed: changedPaths.has(file),
+      changedLines: changedPaths.has(file)
+        ? lineRanges(changedLines.get(file))
+        : [],
       imports: blockImports(read),
     };
   });
@@ -573,6 +623,7 @@ export function changeMap({
       kind: 'file',
       path: file.path,
       changed: true,
+      changedLines: null,
       imports: {
         kind: 'unavailable',
         reason: 'Neither source snapshot contains this file.',

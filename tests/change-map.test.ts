@@ -152,14 +152,13 @@ test('a journey connects to a changed file only through a finding or coverage th
     },
   );
 
-  expect(
-    withoutEvidence.connections
-      .filter(
-        (item) =>
-          item.to === 'file:src/App.jsx' || item.from === 'file:src/App.jsx',
-      )
-      .every((item) => item.kind === 'imports'),
-  ).toBe(true);
+  const touching = withoutEvidence.connections.filter(
+    (item) =>
+      item.to === 'file:src/App.jsx' || item.from === 'file:src/App.jsx',
+  );
+
+  expect(touching).not.toHaveLength(0);
+  expect(touching.every((item) => item.kind === 'imports')).toBe(true);
 
   const withFinding = await build(recorded);
 
@@ -225,13 +224,15 @@ test('a not-observed file never renders as passed or checked', () => {
 
 // Resolving a package name makes Bun install it, so bare names other than
 // the snapshot's own aliases must never reach the resolver.
-test('bare package names never reach the resolver, and aliases resolve inside the snapshot', async () => {
+test('bare package names never reach the resolver, and only the nearest config supplies aliases', async () => {
   const resolve = vi.spyOn(Bun, 'resolveSync');
   const imports = snapshotImports(
     await snapshot({
       'tsconfig.json':
         '{ // aliases\n "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"], "@*": ["x/*"] } } }',
-      'web/jsconfig.json': '{ not json',
+      'web/jsconfig.json':
+        '{ "compilerOptions": { "paths": { "left-pad": ["./pad.js"] } } }',
+      'docs/tsconfig.json': '{ not json',
       'src/a.ts':
         "import pad from 'left-pad';\nimport { b } from '@/b';\nimport { c } from '@scope/c';\nimport { d } from './missing';\nexport const a = pad + b + c + d;\n",
       'src/b.ts': 'export const b = 1;\n',

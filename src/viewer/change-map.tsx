@@ -277,7 +277,7 @@ const styles = stylex.create({
     strokeLinejoin: 'round',
     strokeWidth: 4,
   },
-  removed: { strokeDasharray: '3 3' },
+  removed: { strokeDasharray: '1 5', strokeLinecap: 'round' },
   imports: { color: colors.linkImports, stroke: colors.linkImports },
   'ran-in': {
     color: colors.linkRanIn,
@@ -508,11 +508,22 @@ function ranges(list: readonly (readonly [number, number])[]): string {
     .join(', ');
 }
 
-function FileFacts({ file }: { file: ScopeFile }) {
+function FileFacts({ file, block }: { file: ScopeFile; block: MapBlock }) {
+  const changed = block.kind === 'file' ? block.changedLines : null;
+  let changedText =
+    'Changed lines: unknown, because the snapshots could not be compared.';
+
+  if (changed !== null && changed.length === 0) {
+    changedText = 'The change adds no line to this file.';
+  } else if (changed !== null) {
+    changedText = `Changed lines: ${ranges(changed)}.`;
+  }
+
   return (
     <>
       <p {...stylex.props(styles.small)}>Changed file · {file.change}</p>
       <Chip chip={relationChip(file.relation)} />
+      <p {...stylex.props(styles.text)}>{changedText}</p>
       {'lines' in file ? (
         <p {...stylex.props(styles.text)}>
           Changed lines that ran: {lineCount(file.lines.ran)}
@@ -574,7 +585,7 @@ function BlockPanel({
         </p>
       ) : (
         <>
-          <FileFacts file={file} />
+          <FileFacts file={file} block={block} />
           <p {...stylex.props(styles.text)}>{fileDetail(result, file)}</p>
         </>
       )}
@@ -990,6 +1001,17 @@ function MapCanvas({
                 (focus !== null && touches) || connection === selectedConnection
                   ? connectionShort(connection)
                   : '';
+              // Connections between the same two blocks share a midpoint, so
+              // their labels stack instead of overlapping.
+              const stacked = shownConnections
+                .filter(
+                  (other) =>
+                    (other.from === connection.from &&
+                      other.to === connection.to) ||
+                    (other.from === connection.to &&
+                      other.to === connection.from),
+                )
+                .indexOf(connection);
 
               return from === undefined || to === undefined ? null : (
                 <g key={map.connections.indexOf(connection)}>
@@ -1006,7 +1028,7 @@ function MapCanvas({
                   {label === '' ? null : (
                     <text
                       x={(from.x + from.width / 2 + to.x + to.width / 2) / 2}
-                      y={(from.y + from.height + to.y) / 2}
+                      y={(from.y + from.height + to.y) / 2 + stacked * 14}
                       textAnchor="middle"
                       dominantBaseline="middle"
                       {...stylex.props(styles.edgeLabel)}

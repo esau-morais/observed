@@ -132,6 +132,7 @@ Each connection type has its own color and line pattern, so the type survives wi
 | Requested | #80570F | #E1C17A | Dot 2 4 |
 | Threw at | #8E3B63 | #EBA3C4 | Dash-dot 9 3 2 3 |
 | Checked by | #3D4F99 | #AFC0F5 | Long dash 14 4 |
+| Import the change removed | Imports color | Imports color | Round dots 1 5 |
 
 ### Contrast baseline
 

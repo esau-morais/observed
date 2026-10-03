@@ -51,7 +51,6 @@ export const connectionLabels = {
   'checked-by': 'Checked by',
 } satisfies Record<MapConnection['kind'], string>;
 
-// What each connection type is drawn from.
 export const connectionSources = {
   imports: 'The static import graph of each snapshot',
   'ran-in': 'Execution coverage of the changed lines',
@@ -323,7 +322,7 @@ export function connectionShort(connection: MapConnection): string {
     case 'ran-in':
       return `${connection.ran} ran, ${connection.notRan} not`;
     case 'requested':
-      return `${connection.candidate.count}, base ${connection.base === null ? 'unknown' : connection.base.count}`;
+      return `${plural(connection.candidate.count, 'request', 'requests')}, base ${connection.base === null ? 'unknown' : connection.base.count}`;
     case 'threw-at':
       return `line ${connection.line}`;
     case 'checked-by':

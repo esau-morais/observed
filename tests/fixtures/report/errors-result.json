@@ -1623,6 +1623,10 @@
         "kind": "file",
         "path": "src/App.jsx",
         "changed": true,
+        "changedLines": [
+          [9, 12],
+          [29, 29]
+        ],
         "imports": {
           "kind": "scanned",
           "unresolved": []
@@ -1633,6 +1637,7 @@
         "kind": "file",
         "path": "src/api.js",
         "changed": false,
+        "changedLines": [],
         "imports": {
           "kind": "scanned",
           "unresolved": []
@@ -1643,6 +1648,7 @@
         "kind": "file",
         "path": "src/main.jsx",
         "changed": false,
+        "changedLines": [],
         "imports": {
           "kind": "scanned",
           "unresolved": []

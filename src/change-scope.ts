@@ -108,7 +108,7 @@ function unique<T>(values: Iterable<T>): T[] {
   return [...new Set(values)];
 }
 
-function ranges(numbers: Iterable<number>): LineRange[] {
+export function ranges(numbers: Iterable<number>): LineRange[] {
   const sorted = unique(numbers).sort((left, right) => left - right);
   const result: [number, number][] = [];
 

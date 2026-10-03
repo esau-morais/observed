@@ -150,7 +150,8 @@ viewer lays out and draws the map and never adds a block or a connection.
   Bun 1.4.2, resolving `left-pad` from a directory without it downloaded the
   package into Bun's cache. The comparator therefore resolves only relative
   specifiers and those matching a `paths` alias in a `tsconfig.json` or
-  `jsconfig.json` of the snapshot. A wildcard alias counts only up to a
+  `jsconfig.json` of the snapshot, taken from the config nearest the
+  importing file as Bun does. A wildcard alias counts only when `*` follows a
   slash, as in `@/*`, so a key such as `@*` cannot pass scoped package names
   to the resolver. It does not follow `extends`. Any other
   specifier is a package block named after the package.

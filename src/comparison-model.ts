@@ -537,6 +537,9 @@ const mapBlockSchema = Schema.Union([
     kind: Schema.Literal('file'),
     path: text,
     changed: Schema.Boolean,
+    // Candidate line numbers the change added, null when the snapshots could
+    // not be compared. Empty for an unchanged file or a removal.
+    changedLines: Schema.NullOr(Schema.Array(lineRangeSchema)),
     imports: Schema.Union([
       Schema.Struct({
         kind: Schema.Literal('scanned'),
