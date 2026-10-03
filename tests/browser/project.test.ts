@@ -189,8 +189,9 @@ async function rawCapture(
         ),
       )(line),
     );
+  // The server also answers the coverage session's repeat of the journey.
   expect(ledger).toEqual(
-    Array.from({ length: count }, () => ({ method, path: endpoint })),
+    Array.from({ length: count * 2 }, () => ({ method, path: endpoint })),
   );
   const manifest = await readJson(
     path.join(directory, 'capture.json'),
@@ -940,7 +941,9 @@ test.each([
     const fills = (await transcript(capture)).filter(
       (record) => record.args.at(-2) === 'batch',
     );
-    expect(fills).toHaveLength(1);
+    // The coverage session fills it again only after the journey's own
+    // session completed the step.
+    expect(fills).toHaveLength(exit === 0 ? 2 : 1);
 
     if (exit === 0) {
       expect(result.result.journeys[0].candidate.checks[0]?.outcome).toBe(
@@ -1189,7 +1192,8 @@ test('additional origins preserve previews and keep same-path request checks sep
       await cleanup(path.join(result.directory, 'journey-1', 'candidate'));
     }
 
-    expect(requests).toEqual(Array.from({ length: 4 }, () => 'POST /orders'));
+    // Four journeys, and a coverage repeat of the three that completed.
+    expect(requests).toEqual(Array.from({ length: 7 }, () => 'POST /orders'));
   } finally {
     await backend.stop(true);
   }
