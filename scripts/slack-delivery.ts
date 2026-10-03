@@ -98,9 +98,12 @@ function checkCount(result: Comparison): string {
       return `${count(['regression', 'failed'])} of ${total} ${noun} failed${unknown === 0 ? '' : `, ${unknown} unknown`}${notRun === 0 ? '' : `, ${notRun} not run`}`;
     }
     case 'unavailable': {
+      const unknown = count(['unknown']);
       const notRun = count(['not-run']);
 
-      return `${count(['unknown'])} of ${total} ${noun} unknown${notRun === 0 ? '' : `, ${notRun} not run`}`;
+      return unknown === 0
+        ? `${notRun} of ${total} ${noun} not run`
+        : `${unknown} of ${total} ${noun} unknown${notRun === 0 ? '' : `, ${notRun} not run`}`;
     }
     case 'no-regression':
     case 'not-checked':

@@ -1,5 +1,6 @@
-// Every status word Observed writes, with its one meaning. Label tables take
-// their words from here. docs/PRODUCT.md#report-behavior lists the same words.
+// Status words for checks, conclusions, captures and artifacts, each with one
+// meaning. Label tables take their words from here, and
+// docs/PRODUCT.md#report-behavior lists the same words.
 export const statusWords = {
   passed: {
     word: 'Passed',

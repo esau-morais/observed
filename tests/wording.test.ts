@@ -335,11 +335,17 @@ test('docs/PRODUCT.md lists every status word', async () => {
   const product = (
     await readFile(path.join(import.meta.dirname, '../docs/PRODUCT.md'), 'utf8')
   ).toLowerCase();
-  const listed = /\| dimension \| values \|\n[\s\S]*?\n\n/.exec(product)?.[0];
+  const table = /\| dimension \| values \|\n[\s\S]*?\n\n/.exec(product)?.[0];
+  const listed = new Set(
+    (table ?? '')
+      .split('\n')
+      .flatMap((row) => row.split('|')[2]?.split(',') ?? [])
+      .map((value) => value.trim().replace(/,.*$/, '')),
+  );
 
   expect(
     Object.values(statusWords)
       .map(({ word }) => word.toLowerCase())
-      .filter((word) => !(listed ?? '').includes(word)),
+      .filter((word) => !listed.has(word)),
   ).toEqual([]);
 });

@@ -116,15 +116,24 @@ export function resultCounts(result: Comparison): string {
   const word = (status: keyof typeof statusWords) =>
     statusWords[status].word.toLowerCase();
   const others = [
-    plural(count('regression'), word('regression'), `${word('regression')}s`),
-    `${count('failed')} ${word('failed')}`,
-    `${count('unknown')} ${word('unknown')}`,
-    `${count('not-run')} ${word('notRun')}`,
+    {
+      count: count('regression'),
+      text: (n: number) =>
+        plural(n, word('regression'), `${word('regression')}s`),
+    },
+    { count: count('failed'), text: (n: number) => `${n} ${word('failed')}` },
+    {
+      count: count('unknown'),
+      text: (n: number) => `${n} ${word('unknown')}`,
+    },
+    { count: count('not-run'), text: (n: number) => `${n} ${word('notRun')}` },
   ];
 
   return [
     `${plural(count('passed'), 'check', 'checks')} passed`,
-    ...others.filter((item) => !item.startsWith('0 ')),
+    ...others.flatMap((item) =>
+      item.count === 0 ? [] : [item.text(item.count)],
+    ),
   ].join(' · ');
 }
 

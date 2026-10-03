@@ -36,10 +36,10 @@ people find Observed useful, so the pilot stays a separate step.
 6. The repository map and agent descriptions
 7. Replay
 
-Gates 1 and 7 need item 1, gate 5 needs item 3, gate 3 needs items 1, 2 and
-5, and gate 10 needs item 4. Generated journeys need items 1 and 2, not item 4,
-so presentation work does not hold back gates 3, 5 and 7. Each item adds the
-gate corpus pairs for the gates it serves.
+Gate 7 needs item 1, gate 1 needs items 1 and 2, gate 5 needs item 3, gate 3
+needs items 1, 2 and 5, and gate 10 needs items 1 to 5. Generated journeys
+need items 1 and 2, not item 4, so presentation work does not hold back gates
+3, 5 and 7. Each item adds the gate corpus pairs for the gates it serves.
 
 ## MVP release gates
 
