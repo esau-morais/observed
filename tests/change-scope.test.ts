@@ -155,15 +155,37 @@ function anchoredFinding(
   };
 }
 
+// The evidence file in the shape the coverage collector writes.
+function coverageFile(
+  files: { path: string; executed: number[][]; unexecuted: number[][] }[],
+  excluded: { path: string; reason: string }[] = [],
+): string {
+  return JSON.stringify({
+    kind: 'coverage',
+    schemaVersion: 1,
+    value: {
+      files,
+      scripts: [
+        {
+          script: 'http://127.0.0.1:4010/assets/index.js',
+          kind: 'mapped',
+          files: [
+            ...files.map((file) => file.path),
+            ...excluded.map((file) => file.path),
+          ],
+          excluded,
+        },
+      ],
+    },
+  });
+}
+
 function coverageOf(
   name: string,
   executed: [number, number][],
   unexecuted: [number, number][],
 ): CoverageRecord {
-  return {
-    kind: 'recorded',
-    files: new Map([[name, { executed, unexecuted }]]),
-  };
+  return parseCoverage(coverageFile([{ path: name, executed, unexecuted }]));
 }
 
 const app = 'export function load() {\n  return 1;\n}\n';
@@ -374,11 +396,48 @@ test('server code that no journey covers is not observed', () => {
 });
 
 test('a malformed coverage file is unavailable, not empty coverage', () => {
-  expect(
-    parseCoverage('{"schemaVersion":1,"files":[{"path":"a.ts"}]}'),
-  ).toEqual(expect.objectContaining({ kind: 'unavailable' }));
-  expect(parseCoverage('{"schemaVersion":2,"files":[]}').kind).toBe(
+  expect(parseCoverage('{"schemaVersion":1,"files":[]}').kind).toBe(
     'unavailable',
+  );
+  expect(
+    parseCoverage(
+      coverageFile([{ path: 'a.ts', executed: [[3, 1]], unexecuted: [] }]),
+    ).kind,
+  ).toBe('unavailable');
+  expect(
+    parseCoverage(
+      coverageFile([]).replace('"schemaVersion":1', '"schemaVersion":2'),
+    ).kind,
+  ).toBe('unavailable');
+});
+
+test('a file whose lines coverage could not map says why, not that it never ran', () => {
+  const unmapped = file(
+    scope([
+      scenario(
+        { 'App.tsx': app },
+        { 'App.tsx': changedApp },
+        {
+          coverage: parseCoverage(
+            coverageFile(
+              [],
+              [
+                {
+                  path: 'App.tsx',
+                  reason: "The source map's copy differs from the snapshot",
+                },
+              ],
+            ),
+          ),
+        },
+      ),
+    ]),
+    'App.tsx',
+  );
+
+  expect(unmapped).toMatchObject({ relation: 'not-observed', basis: 'none' });
+  expect(unmapped.relation === 'not-observed' && unmapped.reason).toBe(
+    "Coverage could not map this file's lines: The source map's copy differs from the snapshot",
   );
 });
 

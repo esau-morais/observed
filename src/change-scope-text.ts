@@ -111,7 +111,7 @@ function fileDetail(result: Comparison, file: ScopeFile): string {
     return `${journeys} recorded ${basisWords[file.basis]} in this file.`;
   }
 
-  return file.reason;
+  return sentence(file.reason);
 }
 
 // One line per changed file, then any missing coverage or Git listing.

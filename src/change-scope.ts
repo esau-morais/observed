@@ -14,15 +14,35 @@ import { diffLines, lines } from './source-diff';
 
 export const coverageSchemaVersion = 1;
 
+// The evidence file the coverage collector writes. Replace with
+// evidenceKinds.coverage.file once that kind is registered.
 const coverageFileSchema = Schema.Struct({
+  kind: Schema.Literal('coverage'),
   schemaVersion: Schema.Literal(coverageSchemaVersion),
-  files: Schema.Array(
-    Schema.Struct({
-      path: text,
-      executed: Schema.Array(lineRangeSchema),
-      unexecuted: Schema.Array(lineRangeSchema),
-    }),
-  ),
+  value: Schema.Struct({
+    files: Schema.Array(
+      Schema.Struct({
+        path: text,
+        executed: Schema.Array(lineRangeSchema),
+        unexecuted: Schema.Array(lineRangeSchema),
+      }),
+    ),
+    scripts: Schema.Array(
+      Schema.Union([
+        Schema.Struct({
+          script: text,
+          kind: Schema.Literal('mapped'),
+          files: Schema.Array(text),
+          excluded: Schema.Array(Schema.Struct({ path: text, reason: text })),
+        }),
+        Schema.Struct({
+          script: text,
+          kind: Schema.Literal('unavailable'),
+          reason: text,
+        }),
+      ]),
+    ),
+  }),
 });
 
 type FileCoverage = {
@@ -31,8 +51,13 @@ type FileCoverage = {
 };
 
 // One journey's candidate coverage, keyed by path relative to the project.
+// `excluded` holds files a source map named whose lines could not be used.
 export type CoverageRecord =
-  | { kind: 'recorded'; files: ReadonlyMap<string, FileCoverage> }
+  | {
+      kind: 'recorded';
+      files: ReadonlyMap<string, FileCoverage>;
+      excluded: ReadonlyMap<string, string>;
+    }
   | { kind: 'unavailable'; reason: string };
 
 export function parseCoverage(input: string): CoverageRecord {
@@ -45,13 +70,22 @@ export function parseCoverage(input: string): CoverageRecord {
       kind: 'unavailable',
       reason: `The coverage file is malformed or not schema version ${coverageSchemaVersion}`,
     }),
-    onSome: (file) => ({
+    onSome: ({ value }) => ({
       kind: 'recorded',
       files: new Map(
-        file.files.map((entry) => [
+        value.files.map((entry) => [
           entry.path,
           { executed: entry.executed, unexecuted: entry.unexecuted },
         ]),
+      ),
+      excluded: new Map(
+        value.scripts.flatMap((script) =>
+          script.kind === 'mapped'
+            ? script.excluded.map(
+                (entry) => [entry.path, entry.reason] as const,
+              )
+            : [],
+        ),
       ),
     }),
   });
@@ -324,12 +358,21 @@ function capturedFile(
     return covered;
   }
 
+  const excludedReason = journeys
+    .map(({ coverage }) =>
+      coverage.kind === 'recorded'
+        ? coverage.excluded.get(identity.path)
+        : undefined,
+    )
+    .find((value) => value !== undefined);
   let reason: string;
 
   if (identity.change === 'removed') {
     reason = reasons.removed;
   } else if (covering.length > 0) {
     reason = changed === null ? reasons.linesUnknown : reasons.onlyRemoved;
+  } else if (excludedReason !== undefined) {
+    reason = `Coverage could not map this file's lines: ${excludedReason}`;
   } else if (!collectorRuns(identity.path)) {
     reason = reasons.fileType;
   } else if (journeys.some(({ coverage }) => coverage.kind === 'recorded')) {
