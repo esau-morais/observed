@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
-import { useState, type ReactNode } from 'react';
+import { createContext, use, useState, type ReactNode } from 'react';
 import type {
+  ChangeScope,
   CheckVerdict,
   Comparison,
   Journey,
@@ -497,6 +498,10 @@ function SectionStatusLine({ section }: { section: OutlineSection }) {
   );
 }
 
+// Lets a check's location read the run's change scope, which places it from
+// the repository root, without passing the scope through every section.
+const ChangeScopeContext = createContext<ChangeScope | undefined>(undefined);
+
 function Location({
   journey,
   check,
@@ -504,7 +509,7 @@ function Location({
   journey: Journey;
   check: CheckVerdict;
 }) {
-  const location = anchorLocation(journey, check);
+  const location = anchorLocation(journey, check, use(ChangeScopeContext));
 
   return location === null ? null : (
     <p {...stylex.props(styles.small)}>
@@ -1491,56 +1496,58 @@ export function ComparisonReport({ result }: { result: Comparison }) {
           </span>
           <ThemeControl {...theme} />
         </header>
-        <main id="report" tabIndex={-1} {...stylex.props(styles.layout)}>
-          <div {...stylex.props(styles.verdictArea)}>
-            <Verdict result={result} />
-          </div>
-          <div {...stylex.props(styles.railArea)}>
-            <div {...stylex.props(styles.wide)}>
-              <Rail outlines={outlines} journeys={result.journeys} />
+        <ChangeScopeContext value={result.changeScope}>
+          <main id="report" tabIndex={-1} {...stylex.props(styles.layout)}>
+            <div {...stylex.props(styles.verdictArea)}>
+              <Verdict result={result} />
             </div>
-            {/* Phones show the index collapsed so the lead evidence stays on
+            <div {...stylex.props(styles.railArea)}>
+              <div {...stylex.props(styles.wide)}>
+                <Rail outlines={outlines} journeys={result.journeys} />
+              </div>
+              {/* Phones show the index collapsed so the lead evidence stays on
             the first screen. */}
-            <details {...stylex.props(styles.narrow)}>
-              <summary {...stylex.props(styles.summary)}>
-                Sections
-                <span {...stylex.props(styles.railCount)}>
-                  {railSummary(outlines)}
-                </span>
-              </summary>
-              <Rail outlines={outlines} journeys={result.journeys} />
-            </details>
-          </div>
-          <div {...stylex.props(styles.bodyArea)}>
-            {result.mode === 'comparison' &&
-            result.changeScope.kind === 'recorded' ? (
-              <ChangeScopeView result={result} scope={result.changeScope} />
-            ) : null}
-            {result.journeys.map((journey, index) => {
-              const outline = outlines[index];
+              <details {...stylex.props(styles.narrow)}>
+                <summary {...stylex.props(styles.summary)}>
+                  Sections
+                  <span {...stylex.props(styles.railCount)}>
+                    {railSummary(outlines)}
+                  </span>
+                </summary>
+                <Rail outlines={outlines} journeys={result.journeys} />
+              </details>
+            </div>
+            <div {...stylex.props(styles.bodyArea)}>
+              {result.mode === 'comparison' &&
+              result.changeScope.kind === 'recorded' ? (
+                <ChangeScopeView result={result} scope={result.changeScope} />
+              ) : null}
+              {result.journeys.map((journey, index) => {
+                const outline = outlines[index];
 
-              return outline === undefined ? null : (
-                <JourneyView
-                  key={index}
-                  journey={journey}
-                  outline={outline}
-                  mode={result.mode}
-                  evaluatedAt={result.evaluatedAt}
-                  shown={[
-                    result.conclusion.text,
-                    headlineParts(result).subject,
-                  ]}
-                  index={index}
-                  multiple={multiple}
-                />
-              );
-            })}
-            <nav aria-label="Report files" {...stylex.props(styles.nav)}>
-              <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
-              <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
-            </nav>
-          </div>
-        </main>
+                return outline === undefined ? null : (
+                  <JourneyView
+                    key={index}
+                    journey={journey}
+                    outline={outline}
+                    mode={result.mode}
+                    evaluatedAt={result.evaluatedAt}
+                    shown={[
+                      result.conclusion.text,
+                      headlineParts(result).subject,
+                    ]}
+                    index={index}
+                    multiple={multiple}
+                  />
+                );
+              })}
+              <nav aria-label="Report files" {...stylex.props(styles.nav)}>
+                <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
+                <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
+              </nav>
+            </div>
+          </main>
+        </ChangeScopeContext>
         <footer {...stylex.props(styles.footer)}>
           Captured evidence · Select a screenshot to open it at full size.
         </footer>

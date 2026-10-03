@@ -16,7 +16,7 @@ afterEach(async () => {
   );
 });
 
-test('a crop keeps a changed region near the edge inside the screenshot', () => {
+test('a crop keeps a changed region inside the screenshot and at a size a comment can show', () => {
   expect(
     cropWindow(
       { width: 400, height: 300 },
@@ -29,6 +29,12 @@ test('a crop keeps a changed region near the edge inside the screenshot', () => 
       { x: 0, y: 0, width: 200, height: 100 },
     ),
   ).toEqual({ x: 0, y: 0, width: 200, height: 100 });
+  expect(
+    cropWindow(
+      { width: 1280, height: 4000 },
+      { x: 0, y: 0, width: 1280, height: 4000 },
+    ),
+  ).toEqual({ x: 160, y: 1680, width: 960, height: 640 });
 });
 
 function solid(value: number): Uint8Array {

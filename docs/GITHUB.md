@@ -14,7 +14,7 @@ Details of the GitHub Action. The
 | `artifact-name` | `observed-bundle` | Name of the uploaded bundle. The report page adds `.html`. Give each call its own name when a workflow runs the action more than once, such as in a matrix |
 | `retention-days` | `7` | Days GitHub keeps the artifacts |
 | `github-token` | `${{ github.token }}` | Token that titles the check and posts the comment |
-| `comment` | `always` | `always` posts one comment and edits it on later runs. `off` posts none; the check and job summary still carry the result |
+| `comment` | `always` | `always` posts one comment and edits it on later runs. `off` posts none; the check and job summary still carry the result. A comment posted before the switch stays until you delete it |
 | `image-upload-token` | empty | A user's token that shows the screenshot crops in the comment instead of linking them. See [Screenshots in the comment](#screenshots-in-the-comment) |
 | `github-app-client-id`, `github-app-private-key` | empty | Sign the comment with your own GitHub App |
 | `slack-bot-token`, `slack-channel`, `slack-images` | empty, empty, `false` | Post failures to Slack |
@@ -105,7 +105,7 @@ passes. Add a check to `observed.json` before you require the job.
 | Check title | The verdict line, such as `Regression: Median LCP 52 ms → 452 ms, at most 250 ms` |
 | Job summary and comment | The verdict and the values that decided it. One line per failing or unknown check, and a count of the rest. Why a capture failed. The screenshot difference with its crops. Up to 10 changed files inside the captured source, by path from the repository root, and a count of the files outside it. Each check that `observed.json` adds, removes or alters, and the base and head commits. What the passing checks covered, the agent prompt and run details are collapsed |
 | Prompt for your agent | A copyable prompt built from the result: values, commits, evidence and artifact paths, and the reminder that a changed value is not a regression by itself |
-| File links | Each listed file and the verdict line's source location link to that file's diff in the pull request, at the line when there is one. A file outside the diff, or a run outside a pull request, links to the file at the head commit |
+| File links | Each listed file and the verdict line's source location link to that file's diff in the pull request, at the line when there is one. A file outside the diff, or a run outside a pull request, links to the file at the head commit. Line numbers come from the captured merge commit, so a line can shift when the base branch changed the same file |
 | Hidden `<!-- observed:agent -->` block | The result schema version, commits, artifact name and `result.json` paths |
 | Open the report | `observed-bundle.html`, the same report as `observed view`, in one file |
 | Screenshot crops | `observed-bundle-screenshots.png`: before, after and changed pixels around the largest changed region of each journey whose screenshots changed |

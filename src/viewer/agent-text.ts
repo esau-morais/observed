@@ -1,5 +1,10 @@
-import { scopeLine } from '../change-scope-text';
-import type { Comparison, Journey, Side } from '../comparison-model';
+import { repositoryPath, scopeLine } from '../change-scope-text';
+import type {
+  ChangeScope,
+  Comparison,
+  Journey,
+  Side,
+} from '../comparison-model';
 import { describeRevision } from '../provenance-text';
 import {
   anchorLocation,
@@ -45,6 +50,7 @@ function journeyText(
   mode: Comparison['mode'],
   conclusion: string,
   level: string,
+  scope: ChangeScope,
 ): string[] {
   const sides =
     mode === 'preview'
@@ -83,7 +89,7 @@ function journeyText(
     ...(journey.checks.length === 0
       ? ['No named check is configured, so no behavior was checked.']
       : journey.checks.map((check) => {
-          const location = anchorLocation(journey, check);
+          const location = anchorLocation(journey, check, scope);
           const measure =
             check.measure === undefined
               ? null
@@ -120,7 +126,7 @@ function notObserved(result: Comparison): string[] {
     ? scope.files.flatMap((file) =>
         file.relation === 'not-observed'
           ? [
-              `- ${file.path} (${file.change}): ${/[.!?]$/.test(file.reason) ? file.reason : `${file.reason}.`}`,
+              `- ${repositoryPath(scope, file)} (${file.change}): ${/[.!?]$/.test(file.reason) ? file.reason : `${file.reason}.`}`,
             ]
           : [],
       )
@@ -151,6 +157,7 @@ export function agentText(result: Comparison): string {
         result.mode,
         result.conclusion.text,
         multiple ? '#####' : '####',
+        result.changeScope,
       ),
       '',
     ]),

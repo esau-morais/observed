@@ -698,7 +698,7 @@ function VerdictPanel({
       <ul {...stylex.props(styles.list)}>
         {failing.map(({ journey, index, check }) => {
           const tone = verdictTones[check.verdict];
-          const location = anchorLocation(journey, check);
+          const location = anchorLocation(journey, check, result.changeScope);
           const files = map.connections.filter(
             (connection) =>
               connection.kind === 'checked-by' &&

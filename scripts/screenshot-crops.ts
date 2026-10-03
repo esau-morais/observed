@@ -8,27 +8,42 @@ type Box = { x: number; y: number; width: number; height: number };
 
 const margin = 24;
 const smallest = { width: 360, height: 160 };
+const biggest = { width: 960, height: 640 };
 const gutter = 12;
 const gutterColor = [208, 215, 222] as const;
 
-function span(start: number, length: number, wanted: number, limit: number) {
-  const size = Math.min(limit, Math.max(length + 2 * margin, wanted));
+function span(
+  start: number,
+  length: number,
+  bounds: { smallest: number; largest: number },
+  limit: number,
+) {
+  const size = Math.min(
+    limit,
+    bounds.largest,
+    Math.max(length + 2 * margin, bounds.smallest),
+  );
   const from = Math.round(start + length / 2 - size / 2);
 
   return [Math.min(Math.max(0, from), limit - size), size] as const;
 }
 
-// The region with a margin, grown to a readable size around its center and
-// kept inside the screenshot.
+// The region with a margin, grown to a readable size or cut to one that fits
+// a comment, around its center and inside the screenshot.
 export function cropWindow(
   image: { width: number; height: number },
   region: Box,
 ): Box {
-  const [x, width] = span(region.x, region.width, smallest.width, image.width);
+  const [x, width] = span(
+    region.x,
+    region.width,
+    { smallest: smallest.width, largest: biggest.width },
+    image.width,
+  );
   const [y, height] = span(
     region.y,
     region.height,
-    smallest.height,
+    { smallest: smallest.height, largest: biggest.height },
     image.height,
   );
 

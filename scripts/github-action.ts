@@ -456,6 +456,29 @@ function screenshotSection(
   ].join('\n\n');
 }
 
+// Why changed screenshots have no crops to show, such as a crop step that
+// failed or an image that no longer matches its hash.
+function screenshotsNote(
+  result: Comparison,
+  screenshots: Screenshots | null,
+): string | null {
+  if (screenshots?.note !== undefined && screenshots.note !== null) {
+    return screenshots.note;
+  }
+
+  const changed = result.journeys.some(
+    (journey) =>
+      journey.comparison.kind === 'available' &&
+      journey.comparison.visual.kind === 'changed',
+  );
+
+  return changed &&
+    httpsUrl(screenshots?.image) === null &&
+    httpsUrl(screenshots?.link) === null
+    ? 'No screenshot crops were uploaded. The report has the screenshots.'
+    : null;
+}
+
 function unchanged(result: Comparison): string | null {
   const compared = result.journeys.map((journey) => journey.comparison);
 
@@ -479,7 +502,7 @@ function unchanged(result: Comparison): string | null {
       : []),
   ];
 
-  return items.length === 0 ? null : `Unchanged: ${items.join(', ')}`;
+  return items.length === 0 ? null : `Unchanged: ${items.join(', ')}.`;
 }
 
 export function describeFailure(
@@ -776,6 +799,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     : checkRows(result, lead, frame.files);
   const recipeSummary =
     result.mode === 'preview' ? null : recipeLine(result.changeScope);
+  const cropsNote = screenshotsNote(result, options.screenshots ?? null);
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -820,12 +844,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       [
         ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
         ...extra(unchanged(result)),
-        ...extra(
-          options.screenshots?.note === undefined ||
-            options.screenshots.note === null
-            ? null
-            : inlineText(options.screenshots.note),
-        ),
+        ...extra(cropsNote === null ? null : inlineText(cropsNote)),
         ...limitations.map(inlineText),
         ...(page === null
           ? []
@@ -1197,7 +1216,7 @@ function commentMode(value: string): {
     ? { mode: mode.value, problem: null }
     : {
         mode: 'always',
-        problem: `The comment input accepts always or off, not ${JSON.stringify(value.slice(0, 40))}. The comment is posted.`,
+        problem: `The comment input accepts always or off, not ${JSON.stringify(value.slice(0, 40))}. Observed treats it as always.`,
       };
 }
 
@@ -1512,6 +1531,12 @@ if (import.meta.main) {
 
     if (pullRequest !== null && comment.mode === 'off') {
       notes.push('No comment, because the comment input is off');
+
+      if (environment('OBSERVED_SLACK_BOT_TOKEN') !== '') {
+        notes.push(
+          'Slack: each failing run posts a new message, because the comment that remembers the earlier one is off',
+        );
+      }
     }
 
     if (signer.kind === 'workflow' && signer.problem !== null) {

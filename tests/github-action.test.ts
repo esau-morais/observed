@@ -632,6 +632,7 @@ test(`a typical failing run's comment stays within ${String(visibleCommentLimit)
   const visible = comment(await typicalFailingRun(), 7);
 
   expect(readable(visible).length).toBeLessThanOrEqual(visibleCommentLimit);
+  expect(visible.length).toBeLessThanOrEqual(2 * visibleCommentLimit);
   expect(visible).toContain('30 files changed outside the captured source.');
   expect(visible).not.toContain('docs/page-');
   expect(visible).not.toContain('../');

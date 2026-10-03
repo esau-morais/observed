@@ -1,6 +1,7 @@
 import {
   fileDetail,
   relationLabels,
+  repositoryPath,
   scopeFileLines,
 } from '../change-scope-text';
 import type {
@@ -142,7 +143,7 @@ export function scopeTable(result: Comparison): {
 
   return {
     rows: scope.files.map((file) => ({
-      path: file.path,
+      path: repositoryPath(scope, file),
       change: file.change,
       chip: relationChip(file.relation),
       detail: fileDetail(result, file),
