@@ -1,9 +1,11 @@
 import {
+  capturedFiles,
   recipeLabels,
   recipeLine,
   recipeLines,
-  scopeFileLines,
+  repositoryPath,
   scopeLine,
+  scopeNotes,
 } from './change-scope-text';
 import { escapeText, link } from './markdown';
 import {
@@ -29,7 +31,12 @@ import { evidenceKinds } from './evidence-kinds';
 import { journeySections, renderMarkdownSection } from './report-sections';
 import { describeObserved, describeRevision } from './provenance-text';
 import { describeStatus } from './request-text';
-import { describeRegion, describeVisual, diffLegend } from './visual-text';
+import {
+  describeRegion,
+  describeVisual,
+  diffLegend,
+  visualChange,
+} from './visual-text';
 
 function heading(level: number, text: string): string {
   return `${'#'.repeat(level)} ${text}`;
@@ -37,6 +44,16 @@ function heading(level: number, text: string): string {
 
 function list(values: readonly string[]): string {
   return values.map((value) => `- ${escapeText(value)}`).join('\n');
+}
+
+// Raw detail stays in the report for audit, folded so the conclusion and the
+// visual difference lead.
+function collapsed(summary: string, body: readonly string[]): string {
+  return [
+    `<details><summary>${escapeText(summary)}</summary>`,
+    ...body,
+    '</details>',
+  ].join('\n\n');
 }
 
 function renderIdentity(side: Side, label: string, level: number): string {
@@ -99,6 +116,64 @@ function renderVisual(visual: Visual): string {
     `${summary} ${link('Open pixel difference image', visual.diff.path)} (SHA-256 ${visual.diff.sha256}). ${escapeText(diffLegend)}`,
     ...visual.regions.map((box) => `  - ${escapeText(describeRegion(box))}`),
   ].join('\n');
+}
+
+function image(label: string, side: Side): string {
+  return side.screenshot === null
+    ? 'Unavailable'
+    : `!${link(label, side.screenshot)}`;
+}
+
+// Before and after side by side, with the changed pixels when the
+// screenshots differ beyond the threshold.
+function renderScreens(
+  result: Comparison,
+  journey: Journey,
+  level: number,
+): string[] {
+  const comparison = journey.comparison;
+
+  if (comparison.kind === 'preview') {
+    return [
+      heading(level, 'Screenshot'),
+      image('Current capture', journey.candidate),
+    ];
+  }
+
+  const visual = comparison.kind === 'available' ? comparison.visual : null;
+  const change = visual === null ? null : visualChange(visual);
+  const pair = [
+    '| Before | After |',
+    '| --- | --- |',
+    `| ${image('Before', journey.base)} | ${image('After', journey.candidate)} |`,
+  ].join('\n');
+
+  if (visual?.kind === 'changed') {
+    return [
+      heading(level, 'What changed on screen'),
+      `${escapeText(change ?? '')} An observation, not a check.`,
+      [
+        '| Before | After | Changed pixels |',
+        '| --- | --- | --- |',
+        `| ${image('Before', journey.base)} | ${image('After', journey.candidate)} | !${link('Changed pixels', visual.diff.path)} |`,
+      ].join('\n'),
+      escapeText(diffLegend),
+    ];
+  }
+
+  if (change !== null) {
+    return [
+      heading(level, 'What changed on screen'),
+      `${escapeText(change)} An observation, not a check.`,
+      pair,
+    ];
+  }
+
+  return [
+    heading(level, 'Screenshots'),
+    visual === null ? 'Not compared.' : escapeText(describeVisual(visual)),
+    collapsed('Before and after', [pair]),
+  ];
 }
 
 function renderAvailability(journey: Journey): string {
@@ -245,19 +320,13 @@ function renderJourney(
   result: Comparison,
   journey: Journey,
   level: number,
-): { screenshots: string[]; details: string[] } {
+): { lead: string[]; details: string[] } {
   const preview = result.mode === 'preview';
   const candidateLabel = preview ? 'Current capture' : 'Candidate · after';
   const sides = (render: (side: Side, label: string) => string) => [
     ...(preview ? [] : [render(journey.base, 'Base · before')]),
     render(journey.candidate, candidateLabel),
   ];
-  const screenshots = preview
-    ? [{ side: journey.candidate, label: 'Current capture' }]
-    : [
-        { side: journey.base, label: 'Before' },
-        { side: journey.candidate, label: 'After' },
-      ];
   const shared = new Set(
     preview
       ? []
@@ -275,99 +344,123 @@ function renderJourney(
     ...journey.candidate.unresolved
       .filter((reason) => !shared.has(reason))
       .map((reason) => `Candidate: ${reason}`),
-    ...journey.limitations,
   ];
   const single = result.journeys.length === 1;
+  const comparison = journey.comparison;
 
   return {
-    screenshots: screenshots.map(({ side, label }) =>
-      [
-        heading(level, label),
-        side.capture === null
-          ? 'Capture unavailable.'
-          : `Source: ${escapeText(describeRevision(side.capture.manifest.source.revision))} · ${side.capture.manifest.source.sha256}`,
-        side.screenshot === null
-          ? 'Screenshot unavailable.'
-          : `!${link(`${label} captured application`, side.screenshot)}`,
-      ].join('\n\n'),
-    ),
-    details: [
+    lead: [
       ...(single
         ? []
         : [
-            heading(level, 'Journey conclusion'),
-            `**${conclusionLabels[journey.conclusion.kind]}**`,
-            escapeText(journey.conclusion.text),
+            `**${conclusionLabels[journey.conclusion.kind]}** · ${escapeText(journey.conclusion.text)}`,
           ]),
-      heading(level, 'Unresolved evidence and limits'),
-      unresolved.length === 0
-        ? 'No unresolved items reported. Coverage is limited to the named checks and recorded capture windows.'
-        : list(unresolved),
-      heading(level, 'Selected captures'),
-      ...sides((side, label) => renderIdentity(side, label, level + 1)),
-      heading(level, 'Comparison availability'),
-      renderAvailability(journey),
-      heading(level, 'Named checks'),
-      'Observed executed its own checks against each capture\'s evidence. A check whose scope starts with "Imported from" reports another tool\'s result. Each result covers its stated expectation and scope; comparison availability is separate.',
+      ...(comparison.kind === 'unavailable'
+        ? [heading(level, 'Not compared'), list(comparison.reasons)]
+        : []),
+      ...renderScreens(result, journey, level),
+      heading(level, 'Checks'),
       journey.checks.length === 0
         ? 'No named check configured.'
         : journey.checks.map(renderVerdict).join('\n'),
-      ...sides((side, label) => renderChecks(side, label, level + 1)),
-      heading(level, 'Request ledger'),
-      'Collector measurements from the recorded windows. A recorded response status is not a named check result.',
-      ...sides((side, label) => renderLedger(side, label, level + 1)),
-      ...journeySections(journey).flatMap((section) => [
-        heading(level, escapeText(evidenceKinds[section.kind].title)),
-        renderMarkdownSection(section),
+      ...(unresolved.length === 0
+        ? []
+        : [heading(level, 'Unresolved evidence'), list(unresolved)]),
+    ],
+    details: [
+      collapsed('Limits of this comparison', [
+        journey.limitations.length === 0
+          ? 'Coverage is limited to the named checks and recorded capture windows.'
+          : list(journey.limitations),
       ]),
-      heading(level, 'Screenshots and original artifacts'),
-      'Screenshots are collector measurements. Artifact integrity describes availability and hash matches, not application correctness.',
-      ...sides((side, label) => renderArtifacts(side, label, level + 1)),
-      heading(level, 'Observed, producer, conditions and recipe'),
-      ...sides((side, label) => renderProvenance(side, label, level + 1)),
+      collapsed('Each check on base and candidate', [
+        'Observed executed its own checks against each capture\'s evidence. A check whose scope starts with "Imported from" reports another tool\'s result.',
+        ...sides((side, label) => renderChecks(side, label, level + 1)),
+      ]),
+      collapsed('Request ledger', [
+        'Collector measurements from the recorded windows. A recorded response status is not a named check result.',
+        ...sides((side, label) => renderLedger(side, label, level + 1)),
+      ]),
+      ...journeySections(journey).map((section) =>
+        collapsed(evidenceKinds[section.kind].title, [
+          renderMarkdownSection(section),
+        ]),
+      ),
+      collapsed('Comparison availability', [renderAvailability(journey)]),
+      collapsed('Screenshots and original artifacts', [
+        'Screenshots are collector measurements. Artifact integrity describes availability and hash matches, not application correctness.',
+        ...sides((side, label) => renderArtifacts(side, label, level + 1)),
+      ]),
+      collapsed('Captures, producer, conditions and recipe', [
+        ...sides((side, label) => renderIdentity(side, label, level + 1)),
+        ...sides((side, label) => renderProvenance(side, label, level + 1)),
+      ]),
     ],
   };
 }
 
 function renderChangeScope(result: Comparison): string[] {
-  const files = scopeFileLines(result);
-  const recipe = recipeLine(result.changeScope);
+  const scope = result.changeScope;
+  const files = capturedFiles(result).map(
+    (file) =>
+      `${file.path}${file.change === 'modified' ? '' : ` (${file.change})`}: ${file.relation}. ${file.detail}`,
+  );
+  const outside =
+    scope.kind === 'recorded'
+      ? scope.files
+          .filter((file) => !file.captured)
+          .map((file) => `${repositoryPath(scope, file)} (${file.change})`)
+      : [];
+  const notes = scopeNotes(result);
+  const recipe = recipeLine(scope);
   const differences = recipeLines(result);
 
   return [
     '## Change scope',
-    escapeText(scopeLine(result.changeScope)),
+    escapeText(scopeLine(scope)),
     ...(files.length === 0 ? [] : [list(files)]),
+    ...(notes.length === 0 ? [] : [list(notes)]),
     ...(recipe === null ? [] : [escapeText(recipe)]),
     ...(differences.length === 0 ? [] : [list(differences)]),
+    ...(outside.length === 0
+      ? []
+      : [
+          collapsed(`Files outside the captured source (${outside.length})`, [
+            list(outside),
+          ]),
+        ]),
   ];
 }
 
 export function renderComparison(result: Comparison): string {
   const [first, ...rest] = result.journeys;
   const single = rest.length === 0 ? renderJourney(result, first, 2) : null;
+  const journeys =
+    single === null
+      ? result.journeys.map((journey, index) => ({
+          title: `## Journey ${index + 1}: ${escapeText(journey.title)}`,
+          rendered: renderJourney(result, journey, 3),
+        }))
+      : [];
 
   return [
     `# ${escapeText(result.title)}`,
-    ...(single?.screenshots ?? []),
     '## Conclusion',
     unobservedAfterPassing(result) > 0
       ? `**${runLabel(result)}** · ${unobservedText(unobservedAfterPassing(result))}`
       : `**${runLabel(result)}**`,
     escapeText(result.conclusion.text),
     `${escapeText(checkSummary(result))}.`,
+    ...(single?.lead ??
+      journeys.flatMap(({ title, rendered }) => [title, ...rendered.lead])),
     ...(result.mode === 'preview' ? [] : renderChangeScope(result)),
+    '## Evidence for audit',
     `Evaluated at: ${escapeText(result.evaluatedAt)}`,
     ...(single?.details ??
-      result.journeys.flatMap((journey, index) => {
-        const rendered = renderJourney(result, journey, 3);
-
-        return [
-          `## Journey ${index + 1}: ${escapeText(journey.title)}`,
-          ...rendered.screenshots,
-          ...rendered.details,
-        ];
-      })),
+      journeys.flatMap(({ title, rendered }) => [
+        title.replace(/^## /, '### '),
+        ...rendered.details,
+      ])),
     'Observed renders the saved comparison result. Imported Phase 0 evidence reports are generated separately by the CLI.',
     '',
   ].join('\n\n');
