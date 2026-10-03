@@ -411,6 +411,40 @@ test('a malformed coverage file is unavailable, not empty coverage', () => {
   ).toBe('unavailable');
 });
 
+test('a script coverage could not map leaves files unknown, not unexecuted', () => {
+  const unmapped = file(
+    scope([
+      scenario(
+        { 'base.ts': app },
+        { 'base.ts': changedApp },
+        {
+          coverage: parseCoverage(
+            JSON.stringify({
+              kind: 'coverage',
+              schemaVersion: 1,
+              value: {
+                files: [],
+                scripts: [
+                  {
+                    script: '/assets/index.js',
+                    kind: 'unavailable',
+                    reason: 'No source map',
+                  },
+                ],
+              },
+            }),
+          ),
+        },
+      ),
+    ]),
+    'base.ts',
+  );
+
+  expect(unmapped.relation === 'not-observed' && unmapped.reason).toBe(
+    'Coverage could not map a script to source files, so no evidence shows whether this file ran: No source map',
+  );
+});
+
 test('a file whose lines coverage could not map says why, not that it never ran', () => {
   const unmapped = file(
     scope([

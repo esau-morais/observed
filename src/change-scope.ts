@@ -51,12 +51,14 @@ type FileCoverage = {
 };
 
 // One journey's candidate coverage, keyed by path relative to the project.
-// `excluded` holds files a source map named whose lines could not be used.
+// `excluded` holds files a source map named whose lines could not be used,
+// and `unmapped` the reasons scripts could not be mapped to source files.
 export type CoverageRecord =
   | {
       kind: 'recorded';
       files: ReadonlyMap<string, FileCoverage>;
       excluded: ReadonlyMap<string, string>;
+      unmapped: readonly string[];
     }
   | { kind: 'unavailable'; reason: string };
 
@@ -86,6 +88,9 @@ export function parseCoverage(input: string): CoverageRecord {
               )
             : [],
         ),
+      ),
+      unmapped: value.scripts.flatMap((script) =>
+        script.kind === 'unavailable' ? [script.reason] : [],
       ),
     }),
   });
@@ -365,6 +370,11 @@ function capturedFile(
         : undefined,
     )
     .find((value) => value !== undefined);
+  const unmappedReason = journeys
+    .flatMap(({ coverage }) =>
+      coverage.kind === 'recorded' ? coverage.unmapped : [],
+    )
+    .at(0);
   let reason: string;
 
   if (identity.change === 'removed') {
@@ -375,6 +385,8 @@ function capturedFile(
     reason = `Coverage could not map this file's lines: ${excludedReason}`;
   } else if (!collectorRuns(identity.path)) {
     reason = reasons.fileType;
+  } else if (unmappedReason !== undefined) {
+    reason = `Coverage could not map a script to source files, so no evidence shows whether this file ran: ${unmappedReason}`;
   } else if (journeys.some(({ coverage }) => coverage.kind === 'recorded')) {
     reason = reasons.notInCoverage;
   } else {
