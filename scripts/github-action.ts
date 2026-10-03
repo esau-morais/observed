@@ -44,7 +44,7 @@ import { describeVisual } from '../src/visual-text';
 import { scopeFileLines, scopeLine } from '../src/change-scope-text';
 import {
   checkSummary,
-  conclusionTones,
+  runTone,
   describeMeasure,
   headline,
   anchorLocation,
@@ -636,7 +636,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
-    alert(alerts[conclusionTones[kind]], [
+    alert(alerts[runTone(result)], [
       ...(options.surface.kind === 'check'
         ? []
         : [

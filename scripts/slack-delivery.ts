@@ -9,7 +9,7 @@ import { decodePng, encodeRgbPng } from '../src/png';
 import { shortSource } from '../src/provenance-text';
 import {
   anchorLocation,
-  conclusionTones,
+  runTone,
   executionLabels,
   headline,
   leadingChecks,
@@ -146,10 +146,7 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
       : headline(result),
     300,
   );
-  const icon =
-    result === null
-      ? icons.unknown
-      : icons[conclusionTones[result.conclusion.kind]];
+  const icon = result === null ? icons.unknown : icons[runTone(result)];
   const where =
     slackLink(links.pullRequestLabel, links.pullRequest) ??
     slackText(links.pullRequestLabel);
@@ -200,10 +197,7 @@ export function slackRecovery(result: Comparison | null) {
     result === null
       ? 'No result: treat this run as unavailable'
       : headline(result);
-  const icon =
-    result === null
-      ? icons.unknown
-      : icons[conclusionTones[result.conclusion.kind]];
+  const icon = result === null ? icons.unknown : icons[runTone(result)];
 
   return {
     text: `${icon} *${slackText(clip(title, 300))}* at ${revision(head)}${result === null ? '' : ` · ${checkCount(result)}`}`,

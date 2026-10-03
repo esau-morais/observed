@@ -17,6 +17,7 @@ import {
   anchorLocation,
   conclusionLabels,
   conclusionTones,
+  runTone,
   describeMeasure,
   executionLabels,
   headlineParts,
@@ -1411,7 +1412,7 @@ function JourneyView({
 }
 
 function Verdict({ result }: { result: Comparison }) {
-  const tone = conclusionTones[result.conclusion.kind];
+  const tone = runTone(result);
   const multiple = result.journeys.length > 1;
   const { label, subject, restated } = headlineParts(result);
   const unresolved = groupUnresolved(result);

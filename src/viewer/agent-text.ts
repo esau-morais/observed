@@ -2,8 +2,10 @@ import type { Comparison, Journey, Side } from '../comparison-model';
 import { describeRevision } from '../provenance-text';
 import {
   anchorLocation,
-  runLabel,
   describeMeasure,
+  runLabel,
+  unobservedAfterPassing,
+  unobservedText,
   verdictLabels,
 } from '../result-text';
 
@@ -116,7 +118,7 @@ export function agentText(result: Comparison): string {
   const multiple = result.journeys.length > 1;
 
   return [
-    `## Observed: ${runLabel(result)} · ${result.title}`,
+    `## Observed: ${runLabel(result)} · ${result.title}${unobservedAfterPassing(result) > 0 ? ` · ${unobservedText(unobservedAfterPassing(result))}` : ''}`,
     '',
     '### Facts',
     '',

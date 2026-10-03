@@ -44,7 +44,7 @@ export const statusWords = {
   noRegressionInNamedChecks: {
     word: 'No regression in the named checks',
     meaning:
-      'Every named check that ran passed on the candidate, and at least one changed file is not observed.',
+      'Every named check that ran passed on the candidate, and at least one ran. At least one changed file is not observed.',
   },
   notChecked: {
     word: 'Not checked',

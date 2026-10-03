@@ -24,7 +24,7 @@ import {
   type Side,
 } from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
-import { headline } from '../src/result-text';
+import { headline, runTone } from '../src/result-text';
 import { sha256 } from '../src/encoding';
 
 const fixture = await readFile(
@@ -541,29 +541,49 @@ test('a coverage file that lists a path twice is unavailable', () => {
 });
 
 test('passing checks with a file not observed read as no regression in the named checks', () => {
-  const computed = scope([
-    scenario({ 'server.ts': app }, { 'server.ts': changedApp }),
-  ]);
+  const mixed = scope(
+    [
+      scenario(
+        { 'server.ts': app, 'App.tsx': app },
+        { 'server.ts': changedApp, 'App.tsx': changedApp },
+        {
+          findings: [anchoredFinding('App.tsx', 'stack-frame', ['no-errors'])],
+        },
+      ),
+    ],
+    { kind: 'listed', files: [{ path: 'README.md', change: 'modified' }] },
+  );
   const passing = {
     ...result,
     conclusion: {
       kind: 'no-regression' as const,
       text: 'One request per load action passed on base and candidate.',
     },
-    changeScope: computed,
+    changeScope: mixed,
   };
-  const everythingObserved = {
+  const everyFileTouched = {
     ...passing,
-    changeScope: scope([scenario({ 'app.ts': app }, { 'app.ts': app })]),
+    changeScope: scope([
+      scenario(
+        { 'App.tsx': app },
+        { 'App.tsx': changedApp },
+        {
+          findings: [anchoredFinding('App.tsx', 'stack-frame', ['no-errors'])],
+        },
+      ),
+    ]),
   };
+  const regression = { ...result, changeScope: mixed };
 
   expect(headline(passing)).toBe(
     'No regression in the named checks: 1 changed file not observed',
   );
   expect(renderComparison(passing)).toContain(
-    '**No regression in the named checks**',
+    '**No regression in the named checks** · 1 changed file not observed',
   );
-  expect(headline(everythingObserved)).toBe(`No regression: ${result.title}`);
+  expect(runTone(passing)).not.toBe('checked');
+  expect(headline(everyFileTouched)).toBe(`No regression: ${result.title}`);
+  expect(headline(regression)).toMatch(/^Regression: /);
 });
 
 test('a changed observed.json says that journey and check changes were not compared', () => {
