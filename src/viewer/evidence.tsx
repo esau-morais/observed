@@ -3,6 +3,7 @@ import { createContext, use, useState, type ReactNode } from 'react';
 import type { Side, Visual, VisualRegion } from '../comparison-model';
 import { describeRevision, shortSource } from '../provenance-text';
 import { describeStatus } from '../request-text';
+import { integrityLabels } from '../result-text';
 import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
 import { SubHeading } from './heading';
@@ -345,7 +346,7 @@ export function Artifacts({ side, label }: { side: Side; label: string }) {
               )}
               <p {...stylex.props(styles.text)}>{artifact.description}</p>
               <p {...stylex.props(styles.caption)}>
-                Artifact integrity: {artifact.integrity}.
+                Artifact integrity: {integrityLabels[artifact.integrity]}.
                 {artifact.integrity === 'verified'
                   ? null
                   : ` ${artifact.reason}`}

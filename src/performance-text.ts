@@ -13,6 +13,7 @@ import {
   type PerformanceValue,
   type Recording,
 } from './evidence-kinds/performance';
+import { statusWords } from './status-words';
 
 type PerformanceView = EvidenceView<'performance'>;
 
@@ -47,7 +48,7 @@ function cell(
   metric: PerformanceMetric,
 ): PerformanceCell {
   if (view.status === 'unavailable') {
-    return { kind: 'missing', text: 'Unavailable' };
+    return { kind: 'missing', text: statusWords.unavailable.word };
   }
 
   const summary = summarize(view.value, metric);

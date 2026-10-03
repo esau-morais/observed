@@ -14,7 +14,6 @@ import {
   shortSource,
 } from '../provenance-text';
 import {
-  checkLabels,
   anchorLocation,
   conclusionLabels,
   conclusionTones,
@@ -22,11 +21,13 @@ import {
   executionLabels,
   headlineParts,
   resultCounts,
+  sideOutcome,
   toneSymbols,
   verdictLabels,
   verdictTones,
   type Tone,
 } from '../result-text';
+import { statusWords } from '../status-words';
 import { describeVisual, diffLegend } from '../visual-text';
 import { AgentCopy } from './agent-copy';
 import { fonts, geometry, media } from './constants.stylex';
@@ -430,10 +431,10 @@ const sectionSymbols = {
 } satisfies Record<SectionStatus, string>;
 
 const sectionStatusLabels = {
-  failed: 'Failed',
-  unknown: 'Unknown',
-  changed: 'Changed',
-  passed: 'Passed',
+  failed: statusWords.failed.word,
+  unknown: statusWords.unknown.word,
+  changed: statusWords.changed.word,
+  passed: statusWords.passed.word,
   neutral: '',
 } satisfies Record<SectionStatus, string>;
 
@@ -568,20 +569,6 @@ function SectionChecks({
       ))}
     </ul>
   );
-}
-
-function sideOutcome(side: Side, id: string): string {
-  const check = side.checks.find((item) => item.id === id);
-
-  // A capture that recorded nothing is missing the evidence. A complete
-  // capture whose journey lacks the check never ran it.
-  if (check === undefined) {
-    return checkLabels[side.execution === 'complete' ? 'not-run' : 'unknown'];
-  }
-
-  return check.actual === null
-    ? checkLabels[check.outcome]
-    : `${checkLabels[check.outcome]}, actual ${check.actual}`;
 }
 
 function ChecksList({

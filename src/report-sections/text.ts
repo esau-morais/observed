@@ -1,9 +1,10 @@
 import { escapeText } from '../markdown';
 import type { MarkdownSection, SectionSide } from './define';
+import { statusWords } from '../status-words';
 
 function describe(side: SectionSide<'text'>): string {
   if (side.evidence.status === 'unavailable') {
-    return `Unavailable: ${escapeText(side.evidence.reason)}`;
+    return `${statusWords.unavailable.word}: ${escapeText(side.evidence.reason)}`;
   }
 
   return side.evidence.value.elements

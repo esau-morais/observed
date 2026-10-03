@@ -2,15 +2,21 @@ import { Effect, Schema } from 'effect';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { summarize } from '../scripts/github-action';
-import { compareJourney, summarizeJourneys } from '../src/comparison';
+import { summarize, type Surface } from '../scripts/github-action';
+import {
+  compareJourney,
+  inspectSide,
+  summarizeJourneys,
+} from '../src/comparison';
 import { comparisonSchema, type Comparison } from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
 import { json } from '../src/encoding';
 import { inspectEvidence } from '../src/evidence';
 import { escapeText } from '../src/markdown';
 import { renderReport } from '../src/report';
+import { sideOutcome } from '../src/result-text';
 import { parseManifest } from '../src/schema';
+import { statusWords } from '../src/status-words';
 import { agentText } from '../src/viewer/agent-text';
 import todomvc from './fixtures/todomvc/manifest.json' with { type: 'json' };
 
@@ -29,13 +35,24 @@ const banned = [
   /\bbroken\b/i,
   /\bAI detected\b/i,
 ];
-// Artifact integrity is a hash comparison, not a claim about the change.
-const allowed = /integrity: verified/g;
 const imperative =
   /^(Download|Run|Read|Open|Compare|Treat|Name|Fix|Give|Ask|Tell|Use|Follow)\b/;
 
 const fixture = path.join(import.meta.dirname, 'fixtures');
 const evaluatedAt = '2026-09-27T15:34:04.958Z';
+const exitCodes = {
+  regression: 2,
+  'check-failed': 2,
+  unavailable: 1,
+  'no-regression': 0,
+  'not-checked': 0,
+  preview: 0,
+} satisfies Record<Comparison['conclusion']['kind'], number>;
+const surfaces: Surface[] = [
+  { kind: 'comment' },
+  { kind: 'check' },
+  { kind: 'job' },
+];
 
 async function errorsResult(): Promise<Comparison> {
   return Schema.decodeUnknownSync(Schema.fromJsonString(comparisonSchema))(
@@ -43,52 +60,53 @@ async function errorsResult(): Promise<Comparison> {
   );
 }
 
-// The fixture's regression, the same journey passing, and the same journey
-// with no named check.
-async function results(): Promise<Comparison[]> {
-  const regression = await errorsResult();
-  const [journey] = regression.journeys;
+async function fixtureJourney() {
+  const [journey] = (await errorsResult()).journeys;
 
-  if (journey === undefined || journey.base.execution !== 'complete') {
-    throw new Error('The fixture holds one journey with a complete base');
+  if (
+    journey?.base.execution !== 'complete' ||
+    journey.candidate.execution !== 'complete'
+  ) {
+    throw new Error('The fixture holds one journey with complete captures');
   }
 
-  const visual = { kind: 'identical', width: 1280, height: 800 } as const;
-  const passing = compareJourney({
-    base: journey.base,
-    candidate: journey.base,
-    evaluatedAt,
-    visual,
-  });
-  const unchecked = (side: typeof journey.base) => ({
-    ...side,
-    checks: [],
-    recipe: { ...side.recipe, checks: [] },
-  });
-  const notChecked = compareJourney({
-    base: unchecked(journey.base),
-    candidate: unchecked(journey.base),
-    evaluatedAt,
-    visual,
-  });
+  return { journey, base: journey.base, candidate: journey.candidate };
+}
 
-  return [
-    regression,
-    ...[passing, notChecked].map((item) =>
-      summarizeJourneys({ journeys: [item], evaluatedAt, mode: 'comparison' }),
-    ),
+// The fixture's regression, the same journey passing, with no named check,
+// and with no base capture.
+async function results(): Promise<Comparison[]> {
+  const { base, candidate } = await fixtureJourney();
+  const visual = { kind: 'identical', width: 1280, height: 800 } as const;
+  const unchecked = {
+    ...base,
+    checks: [],
+    recipe: { ...base.recipe, checks: [] },
+  };
+  const missing = await Effect.runPromise(
+    inspectSide({ directory: null, prefix: 'base', evaluatedAt }),
+  );
+  const pairs = [
+    { base, candidate },
+    { base, candidate: base },
+    { base: unchecked, candidate: unchecked },
+    { base: missing, candidate },
   ];
+
+  return pairs.map((pair) =>
+    summarizeJourneys({
+      journeys: [compareJourney({ ...pair, evaluatedAt, visual })],
+      evaluatedAt,
+      mode: 'comparison',
+    }),
+  );
 }
 
 function supplied(result: Comparison): string[] {
   return result.journeys.flatMap((journey) => [
     result.title,
     journey.title,
-    ...journey.checks.flatMap((check) => [
-      check.name,
-      check.scope,
-      check.expectation,
-    ]),
+    ...journey.checks.flatMap((check) => [check.name, check.scope]),
     ...(journey.candidate.execution === 'complete'
       ? journey.candidate.evidence
       : []
@@ -100,48 +118,57 @@ function supplied(result: Comparison): string[] {
   ]);
 }
 
-function strings(value: unknown): string[] {
+// Every multi-word string in the Phase 0 manifest was supplied by its author.
+function phrases(value: unknown): string[] {
   if (typeof value === 'string') {
-    return [value];
+    return /\s/.test(value) ? [value] : [];
   }
 
   return typeof value === 'object' && value !== null
-    ? Object.values(value).flatMap(strings)
+    ? Object.values(value).flatMap(phrases)
     : [];
 }
-
-type Sentence = { text: string; words: number; instruction: boolean };
 
 function mask(text: string, data: string[]): string {
   return data
     .flatMap((item) => [item, escapeText(item)])
-    .filter((item) => item.trim() !== '')
+    .map((item) => item.trim().replace(/\.$/, ''))
+    .filter((item) => item !== '')
     .sort((a, b) => b.length - a.length)
     .reduce(
-      (current, item) => current.replaceAll(item.replace(/\.$/, ''), 'DATA'),
+      (current, item) =>
+        current.replace(
+          new RegExp(
+            `(?<![\\p{L}\\d])${item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\d])`,
+            'gu',
+          ),
+          'DATA',
+        ),
       text,
     );
 }
+
+type Sentence = { text: string; words: number; instruction: boolean };
 
 function sentences(text: string, data: string[]): Sentence[] {
   const masked = mask(text, data)
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<[^>]+>/g, '')
-    .replace(/^```.*$/gm, '')
     .replace(/`[^`\n]*`/g, 'CODE')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/"[^"\n]*"/g, 'DATA');
   let steps = false;
 
   return masked.split('\n').flatMap((line) => {
-    if (/^#+ /.test(line)) {
+    if (/^#+ /.test(line) || line.startsWith('```')) {
       steps = /^#+ Next steps$/.test(line);
+
+      return [];
     }
 
-    const content = line.replace(/^[\s>#*|-]*(\d+\.\s)?/, '');
-
-    return content
-      .split(/(?<=[.!?])\s+|\s·\s|\s\|\s/)
+    return line
+      .replace(/^[\s>#*|-]*(\d+\.\s)?/, '')
+      .split(/(?<=[.!?;])\s+|\s·\s|\s\|\s/)
       .map((part) => part.replace(/\*\*/g, '').trim())
       .filter((part) => /\p{L}/u.test(part))
       .map((part) => ({
@@ -153,14 +180,40 @@ function sentences(text: string, data: string[]): Sentence[] {
   });
 }
 
-async function phase0Report(): Promise<string> {
+async function phase0Reports(): Promise<string[]> {
   const directory = path.join(fixture, 'todomvc');
-  const manifest = await Effect.runPromise(parseManifest(todomvc));
+  const unhashed = {
+    ...todomvc,
+    artifacts: todomvc.artifacts.map(({ id, path, description }) => ({
+      id,
+      path,
+      description,
+    })),
+  };
 
-  return renderReport(
-    await Effect.runPromise(inspectEvidence(manifest, directory)),
-    directory,
+  return Promise.all(
+    [todomvc, unhashed].map(async (input) =>
+      renderReport(
+        await Effect.runPromise(
+          inspectEvidence(
+            await Effect.runPromise(parseManifest(input)),
+            directory,
+          ),
+        ),
+        directory,
+      ),
+    ),
   );
+}
+
+function comment(result: Comparison, surface: Surface): string {
+  return summarize({
+    output: json({ directory: '/bundle', result }),
+    exitCode: exitCodes[result.conclusion.kind],
+    artifact: 'observed-bundle',
+    page: null,
+    surface,
+  }).markdown;
 }
 
 async function texts(): Promise<
@@ -172,35 +225,37 @@ async function texts(): Promise<
 
     return [
       { name: `report.md (${kind})`, text: renderComparison(result), data },
-      {
-        name: `PR comment (${kind})`,
-        text: summarize({
-          output: json({ directory: '/bundle', result }),
-          exitCode: kind === 'regression' ? 2 : 0,
-          artifact: 'observed-bundle',
-          page: null,
-          surface: { kind: 'comment' },
-        }).markdown,
+      ...surfaces.map((surface) => ({
+        name: `${surface.kind} summary (${kind})`,
+        text: comment(result, surface),
         data,
-      },
+      })),
       { name: `handoff (${kind})`, text: agentText(result), data },
     ];
   });
+  const untrusted = summarize({
+    output: '{"result":{"conclusion":{"kind":"no-regression"}}}',
+    exitCode: 0,
+    artifact: 'observed-bundle',
+    page: null,
+    surface: { kind: 'comment' },
+  }).markdown;
 
   return [
     ...rendered,
-    {
-      name: 'Phase 0 report.md',
-      text: await phase0Report(),
-      data: strings(todomvc),
-    },
+    { name: 'untrusted summary', text: untrusted, data: [] },
+    ...(await phase0Reports()).map((text, index) => ({
+      name: `Phase 0 report.md ${index}`,
+      text,
+      data: phrases(todomvc),
+    })),
   ];
 }
 
 test('generated text uses no banned status wording', async () => {
   const found = (await texts()).flatMap(({ name, text, data }) =>
     banned
-      .filter((pattern) => pattern.test(mask(text, data).replace(allowed, '')))
+      .filter((pattern) => pattern.test(mask(text, data)))
       .map((pattern) => `${name}: ${pattern.source}`),
   );
 
@@ -221,54 +276,70 @@ test('generated sentences stay within the word limits', async () => {
   expect(long).toEqual([]);
 });
 
-function handoffs(result: Comparison): string[] {
-  const comment = summarize({
-    output: json({ directory: '/bundle', result }),
-    exitCode: 2,
-    artifact: 'observed-bundle',
-    page: null,
-    surface: { kind: 'comment' },
-  }).markdown;
-  const prompt = /```text\n([\s\S]*?)\n```/.exec(comment)?.[1];
+test('agent handoffs list facts, then one instruction per next step', async () => {
+  const result = await errorsResult();
+  const prompt = /```text\n([\s\S]*?)\n```/.exec(
+    comment(result, { kind: 'comment' }),
+  )?.[1];
 
   if (prompt === undefined) {
     throw new Error('The regression comment holds an agent prompt');
   }
 
-  return [agentText(result), prompt];
-}
-
-test('agent handoffs list facts, then one instruction per next step', async () => {
-  for (const text of handoffs(await errorsResult())) {
+  for (const text of [agentText(result), prompt]) {
     const lines = text.split('\n');
     const facts = lines.findIndex((line) => /^#+ Facts$/.test(line));
     const steps = lines.findIndex((line) => /^#+ Next steps$/.test(line));
-
-    expect(facts).toBeGreaterThanOrEqual(0);
-    expect(steps).toBeGreaterThan(facts);
-
     const instructions = lines
       .slice(steps + 1)
       .filter((line) => line.trim() !== '');
-    const verbs = new Set(
-      instructions.map((line) => line.replace(/^- /, '').split(' ')[0]),
-    );
-    const factSentences = sentences(
-      lines.slice(facts + 1, steps).join('\n'),
-      [],
-    );
 
+    expect(facts).toBeGreaterThanOrEqual(0);
+    expect(steps).toBeGreaterThan(facts);
     expect(instructions.length).toBeGreaterThan(0);
 
     for (const line of instructions) {
-      expect(line).toMatch(/^- [A-Z]/);
-      expect(sentences(line, [])).toHaveLength(1);
+      expect(line).toMatch(/^- /);
+      expect(sentences(line, [])).toEqual([
+        expect.objectContaining({ instruction: true }),
+      ]);
+      expect(line.replace(/^- /, '')).toMatch(imperative);
     }
 
     expect(
-      factSentences.filter((sentence) =>
-        verbs.has(sentence.text.split(' ')[0]),
-      ),
+      sentences(lines.slice(facts + 1, steps).join('\n'), supplied(result))
+        .filter((sentence) => sentence.instruction)
+        .map((sentence) => sentence.text),
     ).toEqual([]);
   }
+});
+
+test('a check one side lacks is unknown without a complete capture, and not run with one', async () => {
+  const { journey, base } = await fixtureJourney();
+  const [check] = journey.checks;
+  const missing = await Effect.runPromise(
+    inspectSide({ directory: null, prefix: 'base', evaluatedAt }),
+  );
+
+  if (check === undefined) {
+    throw new Error('The fixture journey has a check');
+  }
+
+  expect(sideOutcome(missing, check.id)).toBe(statusWords.unknown.word);
+  expect(sideOutcome({ ...base, checks: [] }, check.id)).toBe(
+    statusWords.notRun.word,
+  );
+});
+
+test('docs/PRODUCT.md lists every status word', async () => {
+  const product = (
+    await readFile(path.join(import.meta.dirname, '../docs/PRODUCT.md'), 'utf8')
+  ).toLowerCase();
+  const listed = /\| dimension \| values \|\n[\s\S]*?\n\n/.exec(product)?.[0];
+
+  expect(
+    Object.values(statusWords)
+      .map(({ word }) => word.toLowerCase())
+      .filter((word) => !(listed ?? '').includes(word)),
+  ).toEqual([]);
 });

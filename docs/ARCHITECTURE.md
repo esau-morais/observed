@@ -155,10 +155,10 @@ Planned for Phase 3a. Not built.
 The capture records each side with `agent-browser record start`. The help
 text of `agent-browser record` in 0.38.1, read on 2026-10-03, says it
 "Requires ffmpeg on PATH with the libvpx and libx264 encoders". A probe that
-day showed that the PATH that counts is the one the session's daemon started
-with. Without ffmpeg there, `record start` exits 1 with "ffmpeg not found".
-Without ffmpeg the replay is unavailable, with that reason, and nothing else
-changes. Captions come from the action timeline's steps and
+day found that the PATH that counts is the one the session's daemon started
+with. With ffmpeg missing from it, `record start` exited 1 with "ffmpeg not
+found or failed to execute". Then the replay is unavailable, with that reason,
+and nothing else changes. Captions come from the action timeline's steps and
 their times.
 
 Record the session that produced the checked evidence, so the replay shows the

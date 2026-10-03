@@ -69,9 +69,12 @@ Keep these dimensions separate:
 
 | Dimension | Values |
 | --- | --- |
-| Execution | Complete, blocked, failed |
+| Execution | Complete, capture failed, unavailable |
 | Difference | Unchanged, changed, unavailable |
 | Named check | Passed, failed, unknown, not run |
+| Check against base | Regression, when the base passed the same expectation |
+| Run conclusion | Regression, check failed, unavailable, no regression, not checked, preview |
+| Artifact integrity | Hash matched, unavailable |
 | Interpretation | Expected change, suspected regression, confirmed regression |
 
 - A behavior can change while its checks pass.
@@ -80,7 +83,7 @@ Keep these dimensions separate:
   disclose any missing baseline.
 - Missing evidence never becomes a pass, and an absent check is not a pass.
 - A check that one side lacks reads "not run" on that side when its capture
-  completed, and "unknown" when the capture recorded nothing.
+  completed, and "unknown" when the capture did not complete.
 - A source location is a fact about where evidence was read: "thrown at
   App.jsx:10", never "caused by App.jsx:10". Show a line only when the
   evidence places it there, or when a name matches a changed line and is

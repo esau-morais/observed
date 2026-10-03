@@ -8,67 +8,11 @@ import type {
   Side,
 } from './comparison-model';
 import { everyCaptureFailed } from './comparison-model';
+import { statusWords } from './status-words';
 
 type Kind = Comparison['conclusion']['kind'];
 
 export type Tone = 'regression' | 'unknown' | 'checked' | 'neutral';
-
-// Every status word Observed writes, with its one meaning. The label tables
-// below take their words from here, so a word cannot gain a second meaning.
-// docs/PRODUCT.md#report-behavior documents the same values.
-export const statusWords = {
-  passed: {
-    word: 'Passed',
-    meaning: "The evidence met the check's expectation.",
-  },
-  failed: {
-    word: 'Failed',
-    meaning: "The evidence did not meet the check's expectation.",
-  },
-  regression: {
-    word: 'Regression',
-    meaning:
-      'The check passed on the base and fails the same expectation on the candidate.',
-  },
-  unknown: {
-    word: 'Unknown',
-    meaning:
-      'The evidence that the check needs is missing, incomplete, or not comparable.',
-  },
-  notRun: {
-    word: 'Not run',
-    meaning: 'The check did not run on this capture.',
-  },
-  checkFailed: {
-    word: 'Check failed',
-    meaning: 'A named check failed with no comparable passing base.',
-  },
-  noRegression: {
-    word: 'No regression',
-    meaning:
-      'Every named check passed on the candidate. It says nothing about files that no check covered.',
-  },
-  notChecked: {
-    word: 'Not checked',
-    meaning: 'Both versions were captured, and no named check passed.',
-  },
-  unavailable: {
-    word: 'Unavailable',
-    meaning: 'Evidence that the result needs is missing or not comparable.',
-  },
-  preview: {
-    word: 'Preview',
-    meaning: 'One capture of the current application, with no base.',
-  },
-  complete: {
-    word: 'Complete',
-    meaning: 'The capture ran every step and recorded its evidence.',
-  },
-  captureFailed: {
-    word: 'Capture failed',
-    meaning: 'The capture stopped before it recorded its evidence.',
-  },
-} as const;
 
 export const conclusionLabels = {
   regression: statusWords.regression.word,
@@ -123,6 +67,25 @@ export const verdictLabels = {
   'not-run': statusWords.notRun.word,
 } satisfies Record<CheckVerdict['verdict'], string>;
 
+export const integrityLabels = {
+  verified: statusWords.hashMatched.word,
+  unavailable: statusWords.unavailable.word,
+} satisfies Record<Side['artifacts'][number]['integrity'], string>;
+
+export function sideOutcome(side: Side, id: string): string {
+  const check = side.checks.find((item) => item.id === id);
+
+  // A capture that did not complete is missing the evidence. A complete
+  // capture whose journey lacks the check never ran it.
+  if (check === undefined) {
+    return checkLabels[side.execution === 'complete' ? 'not-run' : 'unknown'];
+  }
+
+  return check.actual === null
+    ? checkLabels[check.outcome]
+    : `${checkLabels[check.outcome]}, actual ${check.actual}`;
+}
+
 export const verdictTones = {
   regression: 'regression',
   failed: 'regression',
@@ -150,18 +113,18 @@ export function resultCounts(result: Comparison): string {
   const count = (...kinds: CheckVerdict['verdict'][]) =>
     verdicts.filter((verdict) => kinds.includes(verdict)).length;
 
+  const word = (status: keyof typeof statusWords) =>
+    statusWords[status].word.toLowerCase();
   const others = [
-    { count: count('regression'), word: statusWords.regression.word },
-    { count: count('failed'), word: statusWords.failed.word },
-    { count: count('unknown'), word: statusWords.unknown.word },
-    { count: count('not-run'), word: statusWords.notRun.word },
+    plural(count('regression'), word('regression'), `${word('regression')}s`),
+    `${count('failed')} ${word('failed')}`,
+    `${count('unknown')} ${word('unknown')}`,
+    `${count('not-run')} ${word('notRun')}`,
   ];
 
   return [
     `${plural(count('passed'), 'check', 'checks')} passed`,
-    ...others.flatMap((item) =>
-      item.count === 0 ? [] : [`${item.count} ${item.word.toLowerCase()}`],
-    ),
+    ...others.filter((item) => !item.startsWith('0 ')),
   ].join(' · ');
 }
 

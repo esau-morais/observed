@@ -83,7 +83,7 @@ function renderArtifact(result: ArtifactResult, link: string): string {
     const label =
       result.integrity === 'matched'
         ? 'matched supplied hash'
-        : 'computed; no supplied hash to verify';
+        : 'computed; no supplied hash to compare';
 
     integrity = `SHA-256 ${label}: \`${result.hash}\``;
   }

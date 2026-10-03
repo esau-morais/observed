@@ -4,6 +4,7 @@ import {
   checkSummary,
   conclusionLabels,
   executionLabels,
+  integrityLabels,
   verdictLabels,
 } from './result-text';
 import type {
@@ -152,7 +153,7 @@ function renderArtifacts(side: Side, label: string, level: number): string {
         ? ''
         : ` ${escapeText(artifact.reason)}`;
 
-    return `- ${reference}: ${escapeText(artifact.description)}\n  - Artifact integrity: ${artifact.integrity}.${reason}`;
+    return `- ${reference}: ${escapeText(artifact.description)}\n  - Artifact integrity: ${integrityLabels[artifact.integrity]}.${reason}`;
   });
 
   const screenshot =
@@ -310,7 +311,7 @@ function renderJourney(
         renderMarkdownSection(section),
       ]),
       heading(level, 'Screenshots and original artifacts'),
-      'Screenshots are collector measurements. Artifact integrity describes availability and hash verification, not application correctness.',
+      'Screenshots are collector measurements. Artifact integrity describes availability and hash matches, not application correctness.',
       ...sides((side, label) => renderArtifacts(side, label, level + 1)),
       heading(level, 'Observed, producer, conditions and recipe'),
       ...sides((side, label) => renderProvenance(side, label, level + 1)),

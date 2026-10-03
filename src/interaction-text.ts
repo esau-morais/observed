@@ -1,5 +1,6 @@
 import type { Step } from './capture/recipe';
 import type { EvidenceValue } from './evidence-kinds';
+import { statusWords } from './status-words';
 
 type TimelineStep = EvidenceValue<'timeline'>['steps'][number];
 type BrowserErrors = EvidenceValue<'browser-errors'>;
@@ -25,12 +26,12 @@ export function describeAction(action: string): string {
 export const stepOutcomeLabels = {
   completed: 'Completed',
   failed: 'Step failed',
-  'not-run': 'Not run',
+  'not-run': statusWords.notRun.word,
 } satisfies Record<TimelineStep['outcome'], string>;
 
 export function describeDuration(step: TimelineStep): string {
   if (step.outcome === 'not-run') {
-    return 'Not run';
+    return statusWords.notRun.word;
   }
 
   const milliseconds = Date.parse(step.finishedAt) - Date.parse(step.startedAt);

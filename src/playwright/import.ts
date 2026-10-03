@@ -22,15 +22,16 @@ import {
   PlaywrightReportError,
   type ParsedReport,
 } from './report';
+import { statusWords } from '../status-words';
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 export const importConclusionKinds = ['failed', 'unknown', 'passed'] as const;
 
 const conclusionLabels = {
-  failed: 'Failed',
-  unknown: 'Unknown',
-  passed: 'Passed',
+  failed: statusWords.failed.word,
+  unknown: statusWords.unknown.word,
+  passed: statusWords.passed.word,
 } satisfies Record<(typeof importConclusionKinds)[number], string>;
 
 export const importExitCodes = {

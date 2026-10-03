@@ -92,12 +92,16 @@ function checkCount(result: Comparison): string {
   switch (result.conclusion.kind) {
     case 'regression':
     case 'check-failed': {
-      const unknown = count(['unknown', 'not-run']);
+      const unknown = count(['unknown']);
+      const notRun = count(['not-run']);
 
-      return `${count(['regression', 'failed'])} of ${total} ${noun} failed${unknown === 0 ? '' : `, ${unknown} unknown`}`;
+      return `${count(['regression', 'failed'])} of ${total} ${noun} failed${unknown === 0 ? '' : `, ${unknown} unknown`}${notRun === 0 ? '' : `, ${notRun} not run`}`;
     }
-    case 'unavailable':
-      return `${count(['unknown', 'not-run'])} of ${total} ${noun} unknown`;
+    case 'unavailable': {
+      const notRun = count(['not-run']);
+
+      return `${count(['unknown'])} of ${total} ${noun} unknown${notRun === 0 ? '' : `, ${notRun} not run`}`;
+    }
     case 'no-regression':
     case 'not-checked':
     case 'preview':

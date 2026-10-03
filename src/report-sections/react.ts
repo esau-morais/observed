@@ -1,6 +1,7 @@
 import { renderChanges, type ReactEvidence } from '../evidence-kinds/react';
 import { escapeText } from '../markdown';
 import type { MarkdownSection, SectionSide } from './define';
+import { statusWords } from '../status-words';
 
 function table(
   columns: readonly string[],
@@ -15,7 +16,7 @@ function table(
 
 function describe(side: SectionSide<'react'>): string {
   if (side.evidence.status === 'unavailable') {
-    return `Unavailable: ${escapeText(side.evidence.reason)}`;
+    return `${statusWords.unavailable.word}: ${escapeText(side.evidence.reason)}`;
   }
 
   const value = side.evidence.value;

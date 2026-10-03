@@ -36,9 +36,10 @@ people find Observed useful, so the pilot stays a separate step.
 6. The repository map and agent descriptions
 7. Replay
 
-Gate 7 needs item 1, gate 5 needs item 3, and gate 3 needs items 1, 2 and 5.
-Presentation work does not hold these gates back. Generated journeys start
-once the table in item 4 works, even if the map drawing is not finished.
+Gates 1 and 7 need item 1, gate 5 needs item 3, gate 3 needs items 1, 2 and
+5, and gate 10 needs item 4. Generated journeys need items 1 and 2, not item 4,
+so presentation work does not hold back gates 3, 5 and 7. Each item adds the
+gate corpus pairs for the gates it serves.
 
 ## MVP release gates
 
@@ -94,7 +95,7 @@ corpus replaces them with pairs anyone can run.
 | 2026-10-03 | Agent descriptions are explanation records in the inference color. They never set a chip, a count, or a verdict | Observed separates measurements from interpretation |
 | 2026-10-03 | Imports come from `Bun.Transpiler.scan`, resolved with `Bun.resolveSync`, and the viewer lays out the map with elkjs | A probe resolved every import of the Request lab's `App.tsx` with no new parser. elkjs handles nested directories |
 | 2026-10-03 | Replay records the session that produced the checked evidence, when ffmpeg is installed. Without ffmpeg the replay is unavailable and nothing else changes. A journey with a timing check records its coverage session, labeled as a separate run | Recording can change timing |
-| 2026-10-03 | A check that one side lacks reads "not run" on a complete capture and "unknown" on a capture that recorded nothing. The viewer's "not configured" label is gone | "Not configured" was outside the documented check values. Missing evidence is unknown, never anything else |
+| 2026-10-03 | A check that one side lacks reads "not run" on a complete capture and "unknown" on a capture that did not complete. The viewer's "not configured" label is gone | "Not configured" was outside the documented check values. Missing evidence is unknown, never anything else |
 
 The maintainer delegated the 2026-09-29 rows and every 2026-10-03 row after
 the first. Reverse any of them here. Two things stay with the maintainer. One

@@ -805,9 +805,7 @@ export const inspectSide = Effect.fn('inspectSide')(function* ({
       ) ?? [];
     const evidence = { artifacts, unresolved: [...reasons, ...errors] };
     const checks = unknownChecks(
-      reasons.length === 0
-        ? 'Verified observations unavailable'
-        : reasons.join('; '),
+      reasons.length === 0 ? 'Observations unavailable' : reasons.join('; '),
       recipe,
     );
 

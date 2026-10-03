@@ -4,13 +4,14 @@ import type {
   PlaywrightTest,
   PlaywrightValue,
 } from './evidence-kinds/playwright';
+import { statusWords } from './status-words';
 
 export const playwrightClaimLimit =
   "Imported from Playwright. Observed ran the app's own tests or read their report, and didn't check the assertions itself. A test covers only what it asserts. Flaky and skipped tests are unknown, not passed.";
 
 export const outcomeLabels = {
-  expected: 'Passed',
-  unexpected: 'Failed',
+  expected: statusWords.passed.word,
+  unexpected: statusWords.failed.word,
   flaky: 'Flaky',
   skipped: 'Skipped',
 } satisfies Record<PlaywrightTest['outcome'], string>;
