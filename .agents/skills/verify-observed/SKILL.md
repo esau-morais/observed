@@ -50,8 +50,9 @@ findings, and limitations with the local evidence, not in this skill.
 Execute the affected entry point using the repository's existing tools. When a
 viewer or capture path exists, drive the affected behavior and inspect its raw
 artifacts. Add reusable launch and cleanup instructions only after executing them.
-Report unavailable paths as unverified; a generated report is not an independent
-rerun of the captured application.
+Run the checks you can and are authorized to run before reporting. Report the
+rest as unverified and name each blocker; a generated report is not an
+independent rerun of the captured application.
 
 For interactive CLI changes, use the [terminal recording procedure](references/terminal.md)
 to drive the real prompts with a pinned `tui-test` CLI, retain recordings and

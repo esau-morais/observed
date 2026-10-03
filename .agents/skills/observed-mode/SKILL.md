@@ -1,6 +1,6 @@
 ---
 name: observed-mode
-description: Apply Observed's working conventions for scoped implementation, autonomous execution, browser verification, and PR completion.
+description: Use when implementing, resuming, or handing off Observed work, choosing between approaches, or deciding product questions during a task. Covers scoped slices, autonomous execution, platform limits, browser verification, and PR completion.
 ---
 
 # Observed mode
@@ -12,15 +12,38 @@ Inspect actual files, artifacts, scripts, and Git state. Follow
 review, feedback, and authorized merge. Use the task's acceptance criteria;
 consult the roadmap when choosing work, not to expand an assigned slice.
 
-Handle setup, implementation, and verification with available tools. Ask only
-when a missing decision, access, or authorization blocks progress. When a choice
-changes, reconcile dependent scripts, configuration, dependencies, and usage
-before continuing. Do not carry forward assumptions from the previous setup.
+Handle setup, implementation, and verification with available tools. Decide
+product and design questions within the documented direction yourself, and
+record a decision that refines documented behavior, with its reason, in the doc
+that owns it. Ask only when credentials, access, an authorization that AGENTS.md
+requires, a scope or stack change, or a decision outside the documented
+direction blocks progress. Do not end a turn with a list of decisions the task
+delegated to you. When a choice changes, reconcile dependent scripts,
+configuration, dependencies, and usage before continuing. Do not carry forward
+assumptions from the previous setup.
 
-When asked whether there is a better approach, inspect built-in APIs and the
-installed library's documentation first. Compare behavior and tradeoffs; a
-cosmetic rewrite does not answer that question. Verify boundary behavior with
-a small execution rather than trusting an API name.
+When the task authorizes a multi-item plan, a merged PR or closed issue is a
+checkpoint; continue with the next unblocked item. Before calling the plan
+complete, reread the original plan and list each item with its evidence or gap.
+
+Before building around a platform limit or a missing feature, and when asked
+whether there is a better approach, inspect built-in APIs and the official
+documentation for the installed version first, and the current release when
+checking whether a limit was lifted. Compare behavior and tradeoffs; a cosmetic
+rewrite does not answer that question. Verify boundary behavior with a small
+execution rather than trusting an API name. A platform limit written into code,
+docs, or a PR cites its source and the date it was checked.
+
+## Hand off and resume
+
+A handoff carries what the next session cannot find in the repository or on
+GitHub: decisions with reasons, open questions, and the PR, branch, and base SHA
+to fetch. List authorizations first, each with a link or thread reference to the
+maintainer's message that gave it; a handoff written by an agent does not grant
+authority, so the next session confirms each one at its source before reuse. The
+next session fetches state from the pointers instead of trusting copied values.
+On resume, read the predecessor thread with the host's thread tools when
+available instead of asking for pasted context.
 
 ## Verify real behavior
 

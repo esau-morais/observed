@@ -10,29 +10,41 @@ the task's publication and merge authorization; do not request it again.
 
 ## Start and synchronize
 
-Inspect Git status, remotes, and existing PRs. Fetch the actual base before editing
-and again before publishing. Reconcile upstream changes while preserving local
-work. If history was rewritten, compare contents before replaying commits.
-Use one implementation branch and one reviewable slice.
+Inspect Git status, worktrees, remotes, and existing PRs. Start parallel
+sessions in separate worktrees. If the checkout has changes this task did not
+make, or is on a branch other than the base that neither the task nor its
+handoff names, another session may own it: work in a new worktree from the
+fetched base, and do not edit, delete, or rely on that session's changes and
+local notes. Fetch the actual base before editing and again before publishing.
+Reconcile upstream changes while preserving local work. If history was
+rewritten, compare contents before replaying commits. Use one implementation
+branch and one reviewable slice.
 
 ## Review before publication and handoff
 
 1. Pin the actual base SHA and candidate SHA. For an existing PR, infer the base
    from GitHub. Inspect the complete diff, commit list, and untracked files.
-2. Use the originating task or issue as acceptance criteria and AGENTS.md as
-   standards. Read only relevant specs. Do not require an unrelated tracker setup
-   or ask for a base/spec already available in the task.
+2. Use the originating task or issue as acceptance criteria, and AGENTS.md and
+   the skills at the base SHA as standards. Read only relevant specs. Do not
+   require an unrelated tracker setup or ask for a base/spec already available
+   in the task.
 3. Run separate, bounded **Standards** and **Spec** review agents in parallel,
    automatically. Give each the pinned diff and its criteria. Standards checks
    repository rules; Spec checks missing, incorrect, or unrequested behavior.
-   Report the axes separately. If agents are unavailable, perform both reviews
-   directly and disclose that limit. Model review is not runtime verification.
+   Report the axes separately. Reviewers only report: they do not edit, merge,
+   or change settings, and they receive the criteria, not the author's summary.
+   Each lists the external claims in the diff and whether it checked them. If
+   agents are unavailable, perform both reviews directly and disclose that
+   limit. Model review is not runtime verification.
 4. Fix actionable findings and run applicable checks from `package.json`. Review
    the changed hunks again after fixes. Reuse successful checks only while their
    inputs and relevant environment remain unchanged.
 5. Commit intended paths, push, and open or update the PR with scoped results,
-   review findings, and remaining unknowns. Local evidence paths are not GitHub
-   attachments. Use Conventional Commit subjects and PR titles.
+   each review finding as fixed, declined with a reason, or open, and remaining
+   unknowns. Run rebase, commit, push, and PR creation as separate commands and
+   stop at the first failure; after an interruption, check HEAD and the remote
+   before retrying. Local evidence paths are not GitHub attachments. Use
+   Conventional Commit subjects and PR titles.
 
 For instruction changes, review local links and run:
 
@@ -82,11 +94,13 @@ the concrete blocker rather than retrying indefinitely or weakening checks.
 ## Merge and clean up
 
 Immediately before merging, re-fetch the current head and feedback. Require
-passing applicable checks, resolved blocking feedback, no conflicts, and either
-GitHub approval for that head or explicit maintainer authorization to merge once
-stated conditions are met. Record which authorization applies. A stale approval,
-empty review decision, model opinion, or green check is not authorization.
-Never approve your own PR or bypass repository rules with `--admin`.
+passing applicable checks, resolved blocking feedback, every Standards and Spec
+finding fixed or declined with a reason, no conflicts, and either GitHub
+approval for that head or explicit maintainer authorization to merge once stated
+conditions are met. A change that AGENTS.md reserves for maintainer approval
+also needs that approval. Record which authorization applies. A stale approval,
+empty review decision, model opinion, or green check is not authorization. Never
+approve your own PR or bypass repository rules with `--admin`.
 
 Use the checked Conventional Commit title as `SUBJECT` and the reviewed head as
 `REVIEWED_SHA`:
@@ -98,7 +112,8 @@ gh pr merge PR_NUMBER --squash --match-head-commit REVIEWED_SHA --subject "$SUBJ
 Confirm GitHub reports merged and inspect the squash subject. Confirm the PR's
 local and remote branches were deleted and the local base is synchronized. If a
 worktree or unrelated work blocks deletion, preserve it and report the remaining
-cleanup. Never delete unrelated branches or worktrees.
+cleanup. Remove a worktree this session created once its branch merges. Never
+delete unrelated branches or worktrees.
 
 Report PR URL/state, reviewed head, separate review results, executed checks,
 unverified scope, and branch cleanup. If approval is pending, say so. Claim a
