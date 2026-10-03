@@ -202,6 +202,22 @@ export function anchorLocation(
   return null;
 }
 
+function notObserved(result: Comparison): number {
+  return result.changeScope.kind === 'recorded'
+    ? result.changeScope.files.filter(
+        (file) => file.relation === 'not-observed',
+      ).length
+    : 0;
+}
+
+// The run's conclusion word. Passing checks say nothing about a changed file
+// that no evidence touched, so the word names the checks instead.
+export function runLabel(result: Comparison): string {
+  return result.conclusion.kind === 'no-regression' && notObserved(result) > 0
+    ? statusWords.noRegressionInNamedChecks.word
+    : conclusionLabels[result.conclusion.kind];
+}
+
 export function headlineParts(result: Comparison): {
   label: string;
   subject: string;
@@ -216,13 +232,15 @@ export function headlineParts(result: Comparison): {
 
   if (captureFailed) {
     subject = captureFailure(result);
+  } else if (runLabel(result) !== conclusionLabels[kind]) {
+    subject = `${plural(notObserved(result), 'changed file', 'changed files')} not observed`;
   } else if (first !== undefined) {
     const measure = shownMeasure(first.check);
 
     subject = `${measure === null ? first.check.name : describeMeasure(measure, result.mode)}${rest.length === 0 ? '' : `, plus ${plural(rest.length, 'more check', 'more checks')}`}`;
   }
 
-  return { label: conclusionLabels[kind], subject, restated: captureFailed };
+  return { label: runLabel(result), subject, restated: captureFailed };
 }
 
 function captureFailure(result: Comparison): string {

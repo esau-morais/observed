@@ -41,6 +41,11 @@ export const statusWords = {
     meaning:
       'Every named check that ran passed on the candidate, and at least one ran. It says nothing about files that no check covered.',
   },
+  noRegressionInNamedChecks: {
+    word: 'No regression in the named checks',
+    meaning:
+      'Every named check that ran passed on the candidate, and at least one changed file is not observed.',
+  },
   notChecked: {
     word: 'Not checked',
     meaning: 'Both versions were captured, and no named check ran.',

@@ -24,6 +24,7 @@ import {
   type Side,
 } from '../src/comparison-model';
 import { renderComparison } from '../src/comparison-report';
+import { headline } from '../src/result-text';
 import { sha256 } from '../src/encoding';
 
 const fixture = await readFile(
@@ -537,6 +538,32 @@ test('a coverage file that lists a path twice is unavailable', () => {
   const entry = { path: 'app.ts', executed: [[1, 1]], unexecuted: [] };
 
   expect(parseCoverage(coverageFile([entry, entry])).kind).toBe('unavailable');
+});
+
+test('passing checks with a file not observed read as no regression in the named checks', () => {
+  const computed = scope([
+    scenario({ 'server.ts': app }, { 'server.ts': changedApp }),
+  ]);
+  const passing = {
+    ...result,
+    conclusion: {
+      kind: 'no-regression' as const,
+      text: 'One request per load action passed on base and candidate.',
+    },
+    changeScope: computed,
+  };
+  const everythingObserved = {
+    ...passing,
+    changeScope: scope([scenario({ 'app.ts': app }, { 'app.ts': app })]),
+  };
+
+  expect(headline(passing)).toBe(
+    'No regression in the named checks: 1 changed file not observed',
+  );
+  expect(renderComparison(passing)).toContain(
+    '**No regression in the named checks**',
+  );
+  expect(headline(everythingObserved)).toBe(`No regression: ${result.title}`);
 });
 
 test('a changed observed.json says that journey and check changes were not compared', () => {

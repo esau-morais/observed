@@ -73,7 +73,7 @@ Keep these dimensions separate:
 | Difference | Unchanged, changed, unavailable |
 | Named check | Passed, failed, unknown, not run |
 | Check against base | Regression, when the base passed the same expectation |
-| Run conclusion | Regression, check failed, unavailable, no regression, not checked, preview |
+| Run conclusion | Regression, check failed, unavailable, no regression, no regression in the named checks, not checked, preview |
 | Artifact integrity | Hash matched, unavailable |
 | Changed file | Checked, exercised, not observed, outside the captured source |
 | Interpretation | Expected change, suspected regression, confirmed regression |
