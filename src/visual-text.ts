@@ -55,7 +55,9 @@ export function visualChange(visual: Visual): string | null {
       return `${share(visual.changedPixels, visual.width * visual.height)} of pixels changed, in ${units(visual.regionCount, region)}.`;
     case 'size-differs':
       return describeVisual(visual);
-    default:
+    case 'identical':
+    case 'below-threshold':
+    case 'unavailable':
       return null;
   }
 }

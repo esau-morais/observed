@@ -1,12 +1,6 @@
 import { Option, Schema } from 'effect';
 import { scopeLine } from '../src/change-scope-text';
-import type {
-  CheckVerdict,
-  Comparison,
-  Side,
-  VisualRegion,
-} from '../src/comparison-model';
-import { decodePng, encodeRgbPng } from '../src/png';
+import type { CheckVerdict, Comparison, Side } from '../src/comparison-model';
 import { shortSource } from '../src/provenance-text';
 import {
   anchorLocation,
@@ -159,7 +153,9 @@ function button(text: string, url: string | null, id: string) {
 function location(result: Comparison): string {
   const [lead] = leadingChecks(result);
   const found =
-    lead === undefined ? null : anchorLocation(lead.journey, lead.check);
+    lead === undefined
+      ? null
+      : anchorLocation(lead.journey, lead.check, result.changeScope);
 
   return found === null
     ? ''
@@ -374,38 +370,6 @@ export function callSlack(
 }
 
 // One region only: a box around distant regions could show most of the page.
-export function diffCrop(
-  bytes: Uint8Array,
-  region: VisualRegion,
-): Uint8Array | null {
-  const decoded = decodePng(bytes);
-  const margin = 16;
-
-  if (decoded.kind !== 'decoded') {
-    return null;
-  }
-
-  const { width, height, rgba } = decoded.image;
-  const left = Math.max(0, region.x - margin);
-  const top = Math.max(0, region.y - margin);
-  const right = Math.min(width, region.x + region.width + margin);
-  const bottom = Math.min(height, region.y + region.height + margin);
-  const cropWidth = right - left;
-  const cropHeight = bottom - top;
-  const rgb = new Uint8Array(cropWidth * cropHeight * 3);
-
-  for (let y = 0; y < cropHeight; y += 1) {
-    for (let x = 0; x < cropWidth; x += 1) {
-      const from = ((top + y) * width + left + x) * 4;
-      const to = (y * cropWidth + x) * 3;
-
-      rgb.set(rgba.subarray(from, from + 3), to);
-    }
-  }
-
-  return encodeRgbPng(cropWidth, cropHeight, rgb);
-}
-
 // Needs the optional files:write scope. Without it Slack answers
 // missing_scope, and the message goes out without the image.
 export async function uploadSlackImage(

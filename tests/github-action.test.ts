@@ -7,6 +7,7 @@ import {
   inlineText,
   pageMatchesRun,
   summarize,
+  type Screenshots,
 } from '../scripts/github-action';
 import { Schema } from 'effect';
 import { readFile } from 'node:fs/promises';
@@ -317,9 +318,12 @@ test('captured text cannot close the agent prompt fence, and the artifact name c
   expect(block?.[1]).toContain('conclusion: regression');
 });
 
-test('a failed delivery leaves the verdict and its trust unchanged and ends the job summary', async () => {
+test('a failed delivery or image upload leaves the verdict and its trust unchanged and ends the job summary', async () => {
   const output = await regressionRun('Regressed.');
-  const render = (delivery: string | null) =>
+  const render = (
+    delivery: string | null,
+    screenshots: Screenshots | null = null,
+  ) =>
     summarize({
       output,
       exitCode: 2,
@@ -327,15 +331,24 @@ test('a failed delivery leaves the verdict and its trust unchanged and ends the 
       page: null,
       surface: { kind: 'job' },
       delivery,
+      screenshots,
     });
   const line =
     "Not posted: check title and comment. Add checks: write to the workflow's permissions.";
   const failed = render(line);
-
-  expect({ trusted: failed.trusted, title: failed.title }).toEqual({
-    trusted: render(null).trusted,
-    title: render(null).title,
+  const linked = render(null, {
+    image: null,
+    link: null,
+    note: 'The comment does not show the screenshot crops. GitHub refused the image upload with HTTP 404.',
   });
+  const verdict = ({ trusted, title, kind }: ReturnType<typeof render>) => ({
+    trusted,
+    title,
+    kind,
+  });
+
+  expect(verdict(failed)).toEqual(verdict(render(null)));
+  expect(verdict(linked)).toEqual(verdict(render(null)));
   expect(failed.markdown.trimEnd().endsWith(line)).toBe(true);
 });
 
@@ -477,5 +490,143 @@ test('a failure shared by every capture is one comment line that names the base'
   expect(visible.split(stale)).toHaveLength(2);
   expect(visible).toContain(
     `- ? **Unknown** · Open the report: No browser errors, Find the request: No browser errors\n\n- Every capture failed (application): ${stale}\n`,
+  );
+});
+
+// The comment is the glance: verdict, screenshots, the files that matter and
+// the report link. Features once added lines until the comment read like an
+// audit log and listed 26 files no evidence touched.
+const visibleCommentLimit = 1_200;
+
+async function typicalFailingRun(): Promise<string> {
+  const fixture = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(
+    await readFile(
+      path.join(root, 'tests/fixtures/report/errors-result.json'),
+      'utf8',
+    ),
+  );
+  const [journey] = fixture.journeys;
+  const scope = fixture.changeScope;
+
+  if (journey === undefined || scope.kind !== 'recorded') {
+    throw new Error('The fixture has a journey and a recorded change scope');
+  }
+
+  const [regressed] = journey.checks;
+  const passing = ['Shelf opens', 'One books request', 'No layout shift'].map(
+    (name, index) => ({
+      ...regressed,
+      id: `passing-${String(index)}`,
+      name,
+      verdict: 'passed' as const,
+    }),
+  );
+  const outside = Array.from({ length: 30 }, (_, index) => ({
+    path: `../docs/page-${String(index).padStart(2, '0')}.md`,
+    change: 'modified' as const,
+    captured: false as const,
+    relation: 'outside-captured-source' as const,
+    basis: 'none' as const,
+    reason: 'Neither source snapshot contains this file.',
+    journeys: [],
+    checks: [],
+  }));
+
+  return json({
+    directory: '/bundle',
+    result: {
+      ...fixture,
+      journeys: [
+        {
+          ...journey,
+          checks: [...journey.checks, ...passing],
+          comparison: {
+            ...journey.comparison,
+            visual: {
+              kind: 'changed',
+              width: 1280,
+              height: 800,
+              threshold: 0.1,
+              differingPixels: 40_000,
+              changedPixels: 32_292,
+              regionCount: 3,
+              regions: [
+                {
+                  x: 40,
+                  y: 120,
+                  width: 600,
+                  height: 48,
+                  changedPixels: 20_000,
+                },
+                { x: 40, y: 400, width: 300, height: 30, changedPixels: 8_000 },
+                { x: 900, y: 40, width: 200, height: 30, changedPixels: 4_292 },
+              ],
+              diff: {
+                path: 'journey-1/visual-diff.png',
+                sha256: 'a'.repeat(64),
+              },
+            },
+          },
+        },
+      ],
+      summary: { passed: 3, total: 4 },
+      changeScope: {
+        ...scope,
+        outside: { kind: 'listed', projectDirectory: 'web' },
+        files: [
+          ...outside,
+          ...scope.files,
+          {
+            path: 'src/Shelf.jsx',
+            change: 'modified',
+            captured: true,
+            relation: 'not-observed',
+            basis: 'none',
+            reason: 'No recorded evidence touched this file.',
+            journeys: [],
+            checks: [],
+          },
+          {
+            path: 'src/books.js',
+            change: 'added',
+            captured: true,
+            relation: 'exercised',
+            basis: 'stack-frame',
+            journeys: [journey.title],
+            checks: [],
+          },
+        ],
+      },
+    },
+  });
+}
+
+test(`a typical failing run's comment stays within ${String(visibleCommentLimit)} visible characters and shows paths from the repository root`, async () => {
+  const { markdown } = summarize({
+    output: await typicalFailingRun(),
+    exitCode: 2,
+    artifact: 'observed-bundle',
+    page: 'https://github.com/o/r/actions/runs/1/artifacts/2',
+    screenshots: {
+      image: null,
+      link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
+      note: null,
+    },
+    surface: { kind: 'comment' },
+  });
+  const visible = markdown
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<details>[\s\S]*?<\/details>/g, '');
+
+  expect(visible.length).toBeLessThanOrEqual(visibleCommentLimit);
+  expect(visible).toContain('thrown at `web/src/App.jsx:10`');
+  expect(visible).toContain('`web/src/App.jsx`');
+  expect(visible).toContain('30 files changed outside the captured source.');
+  expect(visible).not.toContain('docs/page-');
+  expect(visible).not.toContain('../');
+  expect(visible).toContain(
+    '[Before, after and changed pixels, left to right](https://github.com/o/r/actions/runs/1/artifacts/3)',
   );
 });

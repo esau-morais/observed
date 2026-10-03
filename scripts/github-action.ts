@@ -17,7 +17,6 @@ import type { Capture, Source } from '../src/capture/model';
 import { loadProject } from '../src/project';
 import { packageName, packaged } from '../src/installation';
 import { renderReportPage } from '../src/report-page';
-import { sha256 } from '../src/encoding';
 import {
   checkName,
   commentMarker,
@@ -215,8 +214,8 @@ function reading(result: Comparison, check: CheckVerdict): string {
     : check.detail;
 }
 
-function rowLocation(open: Open): string | null {
-  const location = anchorLocation(open.journey, open.check);
+function rowLocation(result: Comparison, open: Open): string | null {
+  const location = anchorLocation(open.journey, open.check, result.changeScope);
 
   return location === null ? null : `${location.words} ${code(location.place)}`;
 }
@@ -237,7 +236,7 @@ function rowText(result: Comparison, open: Open): string {
   const { journey, check } = open;
   const where =
     result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
-  const location = rowLocation(open);
+  const location = rowLocation(result, open);
 
   return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}${label(check)}`;
 }
@@ -1457,7 +1456,10 @@ if (import.meta.main) {
         `::warning title=Observed::${escapeCommand(screenshots.note)}\n`,
       );
       notes.push(screenshots.note);
-    } else if (screenshots?.image !== null && screenshots?.image !== undefined) {
+    } else if (
+      screenshots?.image !== null &&
+      screenshots?.image !== undefined
+    ) {
       notes.push('Showed the screenshot crops in the comment');
     }
 
@@ -1521,7 +1523,8 @@ if (import.meta.main) {
 
     const name = checkName(artifact);
     const marker = commentMarker(artifact);
-    const canComment = commenting && source !== 'fork' && commenter.token !== '';
+    const canComment =
+      commenting && source !== 'fork' && commenter.token !== '';
     const lookup = canComment
       ? await (async () => {
           try {

@@ -1,14 +1,12 @@
 import { Effect } from 'effect';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
-  diffCrop,
   readSlackState,
   slackAction,
   slackMessage,
   uploadSlackImage,
   writeSlackState,
 } from '../scripts/slack-delivery';
-import { decodePng, encodeRgbPng } from '../src/png';
 import { slackSkipReason } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 
@@ -254,28 +252,6 @@ test('the Slack message counts the change scope and names files not observed, wi
   expect(text).toContain('`src/e.ts` and 1 more');
   expect(text).not.toContain('src/f.ts');
   expect(text).not.toContain('Captured');
-});
-
-test('the Slack image is one changed region with a margin, clamped to the screenshot', () => {
-  const width = 100;
-  const rgb = new Uint8Array(width * width * 3).map((_, index) => index % 251);
-  const crop = diffCrop(encodeRgbPng(width, width, rgb), {
-    x: 90,
-    y: 5,
-    width: 10,
-    height: 10,
-    changedPixels: 100,
-  });
-  const decoded = crop === null ? null : decodePng(crop);
-
-  if (decoded?.kind !== 'decoded') {
-    throw new Error('The crop is not a readable PNG');
-  }
-
-  expect([decoded.image.width, decoded.image.height]).toEqual([26, 31]);
-  expect(Array.from(decoded.image.rgba.subarray(0, 3))).toEqual(
-    Array.from(rgb.subarray(74 * 3, 74 * 3 + 3)),
-  );
 });
 
 // Slack answers a token without the scope with ok: false and missing_scope,

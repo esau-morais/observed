@@ -6,7 +6,7 @@ import type {
   VerdictRecipe,
 } from './comparison-model';
 import { proposedOf } from './comparison-model';
-import { verdictLabels } from './result-text';
+import { fromRepositoryRoot, verdictLabels } from './result-text';
 import { statusWords } from './status-words';
 
 type Recorded = Extract<ChangeScope, { kind: 'recorded' }>;
@@ -127,27 +127,10 @@ export function fileDetail(result: Comparison, file: ScopeFile): string {
   return sentence(file.reason);
 }
 
-// The viewer bundles this module, so it joins paths without node:path.
-function joined(directory: string, file: string): string {
-  const parts: string[] = [];
-
-  for (const part of `${directory}/${file}`.split('/')) {
-    if (part === '..') {
-      parts.pop();
-    } else if (part !== '.' && part !== '') {
-      parts.push(part);
-    }
-  }
-
-  return parts.join('/');
-}
-
 // The path people read: from the repository root when Git listed the
 // changes, otherwise from the project directory.
 export function repositoryPath(scope: ChangeScope, file: ScopeFile): string {
-  return scope.kind === 'recorded' && scope.outside.kind === 'listed'
-    ? joined(scope.outside.projectDirectory, file.path)
-    : file.path;
+  return fromRepositoryRoot(scope, file.path);
 }
 
 // What the change scope could not record: coverage, the Git listing, or the

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Comparison, Side, VisualRegion } from '../src/comparison-model';
+import type { Visual, VisualRegion } from '../src/comparison-model';
 import { sha256 } from '../src/encoding';
 import { decodePng, encodeRgbPng, type RgbaImage } from '../src/png';
 
@@ -107,7 +107,26 @@ async function readImage(file: string, expected: string): Promise<Read> {
     : { kind: 'none' };
 }
 
-function screenshotOf(directory: string, side: Side): [string, string] | null {
+// The parts of a result the crops read.
+type CropSide = {
+  screenshot: string | null;
+  capture: {
+    manifest: { artifacts: readonly { id: string; sha256: string }[] };
+  } | null;
+};
+
+type CropJourney = {
+  title: string;
+  base: CropSide;
+  candidate: CropSide;
+  comparison:
+    { kind: 'available'; visual: Visual } | { kind: 'preview' | 'unavailable' };
+};
+
+function screenshotOf(
+  directory: string,
+  side: CropSide,
+): [string, string] | null {
   const recorded = side.capture?.manifest.artifacts.find(
     (item) => item.id === 'screenshot',
   );
@@ -127,7 +146,7 @@ export type Crops =
 // match the hash the run recorded.
 export async function screenshotCrops(run: {
   directory: string;
-  result: Comparison;
+  result: { journeys: readonly CropJourney[] };
 }): Promise<Crops> {
   const rows: RgbaImage[][] = [];
   const titles: string[] = [];
@@ -147,7 +166,10 @@ export async function screenshotCrops(run: {
     const images = [
       await readImage(...before),
       await readImage(...after),
-      await readImage(path.join(run.directory, visual.diff.path), visual.diff.sha256),
+      await readImage(
+        path.join(run.directory, visual.diff.path),
+        visual.diff.sha256,
+      ),
     ];
 
     if (images.some((image) => image.kind === 'mismatch')) {

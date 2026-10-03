@@ -1,4 +1,5 @@
 import type {
+  ChangeScope,
   Anchor,
   Check,
   CheckVerdict,
@@ -176,9 +177,37 @@ const anchorWords = {
 } satisfies Record<Anchor['basis'], string>;
 
 // A location is a fact about where the evidence points, never a cause.
+// The viewer bundles this module, so it joins paths without node:path.
+function joined(directory: string, file: string): string {
+  const parts: string[] = [];
+
+  for (const part of `${directory}/${file}`.split('/')) {
+    if (part === '..') {
+      parts.pop();
+    } else if (part !== '.' && part !== '') {
+      parts.push(part);
+    }
+  }
+
+  return parts.join('/');
+}
+
+// A project-relative path as people read it: from the repository root when
+// Git listed the changes, which records where the project sits.
+export function fromRepositoryRoot(
+  scope: ChangeScope,
+  projectPath: string,
+): string {
+  return scope.kind === 'recorded' && scope.outside.kind === 'listed'
+    ? joined(scope.outside.projectDirectory, projectPath)
+    : projectPath;
+}
+
+// Without a change scope the place stays relative to the project.
 export function anchorLocation(
   journey: Journey,
   check: CheckVerdict,
+  scope?: ChangeScope,
 ): { words: string; place: string } | null {
   for (const finding of journey.findings) {
     if (
@@ -192,7 +221,7 @@ export function anchorLocation(
           anchor.basis === 'stack-frame' && finding.subject === 'Console error'
             ? 'logged at'
             : anchorWords[anchor.basis],
-        place: `${anchor.path}:${anchor.line}`,
+        place: `${scope === undefined ? anchor.path : fromRepositoryRoot(scope, anchor.path)}:${anchor.line}`,
       };
     }
   }
