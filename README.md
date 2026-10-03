@@ -131,6 +131,8 @@ The [project schema](src/project.ts) and
 
 #### The journey
 
+- Name the journey after the person's action, such as "Load items". The
+  report and the pull request comment use this name.
 - The browser opens `capture.path` and runs `capture.ready` without recording
   requests. It records requests during `capture.steps`, the journey under
   test. To record the page load itself, start `steps` with a `navigate` step.
@@ -159,6 +161,10 @@ The [project schema](src/project.ts) and
 `capture.checks` is an optional list of named checks. Each has a unique `id`,
 a `name` and a `scope` that says what it covers. `capture.check` still accepts
 a single check. Set one or the other.
+
+Name each check after the behavior it protects, such as "Each Load items click
+sends one item request". The pull request comment leads with the name of each
+failed or unknown check, so the name tells a reviewer what broke.
 
 | Kind | Passes when |
 | --- | --- |

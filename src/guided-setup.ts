@@ -137,7 +137,7 @@ Observed starts an app from observed.json, drives one journey through it in a br
 
 ## Set up observed.json
 
-1. Read how the app installs, builds and starts: package.json scripts, the lockfile, and framework config. Pick one short journey a person would care about, such as opening the main page and using its main control.
+1. Read how the app installs, builds and starts: package.json scripts, the lockfile, and framework config. Pick one short journey a person would care about, such as opening the main page and using its main control. Name the journey and its checks as "Write observed.json" says.
 2. Run \`${cli} schema\` for the JSON Schema of observed.json. It lists every key.
 3. Write observed.json in the app's directory, following "Write observed.json" below. Change no other file; if the app needs a change to run under Observed, ask the person first.
 4. Run \`${cli} observe --json\` in that directory. When Observed rejects observed.json, it exits 1, prints no JSON, and stderr lists every problem. Otherwise exit 1 means the capture is unavailable, and the JSON says why. Fix observed.json and run it again. Exit 2 means a named check failed on the app as it is now; tell the person which one, and ask before changing that check. Exit 0 means it works.

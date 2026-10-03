@@ -79,6 +79,8 @@ Keep these dimensions separate:
   expectation. If another rule establishes a failure, name the rule and
   disclose any missing baseline.
 - Missing evidence never becomes a pass, and an absent check is not a pass.
+- A check that one side lacks reads "not run" on that side when its capture
+  completed, and "unknown" when the capture recorded nothing.
 - A source location is a fact about where evidence was read: "thrown at
   App.jsx:10", never "caused by App.jsx:10". Show a line only when the
   evidence places it there, or when a name matches a changed line and is
@@ -88,14 +90,13 @@ Keep these dimensions separate:
 
 ### Writing
 
-Planned for Phase 3a. Not built.
-
 Generated text follows a reduced form of ASD-STE100, the controlled English
 written for aircraft maintenance manuals. Observed copies its rules, not its
 dictionary, which ASD holds the copyright to.
 
-- Each status word has one meaning, defined once in the code. A test rejects
-  synonyms such as "verified", "safe", and "no issues".
+- Each status word has one meaning, defined once in `statusWords` in
+  `src/result-text.ts`. A test over the report, the PR comment, and the agent
+  handoffs rejects synonyms such as "verified", "safe", and "no issues".
 - An instruction has at most 20 words and tells the reader to do one thing. A
   statement of fact has at most 25 words.
 - Facts and instructions stay in separate sections. The agent handoff lists
@@ -121,14 +122,18 @@ candidate with one relation:
 | Relation | Meaning | Claim limit |
 | --- | --- | --- |
 | Checked | A named check evaluated evidence that touched the file | Only that check's expectation and scope |
-| Exercised | Execution coverage or another record shows changed lines of the file ran in a journey | The code ran. Nothing says it ran correctly |
-| Not observed | No evidence touched the file | Nothing is known about this change |
+| Exercised | Execution coverage or another record shows that lines in scope ran in a journey | The code ran. Nothing says it ran correctly |
+| Not observed | No evidence touched the lines in scope | Nothing is known about those lines |
 | Outside the captured source | The file changed outside the project's `source.paths` | Neither snapshot contains it |
+
+The lines in scope depend on the view. In the change map they are the file's
+changed lines. In the [repository map](#repository-map), which has no diff,
+they are all of the file's lines.
 
 Each relation records its basis, such as execution coverage, a stack frame, a
 component source, or a test location. Label a name match as a match. With no
-basis the relation is "not observed", never a guess. Coverage counts changed
-lines that ran and changed lines that did not, so a journey can exercise part
+basis the relation is "not observed", never a guess. Coverage counts the lines
+in scope that ran and the lines that did not, so a journey can exercise part
 of a file. A file that no collector can execute, such as a stylesheet, a type
 declaration, or code for a server runtime without a collector, is "not
 observed" with that reason, and the agent spends no budget on it.
@@ -151,7 +156,7 @@ the table lacks.
 | Connection | Source |
 | --- | --- |
 | Imports | The static import graph of each snapshot |
-| Ran in | Execution coverage, with the count of changed lines that ran and that did not |
+| Ran in | Execution coverage, with the count of lines in scope that ran and that did not |
 | Requested | The request ledger: method, route, status, and count on each side |
 | Threw at | An error record and its stack frame |
 | Checked by | A named check and its scope |
@@ -275,10 +280,10 @@ output appears only where a finding has a source location.
 - Every run states what it posted and what it skipped, with the reason. A
   skipped delivery never changes the verdict.
 - The PR line names the head commit and leaves out "automatically fixed"
-  until repair exists. Today it reads "N issues found · N behaviors verified ·
-  N unresolved". The target is "N issues found · N checks passed · N
-  unresolved", counting failed, passed, and unknown named checks, then the
-  change scope, such as "2 of 7 changed files not observed".
+  until repair exists. It reads "N checks passed", then each count of
+  regressed, failed, unknown, and not run checks that is not zero, such as
+  "4 checks passed · 1 failed". The target adds the change scope, such as
+  "2 of 7 changed files not observed".
 - Generated journeys run locally in the first release. A run in CI lists the
   files that are not observed and adds them to the agent prompt.
 - Reuse established permissions for routine work. Ask when intent,
