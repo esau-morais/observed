@@ -91,6 +91,7 @@ export const gitChanges = Effect.fn('gitChanges')(
 
     return {
       kind: 'listed',
+      projectDirectory: prefix === '' ? '.' : prefix.replace(/\/$/, ''),
       files: [...files]
         .sort(([left], [right]) => (left < right ? -1 : Number(left > right)))
         .map(([file, change]) => ({ path: file, change })),

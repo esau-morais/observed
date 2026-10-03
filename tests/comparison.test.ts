@@ -2767,7 +2767,7 @@ async function selectedComparison(
     inspectComparison({
       root,
       selection: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         evaluatedAt,
         mode: 'comparison',
         journeys: [{ directory: 'journey-1', base: null, candidate: null }],

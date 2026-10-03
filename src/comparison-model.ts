@@ -472,12 +472,18 @@ const recipeScopeSchema = Schema.Union([
   }),
 ]);
 
+// The project's directory relative to the repository root, `.` at the root.
+// Changed file paths are relative to the project, as source snapshots are;
+// people read them joined to this directory.
+const projectDirectory = text;
+
 // Names Git reports as changed between the base and candidate revisions,
 // relative to the project directory. Recorded at capture time, since the
 // comparator reads only capture directories.
 export const gitChangesSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal('listed'),
+    projectDirectory,
     files: Schema.Array(Schema.Struct(scopeFileIdentity)),
   }),
   unavailableSchema,
@@ -494,7 +500,7 @@ export const changeScopeSchema = Schema.Union([
     // Whether Git listed the changed files, including any that neither
     // snapshot contains.
     outside: Schema.Union([
-      Schema.Struct({ kind: Schema.Literal('listed') }),
+      Schema.Struct({ kind: Schema.Literal('listed'), projectDirectory }),
       unavailableSchema,
     ]),
     coverage: Schema.Array(
@@ -641,7 +647,7 @@ export type MapConnection = typeof mapConnectionSchema.Type;
 
 export type MapEvidence = typeof mapEvidenceSchema.Type;
 
-export const resultSchemaVersion = 8;
+export const resultSchemaVersion = 9;
 
 export const comparisonSchema = Schema.Struct({
   schemaVersion: Schema.Literal(resultSchemaVersion),
@@ -785,8 +791,10 @@ export const recipeSourcesSchema = Schema.Struct({
 
 export type RecipeSources = typeof recipeSourcesSchema.Type;
 
+export const selectionSchemaVersion = 3;
+
 export const selectionSchema = Schema.Struct({
-  schemaVersion: Schema.Literal(2),
+  schemaVersion: Schema.Literal(selectionSchemaVersion),
   evaluatedAt: timestamp,
   mode: Schema.Literals(['preview', 'comparison']),
   journeys: Schema.NonEmptyArray(journeySelectionSchema),

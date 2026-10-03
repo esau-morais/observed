@@ -492,7 +492,7 @@ export function changeScope({
     ),
     outside:
       changes.kind === 'listed'
-        ? { kind: 'listed' }
+        ? { kind: 'listed', projectDirectory: changes.projectDirectory }
         : { kind: 'unavailable', reason: changes.reason },
     coverage: journeys.map(({ journey, coverage }) =>
       coverage.kind === 'recorded'
