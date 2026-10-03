@@ -47,7 +47,8 @@ export type Card =
       status: Status;
     }
   | {
-      kind: 'unchanged-files';
+      kind: 'folded';
+      fold: Fold;
       id: string;
       name: string;
       paths: string[];
@@ -82,6 +83,9 @@ export type Card =
       routes: string[];
       status: Status;
     };
+
+// Groups of files that share one card until the reader opens it.
+export type Fold = 'config' | 'unchanged';
 
 export type Link = {
   id: string;
@@ -134,59 +138,6 @@ function directoryStatus(changed: readonly ScopeFile[]): Status {
   );
 
   return relation === undefined ? unchanged : statusOf(relation);
-}
-
-const words: Record<string, string> = {
-  src: 'Source',
-  lib: 'Library',
-  libs: 'Libraries',
-  pkg: 'Package',
-  utils: 'Utilities',
-  api: 'API',
-  ui: 'UI',
-  css: 'CSS',
-  html: 'HTML',
-  json: 'JSON',
-  cli: 'CLI',
-  url: 'URL',
-  id: 'ID',
-  ci: 'CI',
-};
-
-// A readable name from a path segment: `change-map.tsx` is "Change map",
-// `src` is "Source". The path itself stays in the card and panel.
-export function humanName(segment: string, file = false): string {
-  if (file && !/\.[cm]?[jt]sx?$/.test(segment)) {
-    return segment;
-  }
-
-  const bare = segment
-    .replace(/^\.+/, '')
-    .replace(/\.(d\.)?[cm]?[jt]sx?$|\.[a-z0-9]+$/i, '');
-  const parts = bare
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .split(/[-_.\s]+/)
-    .filter((part) => part !== '');
-
-  if (parts.length === 0) {
-    return segment;
-  }
-
-  return parts
-    .map((part, index) => {
-      const known = words[part.toLowerCase()];
-
-      if (known !== undefined) {
-        return known;
-      }
-
-      const lower = part.toLowerCase();
-
-      return index === 0
-        ? lower.charAt(0).toUpperCase() + lower.slice(1)
-        : lower;
-    })
-    .join(' ');
 }
 
 function normalize(file: string): string {
@@ -292,8 +243,27 @@ export const outsideFilesId = 'outside-files';
 // Packages share one outside card; its panel lists them.
 export const packagesId = 'packages';
 
-// Routes share one journey-row card; its panel lists them.
-export const routesId = 'routes';
+// Requests for scripts, styles, fonts, images and the page itself share one
+// card; the request view lists them. Other routes keep a card each.
+export const assetsId = 'static-assets';
+
+const staticPath =
+  /\.(?:[cm]?js|css|map|woff2?|ttf|otf|eot|png|jpe?g|gif|svg|webp|avif|ico|html?)$/i;
+
+export function isStaticRoute(path: string): boolean {
+  const bare = path.split(/[?#]/)[0] ?? path;
+
+  return bare === '/' || staticPath.test(bare);
+}
+
+const configName =
+  /^(?:package\.json|bun\.lockb?|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bunfig\.toml|[tj]sconfig(?:\.[\w-]+)?\.json|deno\.jsonc?|\.npmrc|\.editorconfig|\.(?:eslintrc|prettierrc)(?:\.\w+)?|[\w-]+\.config\.[cm]?[jt]s)$/;
+
+// Manifests, lockfiles and tool configuration, which say how the project is
+// built rather than what it does.
+export function isConfig(path: string): boolean {
+  return configName.test(path.split('/').at(-1) ?? path);
+}
 
 export function directoryCard(index: MapIndex, path: string): Card {
   const inside = index.captured.filter((block) => under(block.path, path));
@@ -307,7 +277,7 @@ export function directoryCard(index: MapIndex, path: string): Card {
     kind: 'directory',
     id: directoryId(path),
     path,
-    name: humanName(path.split('/').at(-1) ?? path),
+    name: path.split('/').at(-1) ?? path,
     files: inside.length,
     changed,
     status: directoryStatus(changed),
@@ -321,7 +291,7 @@ function fileCard(index: MapIndex, block: FileBlock): Card {
     kind: 'file',
     id: block.id,
     path: block.path,
-    name: humanName(block.path.split('/').at(-1) ?? block.path, true),
+    name: block.path.split('/').at(-1) ?? block.path,
     block,
     file,
     status: file === undefined ? unchanged : statusOf(file.relation),
@@ -357,20 +327,24 @@ export function children(index: MapIndex, directory: string): Card[] {
   }
 
   // Directories first, then files, each by name, so reading order is stable.
-  return [...seen.values()].sort((left, right) =>
-    left.kind === right.kind
-      ? left.id < right.id
-        ? -1
-        : Number(left.id > right.id)
-      : left.kind === 'directory'
-        ? -1
-        : 1,
-  );
+  return [...seen.values()].sort(byKindThenId('directory'));
+}
+
+function byKindThenId(first: Card['kind']) {
+  return (left: Card, right: Card) => {
+    if (left.kind !== right.kind) {
+      return left.kind === first ? -1 : 1;
+    }
+
+    return left.id < right.id ? -1 : Number(left.id > right.id);
+  };
 }
 
 function journeyCards(index: MapIndex): Card[] {
-  const routes = index.map.blocks.flatMap((block) =>
-    block.kind === 'route' ? [`${block.method} ${block.path}`] : [],
+  const assets = index.map.blocks.flatMap((block) =>
+    block.kind === 'route' && isStaticRoute(block.path)
+      ? [`${block.method} ${block.path}`]
+      : [],
   );
   const removed = new Set(
     index.result.removedJourneys.map((journey) => journey.journey),
@@ -405,16 +379,29 @@ function journeyCards(index: MapIndex): Card[] {
 
       return [];
     }),
-    ...(routes.length === 0
+    ...index.map.blocks.flatMap((block): Card[] =>
+      block.kind === 'route' && !isStaticRoute(block.path)
+        ? [
+            {
+              kind: 'route',
+              id: block.id,
+              name: `${block.method} ${block.path}`,
+              routes: [`${block.method} ${block.path}`],
+              status: { label: 'route', tone: 'neutral', symbol: '' },
+            },
+          ]
+        : [],
+    ),
+    ...(assets.length === 0
       ? []
       : [
           {
             kind: 'route' as const,
-            id: routesId,
-            name: 'Requested routes',
-            routes,
+            id: assetsId,
+            name: `Static assets (${assets.length})`,
+            routes: assets,
             status: {
-              label: `${routes.length} ${routes.length === 1 ? 'route' : 'routes'}`,
+              label: 'assets',
               tone: 'neutral' as const,
               symbol: '',
             },
@@ -502,34 +489,73 @@ function cardFor(
 
 // A level with more blocks than this folds its unchanged files into one card
 // until the reader opens it, as Nx folds a directory and CodeSee hides
-// unchanged files.
+// unchanged files. Two or more config files always share one.
 export const crowded = 20;
 
-export const unchangedId = (directory: string) => `unchanged:${directory}`;
+export const foldId = (fold: Fold, directory: string) => `${fold}:${directory}`;
+
+const foldNames = {
+  config: (count: number) => `Config and lockfiles (${count})`,
+  unchanged: (count: number) => `${count} unchanged files`,
+} satisfies Record<Fold, (count: number) => string>;
 
 export function openLevel(
   index: MapIndex,
   directory: string,
-  showUnchanged = false,
+  opened: readonly Fold[] = [],
 ): Level {
   const all = children(index, directory);
-  const quiet = all.filter(
-    (card) => card.kind === 'file' && card.file === undefined,
+  const groups = new Map<Fold, Card[]>();
+  const config = all.filter(
+    (card) => card.kind === 'file' && isConfig(card.path),
   );
-  const fold = !showUnchanged && all.length > crowded && quiet.length > 1;
-  const folded = new Set(fold ? quiet.map((card) => card.id) : []);
-  const inside: Card[] = fold
-    ? [
-        ...all.filter((card) => !folded.has(card.id)),
-        {
-          kind: 'unchanged-files',
-          id: unchangedId(directory),
-          name: `${quiet.length} unchanged files`,
-          paths: quiet.flatMap((card) => (card.kind === 'file' ? [card.path] : [])),
-          status: unchanged,
-        },
-      ]
-    : all;
+
+  if (config.length > 1 && !opened.includes('config')) {
+    groups.set('config', config);
+  }
+
+  const quiet = all.filter(
+    (card) =>
+      card.kind === 'file' &&
+      card.file === undefined &&
+      !(groups.get('config') ?? []).includes(card),
+  );
+
+  if (
+    all.length > crowded &&
+    quiet.length > 1 &&
+    !opened.includes('unchanged')
+  ) {
+    groups.set('unchanged', quiet);
+  }
+
+  const folded = new Map<string, string>();
+  const foldCards: Card[] = [];
+
+  for (const [fold, cards] of groups) {
+    const id = foldId(fold, directory);
+    const changed = cards.flatMap((card) =>
+      card.kind === 'file' && card.file !== undefined ? [card.file] : [],
+    );
+
+    for (const card of cards) {
+      folded.set(card.id, id);
+    }
+
+    foldCards.push({
+      kind: 'folded',
+      fold,
+      id,
+      name: foldNames[fold](cards.length),
+      paths: cards.flatMap((card) => (card.kind === 'file' ? [card.path] : [])),
+      status: directoryStatus(changed),
+    });
+  }
+
+  const inside: Card[] = [
+    ...all.filter((card) => !folded.has(card.id)),
+    ...foldCards,
+  ];
   const insideIds = new Set(inside.map((card) => card.id));
   const outside = new Map<string, Card>();
   const journeys = journeyCards(index);
@@ -540,8 +566,8 @@ export function openLevel(
   const resolve = (id: string) => {
     const block = index.blocks.get(id);
 
-    if (block?.kind === 'route') {
-      return { id: routesId, place: 'journey' as const };
+    if (block?.kind === 'route' && isStaticRoute(block.path)) {
+      return { id: assetsId, place: 'journey' as const };
     }
 
     if (journeyIds.has(id)) {
@@ -554,8 +580,10 @@ export function openLevel(
       return null;
     }
 
-    if (folded.has(found.card.id)) {
-      return { id: unchangedId(directory), place: 'inside' as const };
+    const fold = folded.get(found.card.id);
+
+    if (fold !== undefined) {
+      return { id: fold, place: 'inside' as const };
     }
 
     return { id: found.card.id, place: found.place, card: found.card };
@@ -616,22 +644,19 @@ export function openLevel(
   const name =
     directory === index.root
       ? index.result.title
-      : humanName(directory.split('/').at(-1) ?? directory);
+      : (directory.split('/').at(-1) ?? directory);
 
   return {
     path: directory,
     name,
     inside,
     outside: [
-      ...[...outside.values()].sort((left, right) =>
-        left.kind === right.kind
-          ? left.id < right.id
-            ? -1
-            : Number(left.id > right.id)
-          : left.kind === 'package'
-            ? 1
-            : -1,
-      ),
+      ...[...outside.values()]
+        .sort(byKindThenId('directory'))
+        .sort(
+          (left, right) =>
+            Number(left.kind === 'package') - Number(right.kind === 'package'),
+        ),
       ...(directory === index.root && index.outsideFiles.length > 0
         ? [
             {
@@ -684,8 +709,10 @@ export function cardSentence(index: MapIndex, card: Card): string {
       return `${plural(card.packages.length, 'package', 'packages')} outside the captured source, imported from this level.`;
     case 'outside-files':
       return `${plural(card.files.length, 'file', 'files')} changed outside the captured source. No capture holds them, so no evidence can touch them.`;
-    case 'unchanged-files':
-      return `${plural(card.paths.length, 'file', 'files')} the change did not touch, on the map because they import or are imported by changed files. Open the card to place them.`;
+    case 'folded':
+      return card.fold === 'config'
+        ? `Manifests, lockfiles and tool configuration, folded into one block. ${card.status.label === 'unchanged' ? 'None changed.' : `Changed ones read ${card.status.label}.`} Open the card to place them.`
+        : `${plural(card.paths.length, 'file', 'files')} the change did not touch, on the map because they import or are imported by changed files. Open the card to place them.`;
     case 'journey': {
       const checks = card.journey.checks.length;
       const redefined = card.recipe.length;
@@ -695,7 +722,9 @@ export function cardSentence(index: MapIndex, card: Card): string {
     case 'removed-journey':
       return `Only the base's observed.json defines this journey, so nothing captured it and ${plural(card.checks.length, 'check is', 'checks are')} unknown.`;
     case 'route':
-      return `${plural(card.routes.length, 'route', 'routes')} in the request ledgers. Each journey's links show which it requested.`;
+      return card.id === assetsId
+        ? `${plural(card.routes.length, 'request', 'requests')} for scripts, styles, fonts, images and the page itself. The request view lists each one.`
+        : 'A route in the request ledger. Each journey link says how many requests it made, on each side.';
   }
 }
 
@@ -705,7 +734,12 @@ export function cardPath(index: MapIndex, card: Card): string | null {
       return `${repoPath(index.scope, card.path)}/`;
     case 'file':
       return repoPath(index.scope, card.path);
-    default:
+    case 'package':
+    case 'folded':
+    case 'outside-files':
+    case 'journey':
+    case 'removed-journey':
+    case 'route':
       return null;
   }
 }
@@ -715,14 +749,37 @@ export const cardKinds = {
   file: 'file',
   package: 'package',
   'outside-files': 'outside',
-  'unchanged-files': 'files',
+  folded: 'files',
   journey: 'journey',
   'removed-journey': 'journey',
   route: 'route',
 } satisfies Record<Card['kind'], string>;
 
 export function hasParts(card: Card): boolean {
-  return card.kind === 'directory' || card.kind === 'unchanged-files';
+  return card.kind === 'directory' || card.kind === 'folded';
+}
+
+function lineTotal(list: readonly (readonly [number, number])[]): number {
+  return list.reduce((sum, [start, end]) => sum + end - start + 1, 0);
+}
+
+function fileFoot(block: FileBlock, file: ScopeFile | undefined): string {
+  if (file === undefined) {
+    return 'unchanged';
+  }
+
+  if ('lines' in file) {
+    const ran = lineTotal(file.lines.ran);
+    const total = ran + lineTotal(file.lines.notRan);
+
+    return `${file.change} · ${ran} of ${total} lines ran`;
+  }
+
+  const changed = block.changedLines;
+
+  return changed === null
+    ? file.change
+    : `${file.change} · ${plural(lineTotal(changed), 'line', 'lines')}`;
 }
 
 export function partsLabel(card: Card): string | null {
@@ -730,11 +787,13 @@ export function partsLabel(card: Card): string | null {
     case 'directory':
       return `${plural(card.files, 'file', 'files')}${card.changed.length === 0 ? '' : ` · ${card.changed.length} changed`}`;
     case 'file':
-      return card.path.split('/').at(-1) ?? card.path;
+      return fileFoot(card.block, card.file);
     case 'outside-files':
       return 'outside the captured source';
-    case 'unchanged-files':
-      return 'folded · opens in place';
+    case 'folded':
+      return card.paths
+        .map((path) => path.split('/').at(-1) ?? path)
+        .join(', ');
     case 'package':
       return plural(card.packages.length, 'package', 'packages');
     case 'removed-journey':
@@ -743,7 +802,7 @@ export function partsLabel(card: Card): string | null {
       return card.recipe.length === 0
         ? plural(card.journey.checks.length, 'check', 'checks')
         : `${plural(card.recipe.length, 'check', 'checks')} redefined`;
-    default:
+    case 'route':
       return null;
   }
 }
@@ -770,14 +829,15 @@ export function reach(
   index: MapIndex,
   card: Card,
 ): { upstream: Reach; downstream: Reach } | null {
-  const seeds =
-    card.kind === 'file'
-      ? [card.block.id]
-      : card.kind === 'directory'
-        ? index.captured
-            .filter((block) => under(block.path, card.path))
-            .map((block) => block.id)
-        : [];
+  let seeds: string[] = [];
+
+  if (card.kind === 'file') {
+    seeds = [card.block.id];
+  } else if (card.kind === 'directory') {
+    seeds = index.captured
+      .filter((block) => under(block.path, card.path))
+      .map((block) => block.id);
+  }
 
   if (seeds.length === 0) {
     return null;

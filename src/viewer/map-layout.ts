@@ -92,17 +92,12 @@ function rankNodes(
 
   const ranks = new Map(ids.map((id) => [id, 0]));
   const forward = (id: string) =>
-    (outgoing.get(id) ?? []).filter(
-      (next) => !back.has(`${id}\u0000${next}`),
-    );
+    (outgoing.get(id) ?? []).filter((next) => !back.has(`${id}\u0000${next}`));
   const topological = order.reverse();
 
   for (const id of topological) {
     for (const next of forward(id)) {
-      ranks.set(
-        next,
-        Math.max(ranks.get(next) ?? 0, (ranks.get(id) ?? 0) + 1),
-      );
+      ranks.set(next, Math.max(ranks.get(next) ?? 0, (ranks.get(id) ?? 0) + 1));
     }
   }
 
@@ -560,7 +555,7 @@ export function layoutGraph(
       return;
     }
 
-    ends.sort((a, b) => a.x - b.x || byId(a.key, b.key));
+    ends.sort((a, b) => (a.x === b.x ? byId(a.key, b.key) : a.x - b.x));
     ends.forEach((end, index) => {
       ports.set(
         end.key,
@@ -568,6 +563,7 @@ export function layoutGraph(
       );
     });
   };
+
   const leaving = new Map<string, { key: string; x: number }[]>();
   const arriving = new Map<string, { key: string; x: number }[]>();
 

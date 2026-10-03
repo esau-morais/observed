@@ -155,11 +155,11 @@ viewer lays out and draws the map and never adds a block or a connection.
   slash, as in `@/*`, so a key such as `@*` cannot pass scoped package names
   to the resolver. It does not follow `extends`. Any other
   specifier is a package block named after the package.
-- Layout is presentation, not evidence. The viewer uses
-  [elkjs](https://github.com/kieler/elkjs) for layered layout with nested
-  directories. It is bundled into the built viewer, not installed as a
-  package runtime dependency. Observed uses its EPL-2.0 license option, and
-  its notice goes into the third-party notices.
+- Layout is presentation, not evidence. The viewer shows one directory at a
+  time and lays it out with its own layered layout in
+  `src/viewer/map-layout.ts`: rows from the import order, a row wraps at the
+  available width, and long edges run through shared lanes. The same level at
+  the same width always gives the same picture.
 - A repository map is a single capture's scope over every file in
   `source.paths`.
 

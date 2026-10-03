@@ -19,8 +19,8 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: fileURLToPath(new URL('./dist/viewer', import.meta.url)),
     emptyOutDir: true,
-    // The single-file report allows one script, and elkjs alone adds about
-    // 1.4 MB to it.
-    chunkSizeWarningLimit: 2500,
+    // The single-file report allows one script, so the viewer stays one
+    // chunk of about 530 KB.
+    chunkSizeWarningLimit: 600,
   },
 }));

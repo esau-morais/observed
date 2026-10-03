@@ -48,11 +48,13 @@ import {
   openLevel,
   parentLevel,
   directoryCard,
+  foldId,
   partsLabel,
   reach,
   repoPath,
   statusOf,
   type Card,
+  type Fold,
   type Level,
   type Link,
   type MapIndex,
@@ -68,12 +70,20 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderWidth: 1,
     display: 'grid',
-    gridTemplateColumns: {
-      default: 'minmax(0, 1fr)',
-      [media.desktop]: 'minmax(0, 1fr) 22rem',
-    },
     minWidth: 0,
-    overflow: 'clip',
+    position: 'relative',
+  },
+  // The panel opens over the map's right edge on wide screens and as a sheet
+  // from the bottom on narrow ones, so the map keeps the full width.
+  panelColumn: {
+    insetBlockEnd: { default: 0, [media.desktop]: 0 },
+    insetBlockStart: { default: 'auto', [media.desktop]: 0 },
+    insetInlineEnd: 0,
+    insetInlineStart: { default: 0, [media.desktop]: 'auto' },
+    pointerEvents: 'none',
+    position: { default: 'fixed', [media.desktop]: 'absolute' },
+    width: { default: 'auto', [media.desktop]: '24rem' },
+    zIndex: 3,
   },
   main: { display: 'grid', alignContent: 'start', minWidth: 0 },
   header: {
@@ -178,14 +188,31 @@ const styles = stylex.create({
     color: colors.onAction,
   },
   scroller: {
+    boxSizing: 'border-box',
     minHeight: 240,
-    overflowX: 'auto',
-    overscrollBehaviorX: 'contain',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
     paddingBlock: 24,
     paddingInline: { default: 12, [media.desktop]: 24 },
     touchAction: 'manipulation',
   },
-  canvas: { marginInline: 'auto', position: 'relative' },
+  viewportWrap: { minWidth: 0, position: 'relative' },
+  zoomBar: {
+    alignItems: 'center',
+    display: 'flex',
+    gap: 4,
+    justifyContent: 'flex-end',
+    paddingBlockStart: 12,
+    paddingInline: { default: 12, [media.desktop]: 24 },
+  },
+  viewport: (height: number) => ({ height: `${height + 48}px` }),
+  pannable: { cursor: 'grab' },
+  sizer: { marginInline: 'auto', position: 'relative' },
+  canvas: { insetBlockStart: 0, insetInlineStart: 0, position: 'absolute' },
+  zoomed: (scale: number) => ({
+    transform: `scale(${scale})`,
+    transformOrigin: '0 0',
+  }),
   size: (width: number, height: number) => ({
     height: `${height}px`,
     width: `${width}px`,
@@ -212,7 +239,10 @@ const styles = stylex.create({
     position: 'absolute',
   },
   rowLabel: {
+    backgroundColor: colors.surface,
+    borderRadius: 4,
     color: colors.textSecondary,
+    paddingInline: 4,
     fontSize: '0.75rem',
     fontWeight: 600,
     position: 'absolute',
@@ -407,15 +437,16 @@ const styles = stylex.create({
   panel: {
     alignContent: 'start',
     backgroundColor: colors.canvas,
-    borderInlineStartColor: colors.border,
-    borderInlineStartStyle: { default: 'none', [media.desktop]: 'solid' },
-    borderInlineStartWidth: 1,
-    borderTopColor: colors.border,
-    borderTopStyle: { default: 'solid', [media.desktop]: 'none' },
-    borderTopWidth: 1,
+    borderColor: colors.borderControl,
+    borderRadius: { default: '12px 12px 0 0', [media.desktop]: 12 },
+    borderStyle: 'solid',
+    borderWidth: 1,
+    boxShadow: '0 8px 24px rgba(8,17,18,0.22)',
+    boxSizing: 'border-box',
     display: 'grid',
     gap: 16,
-    maxHeight: { default: 'none', [media.desktop]: '100vh' },
+    maxHeight: { default: '70vh', [media.desktop]: 'calc(100vh - 16px)' },
+    pointerEvents: 'auto',
     minWidth: 0,
     outlineColor: {
       default: 'transparent',
@@ -427,8 +458,14 @@ const styles = stylex.create({
     outlineWidth: { default: 0, ':focus-visible': 2 },
     overflowY: 'auto',
     padding: { default: 16, [media.desktop]: 20 },
-    position: { default: 'static', [media.desktop]: 'sticky' },
-    top: 0,
+    position: 'sticky',
+    top: 8,
+  },
+  panelTop: {
+    alignItems: 'start',
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'space-between',
   },
   panelName: { fontSize: '1.125rem', fontWeight: 600, lineHeight: 1.3 },
   mono: {
@@ -604,6 +641,9 @@ const styles = stylex.create({
 
 type Selection = { kind: 'card'; id: string } | null;
 
+// The selection that shows the open level itself in the panel.
+const levelSelection = 'level';
+
 function StatusChip({
   status,
   compact = false,
@@ -675,6 +715,10 @@ function Evidence({ evidence }: { evidence: readonly MapEvidence[] }) {
   );
 }
 
+const minZoom = 0.4;
+const minFit = 0.6;
+const maxZoom = 2;
+
 const sizes = {
   wide: { width: 184, height: 84 },
   narrow: { width: 150, height: 84 },
@@ -735,10 +779,17 @@ function placeLevel(level: Level, width: number, root: boolean): Placed {
     ? null
     : { x: 0, y: 0, width: contentWidth, height: insideHeight + top + pad };
   let y = layout.height + top + (layout.bottomTop === null ? pad + 40 : 40);
+  const outsideLeft = Math.min(
+    ...level.outside.flatMap((card) => {
+      const box = cards.get(card.id);
+
+      return box === undefined ? [] : [box.x];
+    }),
+  );
   const outsideLabel =
-    layout.bottomTop === null
+    layout.bottomTop === null || !Number.isFinite(outsideLeft)
       ? null
-      : { x: shift, y: layout.bottomTop + top - 24 };
+      : { x: outsideLeft, y: layout.bottomTop + top - 24 };
   let journeyRule: Placed['journeyRule'] = null;
 
   if (level.journeys.length > 0) {
@@ -842,7 +893,7 @@ function CardButton({
   dimmed: boolean;
   selected: boolean;
   onActive: (id: string | null) => void;
-  onOpen: (card: Card) => void;
+  onOpen: (card: Card, keyboard: boolean) => void;
 }) {
   const changed =
     (card.kind === 'file' && card.file !== undefined) ||
@@ -855,7 +906,7 @@ function CardButton({
       data-card={card.id}
       aria-label={cardLabel(index, card, links)}
       aria-pressed={selected}
-      onClick={() => onOpen(card)}
+      onClick={(event) => onOpen(card, event.detail === 0)}
       onPointerEnter={() => onActive(card.id)}
       onPointerLeave={() => onActive(null)}
       onFocus={() => onActive(card.id)}
@@ -873,9 +924,7 @@ function CardButton({
       )}
     >
       <span {...stylex.props(styles.cardTop)}>
-        <span {...stylex.props(styles.eyebrow)}>
-          {eyebrowOf(card, place)}
-        </span>
+        <span {...stylex.props(styles.eyebrow)}>{eyebrowOf(card, place)}</span>
         <StatusChip status={card.status} compact />
       </span>
       <span {...stylex.props(styles.cardName)}>{card.name}</span>
@@ -971,6 +1020,14 @@ function MapCanvas({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1000);
+  // null is fitted to the content; a number is the reader's own zoom.
+  const [zoom, setZoom] = useState<number | null>(null);
+  const drag = useRef<{
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [hovered, setHovered] = useState<{ key: string; at: Point } | null>(
     null,
@@ -991,8 +1048,9 @@ function MapCanvas({
         Number.parseFloat(style.paddingRight);
 
       // Snap to 40 px so small resizes keep the same layout.
-      setWidth(Math.max(300, Math.floor(inner / 40) * 40));
+      setWidth(Math.max(280, Math.floor(inner / 40) * 40));
     };
+
     const observer = new ResizeObserver(measure);
 
     measure();
@@ -1090,218 +1148,338 @@ function MapCanvas({
   const shownJourneyLinks = level.journeyLinks.filter(
     (link) => focus !== null && (link.from === focus || link.to === focus),
   );
+  // The level opens fitted to the width, with its height following the
+  // content; zoom and pan go on from there.
+  const fit = Math.max(minFit, Math.min(1, width / placed.width));
+  const scale = zoom ?? fit;
+  const step = (direction: 1 | -1) =>
+    setZoom((current) =>
+      Math.min(
+        maxZoom,
+        Math.max(
+          minZoom,
+          Math.round(((current ?? fit) + direction * 0.2) * 10) / 10,
+        ),
+      ),
+    );
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      step(1);
+    } else if (event.key === '-') {
+      event.preventDefault();
+      step(-1);
+    } else if (event.key === '0') {
+      event.preventDefault();
+      setZoom(null);
+    }
+  };
 
   return (
-    <div ref={scroller} {...stylex.props(styles.scroller)}>
+    <div {...stylex.props(styles.viewportWrap)}>
+      <div role="group" aria-label="Zoom" {...stylex.props(styles.zoomBar)}>
+        <button
+          type="button"
+          aria-label="Zoom out"
+          onClick={() => step(-1)}
+          {...stylex.props(styles.toggle)}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          aria-pressed={zoom === null}
+          onClick={() => setZoom(null)}
+          {...stylex.props(styles.toggle, zoom === null && styles.pressed)}
+        >
+          Fit · {Math.round(scale * 100)}%
+        </button>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          onClick={() => step(1)}
+          {...stylex.props(styles.toggle)}
+        >
+          +
+        </button>
+      </div>
       <div
+        ref={scroller}
+        onKeyDown={onKeyDown}
+        onPointerDown={(event) => {
+          const element = scroller.current;
+
+          if (
+            element === null ||
+            event.button !== 0 ||
+            (event.target instanceof Element &&
+              event.target.closest('button') !== null)
+          ) {
+            return;
+          }
+
+          drag.current = {
+            x: event.clientX,
+            y: event.clientY,
+            left: element.scrollLeft,
+            top: element.scrollTop,
+          };
+          element.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const element = scroller.current;
+          const start = drag.current;
+
+          if (element !== null && start !== null) {
+            element.scrollLeft = start.left - (event.clientX - start.x);
+            element.scrollTop = start.top - (event.clientY - start.y);
+          }
+        }}
+        onPointerUp={() => {
+          drag.current = null;
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+        }}
         {...stylex.props(
-          styles.canvas,
-          styles.size(placed.width, placed.height),
+          styles.scroller,
+          styles.viewport(Math.ceil(placed.height * Math.min(scale, fit))),
+          scale > fit && styles.pannable,
         )}
       >
-        {placed.container === null ? null : (
+        <div
+          {...stylex.props(
+            styles.sizer,
+            styles.size(placed.width * scale, placed.height * scale),
+          )}
+        >
           <div
-            aria-hidden="true"
-            {...stylex.props(styles.container, styles.place(placed.container))}
-          >
-            <span
-              {...stylex.props(styles.rowLabel, styles.tooltipPlace(12, 10))}
-            >
-              Inside {level.name}
-            </span>
-          </div>
-        )}
-        {placed.outsideLabel === null ? null : (
-          <span
-            aria-hidden="true"
             {...stylex.props(
-              styles.rowLabel,
-              styles.tooltipPlace(placed.outsideLabel.x, placed.outsideLabel.y),
+              styles.canvas,
+              styles.size(placed.width, placed.height),
+              styles.zoomed(scale),
             )}
           >
-            Outside{' '}
-            <span {...stylex.props(styles.rowNote)}>
-              · what this level imports or is imported by
-            </span>
-          </span>
-        )}
-        {placed.journeyRule === null ? null : (
-          <>
-            <div
-              aria-hidden="true"
-              {...stylex.props(
-                styles.rule,
-                styles.place({
-                  x: 0,
-                  y: placed.journeyRule.y,
-                  width: placed.journeyRule.width,
-                  height: 0,
-                }),
-              )}
-            />
-            <span
-              aria-hidden="true"
-              {...stylex.props(
-                styles.rowLabel,
-                styles.tooltipPlace(0, placed.journeyRule.y + 10),
-              )}
-            >
-              Journeys{' '}
-              <span {...stylex.props(styles.rowNote)}>
-                · links show on hover or selection
-              </span>
-            </span>
-          </>
-        )}
-        <svg
-          aria-hidden="true"
-          width={placed.width}
-          height={placed.height}
-          {...stylex.props(styles.edges)}
-        >
-          <defs>
-            {connectionKinds.map((kind) => (
-              <marker
-                key={kind}
-                id={`arrow-${kind}`}
-                viewBox="0 0 8 8"
-                refX="7"
-                refY="4"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto-start-reverse"
-                {...stylex.props(styles[kind])}
-              >
-                <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
-              </marker>
-            ))}
-          </defs>
-          {[...byPair].map(([key, links]) => {
-            const points = placed.edges.get(key);
-
-            if (points === undefined) {
-              return null;
-            }
-
-            const [first] = links;
-            const touches =
-              focus === null ||
-              (first !== undefined &&
-                (first.from === focus || first.to === focus));
-            const total = links.reduce(
-              (sum, link) => sum + link.connections.length,
-              0,
-            );
-            const start = points[0];
-            const next = points[1];
-            const mid =
-              start === undefined || next === undefined
-                ? null
-                : { x: (start.x + next.x) / 2, y: (start.y + next.y) / 2 };
-
-            return (
-              <g
-                key={key}
-                onPointerEnter={(event) => {
-                  const box =
-                    event.currentTarget.ownerSVGElement?.getBoundingClientRect();
-
-                  setHovered({
-                    key,
-                    at: {
-                      x: event.clientX - (box?.left ?? 0) + 12,
-                      y: event.clientY - (box?.top ?? 0) + 12,
-                    },
-                  });
-                }}
-                onPointerLeave={() => setHovered(null)}
+            {placed.container === null ? null : (
+              <div
+                aria-hidden="true"
                 {...stylex.props(
-                  styles.edgeGroup,
-                  !touches && styles.faint,
-                  focus === null && dense && styles.rest,
+                  styles.container,
+                  styles.place(placed.container),
                 )}
               >
-                {links.map((link, position) => {
-                  const offset = (position - (links.length - 1) / 2) * 4;
-                  const shifted = points.map((point, at) =>
-                    at === 0 || at === points.length - 1
-                      ? { x: point.x + offset, y: point.y }
-                      : { x: point.x + offset, y: point.y },
-                  );
+                <span
+                  {...stylex.props(
+                    styles.rowLabel,
+                    styles.tooltipPlace(12, 10),
+                  )}
+                >
+                  Inside {level.name}
+                </span>
+              </div>
+            )}
+            {placed.outsideLabel === null ? null : (
+              <span
+                aria-hidden="true"
+                {...stylex.props(
+                  styles.rowLabel,
+                  styles.tooltipPlace(
+                    placed.outsideLabel.x,
+                    placed.outsideLabel.y,
+                  ),
+                )}
+              >
+                Outside{' '}
+                <span {...stylex.props(styles.rowNote)}>
+                  · what this level imports or is imported by
+                </span>
+              </span>
+            )}
+            {placed.journeyRule === null ? null : (
+              <>
+                <div
+                  aria-hidden="true"
+                  {...stylex.props(
+                    styles.rule,
+                    styles.place({
+                      x: 0,
+                      y: placed.journeyRule.y,
+                      width: placed.journeyRule.width,
+                      height: 0,
+                    }),
+                  )}
+                />
+                <span
+                  aria-hidden="true"
+                  {...stylex.props(
+                    styles.rowLabel,
+                    styles.tooltipPlace(0, placed.journeyRule.y + 10),
+                  )}
+                >
+                  Journeys{' '}
+                  <span {...stylex.props(styles.rowNote)}>
+                    · links show on hover or selection
+                  </span>
+                </span>
+              </>
+            )}
+            <svg
+              aria-hidden="true"
+              width={placed.width}
+              height={placed.height}
+              {...stylex.props(styles.edges)}
+            >
+              <defs>
+                {connectionKinds.map((kind) => (
+                  <marker
+                    key={kind}
+                    id={`arrow-${kind}`}
+                    viewBox="0 0 8 8"
+                    refX="7"
+                    refY="4"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                    {...stylex.props(styles[kind])}
+                  >
+                    <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
+                  </marker>
+                ))}
+              </defs>
+              {[...byPair].map(([key, links]) => {
+                const points = placed.edges.get(key);
 
-                  return (
-                    <path
-                      key={link.id}
-                      d={curve(shifted)}
-                      markerEnd={`url(#arrow-${link.kind})`}
-                      {...stylex.props(
-                        styles.line,
-                        styles[link.kind],
-                        link.removed && styles.removed,
-                        focus !== null && touches && styles.strong,
-                      )}
-                    />
-                  );
-                })}
-                <path d={curve(points)} {...stylex.props(styles.hit)} />
-                {total > 1 && mid !== null ? (
-                  <g>
-                    <circle
-                      cx={mid.x}
-                      cy={mid.y}
-                      r={8}
-                      {...stylex.props(styles.badge)}
-                    />
-                    <text
-                      x={mid.x}
-                      y={mid.y}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      {...stylex.props(styles.badgeText)}
-                    >
-                      {total}
-                    </text>
+                if (points === undefined) {
+                  return null;
+                }
+
+                const [first] = links;
+                const touches =
+                  focus === null ||
+                  (first !== undefined &&
+                    (first.from === focus || first.to === focus));
+                const total = links.reduce(
+                  (sum, link) => sum + link.connections.length,
+                  0,
+                );
+                const start = points[0];
+                const next = points[1];
+                const mid =
+                  start === undefined || next === undefined
+                    ? null
+                    : { x: (start.x + next.x) / 2, y: (start.y + next.y) / 2 };
+
+                return (
+                  <g
+                    key={key}
+                    onPointerEnter={(event) => {
+                      const box =
+                        event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+
+                      setHovered({
+                        key,
+                        at: {
+                          x: (event.clientX - (box?.left ?? 0)) / scale + 12,
+                          y: (event.clientY - (box?.top ?? 0)) / scale + 12,
+                        },
+                      });
+                    }}
+                    onPointerLeave={() => setHovered(null)}
+                    {...stylex.props(
+                      styles.edgeGroup,
+                      !touches && styles.faint,
+                      focus === null && dense && styles.rest,
+                    )}
+                  >
+                    {links.map((link, position) => {
+                      const offset = (position - (links.length - 1) / 2) * 4;
+                      const shifted = points.map((point, at) =>
+                        at === 0 || at === points.length - 1
+                          ? { x: point.x + offset, y: point.y }
+                          : { x: point.x + offset, y: point.y },
+                      );
+
+                      return (
+                        <path
+                          key={link.id}
+                          d={curve(shifted)}
+                          markerEnd={`url(#arrow-${link.kind})`}
+                          {...stylex.props(
+                            styles.line,
+                            styles[link.kind],
+                            link.removed && styles.removed,
+                            focus !== null && touches && styles.strong,
+                          )}
+                        />
+                      );
+                    })}
+                    <path d={curve(points)} {...stylex.props(styles.hit)} />
+                    {total > 1 && mid !== null ? (
+                      <g>
+                        <circle
+                          cx={mid.x}
+                          cy={mid.y}
+                          r={8}
+                          {...stylex.props(styles.badge)}
+                        />
+                        <text
+                          x={mid.x}
+                          y={mid.y}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          {...stylex.props(styles.badgeText)}
+                        >
+                          {total}
+                        </text>
+                      </g>
+                    ) : null}
                   </g>
-                ) : null}
-              </g>
-            );
-          })}
-          {shownJourneyLinks.map((link) => {
-            const from = placed.cards.get(link.from);
-            const to = placed.cards.get(link.to);
+                );
+              })}
+              {shownJourneyLinks.map((link) => {
+                const from = placed.cards.get(link.from);
+                const to = placed.cards.get(link.to);
 
-            return from === undefined || to === undefined ? null : (
-              <path
-                key={link.id}
-                d={journeyPath(from, to)}
-                markerEnd={`url(#arrow-${link.kind})`}
-                {...stylex.props(styles.line, styles[link.kind], styles.strong)}
+                return from === undefined || to === undefined ? null : (
+                  <path
+                    key={link.id}
+                    d={journeyPath(from, to)}
+                    markerEnd={`url(#arrow-${link.kind})`}
+                    {...stylex.props(
+                      styles.line,
+                      styles[link.kind],
+                      styles.strong,
+                    )}
+                  />
+                );
+              })}
+            </svg>
+            {ordered.map(({ card, box, place }) => (
+              <CardButton
+                key={card.id}
+                index={index}
+                card={card}
+                box={box}
+                place={place}
+                links={linkCount.get(card.id) ?? 0}
+                dimmed={near !== null && !near.has(card.id)}
+                selected={
+                  selection?.kind === 'card' && selection.id === card.id
+                }
+                onActive={setActive}
+                onOpen={onOpen}
               />
-            );
-          })}
-        </svg>
-        {ordered.map(({ card, box, place }) => (
-          <CardButton
-            key={card.id}
-            index={index}
-            card={card}
-            box={box}
-            place={place}
-            links={linkCount.get(card.id) ?? 0}
-            dimmed={near !== null && !near.has(card.id)}
-            selected={selection?.kind === 'card' && selection.id === card.id}
-            onActive={setActive}
-            onOpen={onOpen}
-          />
-        ))}
-        {hovered === null ? null : (
-          <Tooltip
-            links={hoveredLinks}
-            names={names}
-            blocks={index.blocks}
-            at={hovered.at}
-          />
-        )}
+            ))}
+            {hovered === null ? null : (
+              <Tooltip
+                links={hoveredLinks}
+                names={names}
+                blocks={index.blocks}
+                at={hovered.at}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1513,7 +1691,12 @@ function sourceFiles(card: Card): string[] {
       return card.changed.map((file) => file.path);
     case 'outside-files':
       return card.files.map((file) => file.path);
-    default:
+    case 'folded':
+      return card.paths;
+    case 'package':
+    case 'journey':
+    case 'removed-journey':
+    case 'route':
       return [];
   }
 }
@@ -1523,7 +1706,7 @@ function sourcesHeading(card: Card, count: number): string {
     return 'Source';
   }
 
-  return card.kind === 'outside-files'
+  return card.kind === 'outside-files' || card.kind === 'folded'
     ? `Files (${count})`
     : `Changed files (${count})`;
 }
@@ -1720,11 +1903,16 @@ function Reach({ index, card }: { index: MapIndex; card: Card }) {
     <section {...stylex.props(styles.group)}>
       <h4 {...stylex.props(styles.panelHeading)}>Reach on this map</h4>
       <p {...stylex.props(styles.text)}>
-        Upstream: {line(found.upstream.files, found.upstream.hops, 'imports it')}
+        Upstream:{' '}
+        {line(found.upstream.files, found.upstream.hops, 'imports it')}
       </p>
       <p {...stylex.props(styles.text)}>
         Downstream:{' '}
-        {line(found.downstream.files, found.downstream.hops, 'is imported by it')}
+        {line(
+          found.downstream.files,
+          found.downstream.hops,
+          'is imported by it',
+        )}
       </p>
     </section>
   );
@@ -1762,6 +1950,7 @@ function Panel({
   card,
   onOpen,
   onSelect,
+  onClose,
   panelRef,
 }: {
   index: MapIndex;
@@ -1769,6 +1958,7 @@ function Panel({
   card: Card | null;
   onOpen: (card: Card) => void;
   onSelect: (id: string) => void;
+  onClose: () => void;
   panelRef: RefObject<HTMLElement | null>;
 }) {
   const names = new Map(
@@ -1791,11 +1981,21 @@ function Panel({
       {...stylex.props(styles.panel)}
     >
       <div {...stylex.props(styles.group)}>
-        <span {...stylex.props(styles.titleRow)}>
-          <span {...stylex.props(styles.chip, styles.kindChip)}>
-            {shown === null ? 'project' : cardKinds[shown.kind]}
+        <span {...stylex.props(styles.panelTop)}>
+          <span {...stylex.props(styles.titleRow)}>
+            <span {...stylex.props(styles.chip, styles.kindChip)}>
+              {shown === null ? 'project' : cardKinds[shown.kind]}
+            </span>
+            {shown === null ? null : <StatusChip status={shown.status} />}
           </span>
-          {shown === null ? null : <StatusChip status={shown.status} />}
+          <button
+            type="button"
+            aria-label="Close details"
+            onClick={onClose}
+            {...stylex.props(styles.toggle)}
+          >
+            ×
+          </button>
         </span>
         <h3 {...stylex.props(styles.panelName)}>
           {shown === null ? index.result.title : shown.name}
@@ -1850,14 +2050,18 @@ function Panel({
 
 type MapState = {
   directory: string;
-  showUnchanged: boolean;
+  opened: Fold[];
   selection: Selection;
 };
 
 // The open level and selected block live in the URL hash, as Archify keeps
 // its focus, so a link opens the same view: `#map=src&block=file:src/a.ts`.
 function readHash(index: MapIndex): MapState {
-  const fallback = { directory: index.root, showUnchanged: false, selection: null };
+  const fallback = {
+    directory: index.root,
+    opened: [],
+    selection: null,
+  };
 
   if (typeof location === 'undefined' || !location.hash.startsWith('#map=')) {
     return fallback;
@@ -1869,7 +2073,10 @@ function readHash(index: MapIndex): MapState {
     directory === index.root ||
     index.captured.some((block) => block.path.startsWith(`${directory}/`));
 
-  if (!known || !(directory === index.root || directory.startsWith(index.root))) {
+  if (
+    !known ||
+    !(directory === index.root || directory.startsWith(index.root))
+  ) {
     return fallback;
   }
 
@@ -1877,7 +2084,11 @@ function readHash(index: MapIndex): MapState {
 
   return {
     directory,
-    showUnchanged: params.get('unchanged') === 'shown',
+    opened: (params.get('open') ?? '')
+      .split(',')
+      .filter(
+        (item): item is Fold => item === 'config' || item === 'unchanged',
+      ),
     selection: block === null ? null : { kind: 'card', id: block },
   };
 }
@@ -1887,8 +2098,8 @@ function writeHash(index: MapIndex, state: MapState) {
 
   params.set('map', state.directory);
 
-  if (state.showUnchanged) {
-    params.set('unchanged', 'shown');
+  if (state.opened.length > 0) {
+    params.set('open', state.opened.join(','));
   }
 
   if (state.selection !== null) {
@@ -1897,13 +2108,20 @@ function writeHash(index: MapIndex, state: MapState) {
 
   const hash =
     state.directory === index.root &&
-    !state.showUnchanged &&
+    state.opened.length === 0 &&
     state.selection === null
       ? ''
       : `#${params.toString()}`;
 
-  if (hash !== location.hash && (hash !== '' || location.hash.startsWith('#map='))) {
-    history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+  if (
+    hash !== location.hash &&
+    (hash !== '' || location.hash.startsWith('#map='))
+  ) {
+    history.replaceState(
+      null,
+      '',
+      `${location.pathname}${location.search}${hash}`,
+    );
   }
 }
 
@@ -1948,10 +2166,10 @@ function MapSection({
   const changedByUser = useRef(false);
   const panel = useRef<HTMLElement>(null);
   const wide = useWide();
-  const { directory, showUnchanged, selection } = state;
+  const { directory, opened, selection } = state;
   const level = useMemo(
-    () => openLevel(index, directory, showUnchanged),
-    [index, directory, showUnchanged],
+    () => openLevel(index, directory, opened),
+    [index, directory, opened],
   );
   const root = directory === index.root;
   const cards = useMemo(
@@ -1966,6 +2184,18 @@ function MapSection({
   );
   const selected =
     selection === null ? null : (cards.get(selection.id) ?? null);
+  const panelOpen =
+    selection !== null &&
+    (selection.id === levelSelection || selected !== null);
+  const [focusPanel, setFocusPanel] = useState(false);
+
+  useEffect(() => {
+    if (focusPanel && panelOpen) {
+      panel.current?.focus();
+      setFocusPanel(false);
+    }
+  }, [focusPanel, panelOpen, selection]);
+
   const linkTotal = level.links.reduce(
     (sum, link) => sum + link.connections.length,
     0,
@@ -1981,6 +2211,19 @@ function MapSection({
     }
   }, [index, state]);
 
+  // A link inside the page can change only the hash.
+  useEffect(() => {
+    const follow = () => {
+      if (location.hash.startsWith('#map=')) {
+        setState(readHash(index));
+      }
+    };
+
+    window.addEventListener('hashchange', follow);
+
+    return () => window.removeEventListener('hashchange', follow);
+  }, [index]);
+
   const update = (next: MapState, focus: string | null) => {
     changedByUser.current = true;
     setState(next);
@@ -1988,7 +2231,7 @@ function MapSection({
   };
 
   const go = (next: string, focus: string | null) => {
-    update({ directory: next, showUnchanged: false, selection: null }, focus);
+    update({ directory: next, opened: [], selection: null }, focus);
     const opened = openLevel(index, next);
 
     setAnnouncement(
@@ -1996,28 +2239,33 @@ function MapSection({
     );
   };
 
-  const open = (card: Card) => {
+  const open = (card: Card, keyboard = false) => {
     if (card.kind === 'directory') {
       go(card.path, null);
 
       return;
     }
 
-    if (card.kind === 'unchanged-files') {
-      update({ ...state, showUnchanged: true, selection: null }, null);
-      setAnnouncement(`Showing ${card.paths.length} unchanged files.`);
+    if (card.kind === 'folded') {
+      update(
+        { ...state, opened: [...opened, card.fold], selection: null },
+        null,
+      );
+      setAnnouncement(`Placed ${card.paths.length} files: ${card.name}.`);
 
       return;
     }
 
+    const closing = selection?.id === card.id;
+
     update(
       {
         ...state,
-        selection:
-          selection?.id === card.id ? null : { kind: 'card', id: card.id },
+        selection: closing ? null : { kind: 'card', id: card.id },
       },
-      null,
+      closing ? card.id : null,
     );
+    setFocusPanel(keyboard && !closing);
   };
 
   // Escape clears the selection, then folds unchanged files back, then goes
@@ -2029,14 +2277,22 @@ function MapSection({
 
     if (selection !== null) {
       event.preventDefault();
-      update({ ...state, selection: null }, selection.id);
+      update(
+        { ...state, selection: null },
+        selection.id === levelSelection ? null : selection.id,
+      );
 
       return;
     }
 
-    if (showUnchanged && openLevel(index, directory).inside.some((card) => card.kind === 'unchanged-files')) {
+    const last = opened.at(-1);
+
+    if (last !== undefined) {
       event.preventDefault();
-      update({ ...state, showUnchanged: false }, `unchanged:${directory}`);
+      update(
+        { ...state, opened: opened.slice(0, -1) },
+        foldId(last, directory),
+      );
 
       return;
     }
@@ -2055,7 +2311,7 @@ function MapSection({
       <Legend level={level} />
       <p {...stylex.props(styles.hint)}>
         Arrows point from the importer to the imported file. Select a block with
-        parts to open it. Escape goes up.
+        parts to open it. Escape goes up. Plus and minus zoom; drag to pan.
       </p>
     </>
   );
@@ -2093,6 +2349,29 @@ function MapSection({
               {root ? 'project' : 'directory'}
             </span>
             {toolbar}
+            <button
+              type="button"
+              aria-pressed={selection?.id === levelSelection}
+              onClick={(event) => {
+                update(
+                  {
+                    ...state,
+                    selection:
+                      selection?.id === levelSelection
+                        ? null
+                        : { kind: 'card', id: levelSelection },
+                  },
+                  null,
+                );
+                setFocusPanel(event.detail === 0);
+              }}
+              {...stylex.props(
+                styles.toggle,
+                selection?.id === levelSelection && styles.pressed,
+              )}
+            >
+              Details
+            </button>
           </div>
           <p {...stylex.props(styles.lead)}>{scopeLine(scope)}</p>
           <p {...stylex.props(styles.counts)}>
@@ -2102,22 +2381,22 @@ function MapSection({
               ? ''
               : ` · ${journeyTotal} journey links show on hover`}
           </p>
-          {view !== 'map' ? null : wide ? (
-            legend
-          ) : (
+          {view === 'map' && wide ? legend : null}
+          {view === 'map' && !wide ? (
             <details>
               <summary {...stylex.props(styles.summary, styles.hint)}>
                 Legend and keys
               </summary>
               {legend}
             </details>
-          )}
+          ) : null}
           <p aria-live="polite" {...stylex.props(styles.srOnly)}>
             {announcement}
           </p>
         </header>
         {view === 'map' ? (
           <MapCanvas
+            key={`${directory}\u0000${opened.join(',')}`}
             index={index}
             level={level}
             root={root}
@@ -2129,20 +2408,32 @@ function MapSection({
           <FileTree index={index} />
         )}
       </div>
-      <Panel
-        index={index}
-        level={level}
-        card={selected}
-        onOpen={open}
-        onSelect={(id) => {
-          const card = cards.get(id);
+      {panelOpen ? (
+        <div {...stylex.props(styles.panelColumn)}>
+          <Panel
+            index={index}
+            level={level}
+            card={selected}
+            onOpen={(card) => open(card, true)}
+            onSelect={(id) => {
+              const card = cards.get(id);
 
-          if (card !== undefined) {
-            open(card);
-          }
-        }}
-        panelRef={panel}
-      />
+              if (card !== undefined) {
+                open(card, true);
+              }
+            }}
+            onClose={() =>
+              update(
+                { ...state, selection: null },
+                selection?.id === levelSelection
+                  ? null
+                  : (selection?.id ?? null),
+              )
+            }
+            panelRef={panel}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2183,7 +2474,12 @@ function fileTree(index: MapIndex): TreeNode {
     const directories = node.directories.map(squash);
     const [only] = directories;
 
-    if (node.path !== '' && node.files.length === 0 && directories.length === 1 && only !== undefined) {
+    if (
+      node.path !== '' &&
+      node.files.length === 0 &&
+      directories.length === 1 &&
+      only !== undefined
+    ) {
       return { ...only, name: `${node.name}/${only.name}` };
     }
 

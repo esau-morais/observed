@@ -108,16 +108,6 @@ await buildViewer({
 // require to accompany the copies.
 const notices: string[] = [];
 
-// Packages offered under a choice of licenses, with the one Observed takes.
-// EPL-2.0 asks a binary distribution to say where the source is.
-const choices = new Map([
-  [
-    'elkjs',
-    (version: string) =>
-      `Observed distributes elkjs under EPL-2.0. Its source is at https://github.com/kieler/elkjs/tree/${version}.`,
-  ],
-]);
-
 for (const name of [...bundled].sort()) {
   const directory = path.join(root, 'node_modules', name);
   const manifest = await readManifest(directory);
@@ -137,10 +127,8 @@ for (const name of [...bundled].sort()) {
     process.exit(1);
   }
 
-  const choice = choices.get(name)?.(manifest.version);
-
   notices.push(
-    `${name} ${manifest.version} (${manifest.license ?? 'see below'})\n\n${choice === undefined ? '' : `${choice}\n\n`}${
+    `${name} ${manifest.version} (${manifest.license ?? 'see below'})\n\n${
       licenseFile === undefined
         ? `The package ships no license file. Its license text is in ${String(repository)}.`
         : (await Bun.file(path.join(directory, licenseFile)).text()).trim()
