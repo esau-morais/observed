@@ -4,6 +4,43 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.4 (2026-10-03)
+
+Fifth alpha of 0.2.0, published under the npm dist-tags `alpha` and `latest`.
+The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
+`result.json` moves to schema version 8: the viewer and the action reject a
+version 7 result and ask you to capture both revisions again.
+
+- **Every changed file gets a relation.** The comparison lists the files that
+  differ between base and candidate and says what evidence touched each one:
+  checked, exercised, not observed, or outside the captured source. A run whose
+  checks pass while a changed file is not observed reads "No regression in the
+  named checks" with the count of files not observed, in place of a plain "No
+  regression". Slack shows the same count with a neutral icon and lists up to
+  5 files not observed.
+- **Browser coverage per journey.** Each journey records the source lines that
+  ran, as `evidence/coverage.json`, through source maps. It runs the journey
+  once more in its own browser session, so the server receives the journey's
+  requests again. Turn it off for a journey with
+  `{ "kind": "coverage", "enabled": false }` in its `collectors`.
+- **Checks are judged by the base revision's `observed.json`.** `observe` reads
+  the file from the base revision too, and the base's definition judges every
+  check it defines, so a pull request can't loosen a check to pass it. The
+  candidate's version of an altered check shows as proposed and sets no
+  verdict. The report, the job summary and the PR comment name added, removed
+  and altered checks. A changed journey makes its checks unknown, and a removed
+  journey with checks makes a run that would otherwise pass unavailable. When
+  the base has no `observed.json`, or an invalid one, every check counts as
+  added, so a failing check reads "failed", not "regression".
+- **The viewer opens on a change map.** Changed files appear with the files they
+  import and the files that import them. Each connection names the evidence it
+  came from: imports, coverage, errors, checks or requests. A toggle switches to
+  the file table.
+- **Status words in place of "verified".** Reports, PR comments, job summaries
+  and the viewer take their words from one table. The count line reads "N
+  checks passed" followed by each count that is not zero. The agent handoff
+  lists facts, then next steps, and names the files no journey reached.
+
 ## 0.2.0-alpha.3 (2026-09-29)
 
 Fourth alpha of 0.2.0, published under the npm dist-tag `alpha`. The action's
