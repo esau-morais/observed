@@ -14,6 +14,8 @@ Details of the GitHub Action. The
 | `artifact-name` | `observed-bundle` | Name of the uploaded bundle. The report page adds `.html`. Give each call its own name when a workflow runs the action more than once, such as in a matrix |
 | `retention-days` | `7` | Days GitHub keeps the artifacts |
 | `github-token` | `${{ github.token }}` | Token that titles the check and posts the comment |
+| `comment` | `always` | `always` posts one comment and edits it on later runs. `off` posts none; the check and job summary still carry the result |
+| `image-upload-token` | empty | A user's token that shows the screenshot crops in the comment instead of linking them. See [Screenshots in the comment](#screenshots-in-the-comment) |
 | `github-app-client-id`, `github-app-private-key` | empty | Sign the comment with your own GitHub App |
 | `slack-bot-token`, `slack-channel`, `slack-images` | empty, empty, `false` | Post failures to Slack |
 | `job-outcome` | empty | Deprecated. It has no effect and prints a warning |
@@ -101,10 +103,12 @@ passes. Add a check to `observed.json` before you require the job.
 | Place | Content |
 | --- | --- |
 | Check title | The verdict line, such as `Regression: Median LCP 52 ms → 452 ms, at most 250 ms` |
-| Job summary and comment | The verdict and the values that decided it, one line per failing or unknown check, a count of the rest, why a capture failed, the change scope with up to 10 changed files and their relations, each check that `observed.json` adds, removes or alters, and the base and head commits |
+| Job summary and comment | The verdict and the values that decided it, one line per failing or unknown check, a count of the rest, why a capture failed, the screenshot difference with its crops, up to 10 changed files inside the captured source with their relations and paths from the repository root, a count of the files outside it, each check that `observed.json` adds, removes or alters, and the base and head commits. What the passing checks covered, the agent prompt and run details are collapsed |
 | Prompt for your agent | A copyable prompt built from the result: values, commits, evidence and artifact paths, and the reminder that a changed value is not a regression by itself |
+| File links | Each listed file and the verdict line's source location link to that file's diff in the pull request, at the line when there is one. A file outside the diff, or a run outside a pull request, links to the file at the head commit |
 | Hidden `<!-- observed:agent -->` block | The result schema version, commits, artifact name and `result.json` paths |
 | Open the report | `observed-bundle.html`, the same report as `observed view`, in one file |
+| Screenshot crops | `observed-bundle-screenshots.png`: before, after and changed pixels around the largest changed region of each journey whose screenshots changed |
 | `observed-bundle` artifact | Raw captures, `result.json` and the exported viewer. Open it with `observed view <download>/run/report` |
 
 Later runs edit the comment. A workflow that calls the action more than once
@@ -128,6 +132,22 @@ annotation with the reason.
 | No `pull-requests: write` | The titled check. A warning names `pull-requests: write` |
 | Pull request from a fork | The verdict in the job's result. GitHub gives fork pull requests a read-only token, so there is no title and no comment, and a notice says so |
 | Dependabot pull request | The same as a pull request from this repository, because `permissions:` raises Dependabot's read-only token |
+
+## Screenshots in the comment
+
+When screenshots changed, the action uploads the crops as their own artifact
+and the comment links them. GitHub opens the PNG in the browser for signed-in
+users who can read the repository.
+
+GitHub has no documented API that adds an image to a comment. `gh` 2.99.0 and
+later upload one for `--attach` through an endpoint that accepts only a user's
+OAuth or personal access token with write access to the repository. It answers
+404 to `github-token` and to GitHub App installation tokens
+([cli/cli#14309](https://github.com/cli/cli/issues/14309), checked
+2026-10-03). Set `image-upload-token` to such a token from a repository secret
+to show the crops in the comment. The image is uploaded as that user and shows
+page content. If the upload fails, the comment keeps the link, and the run
+details and the job summary say why. The upload never changes the verdict.
 
 ## Require the check
 
@@ -180,14 +200,13 @@ failing: a regression, a failed check, or unavailable evidence.
 - It shows check names, metric names, measured numbers and commits. It shows
   no captured text, because a channel can include people who can't read the
   repository.
-- Editing the earlier message needs `pull-requests: write`, because the pull
-  request comment remembers which Slack message belongs to it. Without it,
-  every failing run posts a new message.
+- Editing the earlier message needs `pull-requests: write` and `comment:
+  always`, because the pull request comment remembers which Slack message
+  belongs to it. Without them, every failing run posts a new message.
 - The report link needs a GitHub account that can read the repository.
 
-`slack-images: true` with the `files:write` scope posts the largest changed
-screenshot region in the thread. The image includes any text around the
-change. Without the scope, the message goes out without the image and the job
+`slack-images: true` with the `files:write` scope posts the screenshot crops
+in the thread. The image includes any text around the change. Without the scope, the message goes out without the image and the job
 summary says why.
 
 1. Create a Slack app at https://api.slack.com/apps with **From a manifest**

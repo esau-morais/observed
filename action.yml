@@ -245,6 +245,8 @@ runs:
         OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}
         OBSERVED_IMAGE: ${{ steps.deliver.outputs.image }}
         OBSERVED_IMAGE_NOTE: ${{ steps.deliver.outputs.image-note }}
+        OBSERVED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        OBSERVED_PULL_REQUEST: ${{ github.event.pull_request.number }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: bun "$OBSERVED_SCRIPT" summary "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 

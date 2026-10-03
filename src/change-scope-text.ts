@@ -162,6 +162,7 @@ export function scopeNotes(result: Comparison): string[] {
 
 export type ShownFile = {
   path: string;
+  projectPath: string;
   change: ScopeFile['change'];
   relation: string;
   detail: string;
@@ -176,6 +177,7 @@ export function capturedFiles(result: Comparison): ShownFile[] {
     ? []
     : captured(scope).map((file) => ({
         path: repositoryPath(scope, file),
+        projectPath: file.path,
         change: file.change,
         relation: relationLabels[file.relation],
         detail: fileDetail(result, file),

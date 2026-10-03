@@ -29,6 +29,7 @@ import {
   writeComment,
 } from './github-delivery';
 import { screenshotCrops } from './screenshot-crops';
+import { sha256 } from '../src/encoding';
 import {
   callSlack,
   readSlackState,
@@ -51,6 +52,7 @@ import {
 } from '../src/change-scope-text';
 import {
   checkSummary,
+  rootedPath,
   runTone,
   describeMeasure,
   headline,
@@ -214,10 +216,57 @@ function reading(result: Comparison, check: CheckVerdict): string {
     : check.detail;
 }
 
-function rowLocation(result: Comparison, open: Open): string | null {
+// Where a changed file opens on GitHub: its diff in the pull request, or its
+// blob at the head commit.
+export type FileLinks = {
+  repository: string;
+  pullRequest: number | null;
+  head: string | null;
+};
+
+// GitHub anchors a file in a pull request's diff at the SHA-256 of its path
+// from the repository root, and a line on the new side by appending R and the
+// line. /changes is the route of the current Files changed page; GitHub
+// redirects it to /files where that page is off (checked 2026-10-03).
+function fileHref(
+  result: Comparison,
+  links: FileLinks | null,
+  projectPath: string,
+  line: number | null,
+): string | null {
+  const rooted = rootedPath(result.changeScope, projectPath);
+  const changed =
+    result.changeScope.kind === 'recorded'
+      ? result.changeScope.files.find((file) => file.path === projectPath)
+      : undefined;
+
+  if (links === null || rooted === null) {
+    return null;
+  }
+
+  if (links.pullRequest !== null && changed !== undefined) {
+    return `${links.repository}/pull/${String(links.pullRequest)}/changes#diff-${sha256(rooted)}${line === null ? '' : `R${String(line)}`}`;
+  }
+
+  return links.head === null || changed?.change === 'removed'
+    ? null
+    : `${links.repository}/blob/${links.head}/${rooted.split('/').map(encodeURIComponent).join('/')}${line === null ? '' : `#L${String(line)}`}`;
+}
+
+function fileText(text: string, href: string | null): string {
+  return href === null ? code(text) : `[${code(text)}](${href})`;
+}
+
+function rowLocation(
+  result: Comparison,
+  open: Open,
+  links: FileLinks | null,
+): string | null {
   const location = anchorLocation(open.journey, open.check, result.changeScope);
 
-  return location === null ? null : `${location.words} ${code(location.place)}`;
+  return location === null
+    ? null
+    : `${location.words} ${fileText(location.place, fileHref(result, links, location.path, location.line))}`;
 }
 
 function rowName(result: Comparison, open: Open): string {
@@ -232,11 +281,15 @@ function label(check: CheckVerdict): string {
     : ` · ${recipeLabels[check.recipe.change].toLowerCase()}`;
 }
 
-function rowText(result: Comparison, open: Open): string {
+function rowText(
+  result: Comparison,
+  open: Open,
+  links: FileLinks | null = null,
+): string {
   const { journey, check } = open;
   const where =
     result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
-  const location = rowLocation(result, open);
+  const location = rowLocation(result, open, links);
 
   return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}${label(check)}`;
 }
@@ -259,7 +312,11 @@ function groupedRows(result: Comparison, open: readonly Open[]): string[] {
   });
 }
 
-export function checkRows(result: Comparison, lead?: Open): string[] {
+export function checkRows(
+  result: Comparison,
+  lead?: Open,
+  links: FileLinks | null = null,
+): string[] {
   const open = openChecks(result).filter(
     (item) => lead === undefined || item.check !== lead.check,
   );
@@ -279,7 +336,7 @@ export function checkRows(result: Comparison, lead?: Open): string[] {
       .slice(0, listedChecks)
       .map(
         (item) =>
-          `- ${toneSymbols[verdictTones[item.check.verdict]]} **${verdictLabels[item.check.verdict]}** · ${rowText(result, item)}`,
+          `- ${toneSymbols[verdictTones[item.check.verdict]]} **${verdictLabels[item.check.verdict]}** · ${rowText(result, item, links)}`,
       ),
     ...(more.length === 0 ? [] : [`- More in the report: ${more.join(', ')}.`]),
   ];
@@ -330,7 +387,10 @@ function recipeList(result: Comparison): string | null {
 
 // Only files inside the captured source, by their path from the repository
 // root. The scope line counts the rest.
-function scopeFiles(result: Comparison): string | null {
+function scopeFiles(
+  result: Comparison,
+  links: FileLinks | null,
+): string | null {
   const files = capturedFiles(result);
   const notes = scopeNotes(result);
 
@@ -343,7 +403,7 @@ function scopeFiles(result: Comparison): string | null {
       .slice(0, listedFiles)
       .map(
         (file) =>
-          `- ${code(file.path)}${file.change === 'modified' ? '' : ` (${file.change})`} · ${inlineText(`${file.relation}. ${file.detail}`)}`,
+          `- ${fileText(file.path, fileHref(result, links, file.projectPath, null))}${file.change === 'modified' ? '' : ` (${file.change})`} · ${inlineText(`${file.relation}. ${file.detail}`)}`,
       ),
     ...(files.length > listedFiles
       ? [`- ${files.length - listedFiles} more in the report.`]
@@ -631,6 +691,8 @@ export type SummaryOptions = {
   run?: string | null;
   download?: string | null;
   sourceBuild?: { commit: string | null } | null;
+  pullRequest?: number | null;
+  headSha?: string | null;
 };
 
 type Frame = {
@@ -638,6 +700,7 @@ type Frame = {
   artifact: string;
   page: string | null;
   repository: string | null;
+  files: FileLinks | null;
   bundle: string;
 };
 
@@ -700,7 +763,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     first?.check.verdict === leadingVerdicts[kind]
       ? first
       : undefined;
-  const rows = allFailed ? groupedRows(result, open) : checkRows(result, lead);
+  const rows = allFailed
+    ? groupedRows(result, open)
+    : checkRows(result, lead, frame.files);
   const recipeSummary =
     result.mode === 'preview' ? null : recipeLine(result.changeScope);
 
@@ -710,7 +775,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       ...(options.surface.kind === 'check'
         ? []
         : [
-            `**${label}** · ${lead === undefined ? inlineText(subject) : rowText(result, lead)}`,
+            `**${label}** · ${lead === undefined ? inlineText(subject) : rowText(result, lead, frame.files)}`,
           ]),
       kind === 'unavailable'
         ? `${counts}. Missing evidence is not a pass.`
@@ -723,7 +788,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),
-    ...extra(scopeFiles(result)),
+    ...extra(scopeFiles(result, frame.files)),
     ...extra(recipeList(result)),
     page === null
       ? `No report page was uploaded. ${bundle}`
@@ -793,15 +858,25 @@ export function summarize(options: SummaryOptions): Summary {
     options.sourceBuild === undefined || options.sourceBuild === null
       ? `run \`bunx ${packageName}${packaged === null ? '' : `@${packaged.version}`} view <download>/run/report\``
       : `run \`bun run view <download>/run/report\` in an Observed checkout${options.sourceBuild.commit === null ? '' : ` at ${code(options.sourceBuild.commit.slice(0, 7))}`}, since this job built Observed from source`;
+  const repository = httpsUrl(options.repository);
   const frame: Frame = {
     options,
     artifact,
-    page: Option.getOrNull(
-      Schema.decodeUnknownOption(httpsUrlSchema)(options.page),
-    ),
-    repository: Option.getOrNull(
-      Schema.decodeUnknownOption(httpsUrlSchema)(options.repository ?? null),
-    ),
+    page: httpsUrl(options.page),
+    repository,
+    files:
+      repository === null
+        ? null
+        : {
+            repository,
+            pullRequest: options.pullRequest ?? null,
+            head:
+              options.headSha !== undefined &&
+              options.headSha !== null &&
+              /^[0-9a-f]{40}$/.test(options.headSha)
+                ? options.headSha
+                : null,
+          },
     bundle: `Raw evidence: workflow artifact ${code(artifact)}. Download it and ${viewer}.`,
   };
 
@@ -1226,7 +1301,15 @@ function runContext(args: {
       environment('OBSERVED_FROM_SOURCE') === 'true'
         ? { commit: packaged?.commit ?? null }
         : null,
+    pullRequest: pullRequestNumber(),
+    headSha: emptyAsNull(environment('OBSERVED_HEAD_SHA')),
   };
+}
+
+function pullRequestNumber(): number | null {
+  const number = Number(environment('OBSERVED_PULL_REQUEST'));
+
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 async function readOptional(file: string): Promise<string | null> {
@@ -1242,9 +1325,7 @@ async function readOptional(file: string): Promise<string | null> {
 }
 
 function runSource(): PullRequestSource | null {
-  const pullRequest = Number(environment('OBSERVED_PULL_REQUEST'));
-
-  return Number.isInteger(pullRequest) && pullRequest > 0
+  return pullRequestNumber() !== null
     ? pullRequestSource({
         repository: environment('GITHUB_REPOSITORY'),
         headRepository: environment('OBSERVED_HEAD_REPOSITORY'),
@@ -1366,9 +1447,7 @@ if (import.meta.main) {
           headSha,
           environment('GITHUB_SHA'),
         ]);
-    const pullRequest = Number(environment('OBSERVED_PULL_REQUEST'));
-    const pullRequestNumber =
-      Number.isInteger(pullRequest) && pullRequest > 0 ? pullRequest : null;
+    const { pullRequest } = context;
     const source = runSource();
     const finish = async (items: DeliveryItem[], notes: string[]) => {
       for (const annotation of deliveryAnnotations(items)) {
@@ -1387,7 +1466,7 @@ if (import.meta.main) {
       api,
       repository: environment('GITHUB_REPOSITORY'),
       token: environment('OBSERVED_GITHUB_TOKEN'),
-      pullRequest: pullRequestNumber,
+      pullRequest,
       botLogin: 'github-actions[bot]',
     };
     const signer = appToken({
@@ -1404,7 +1483,7 @@ if (import.meta.main) {
         : workflow;
     const notes: string[] = [];
     const comment = commentMode(environment('OBSERVED_COMMENT'));
-    const commenting = pullRequestNumber !== null && comment.mode === 'always';
+    const commenting = pullRequest !== null && comment.mode === 'always';
 
     if (comment.problem !== null) {
       process.stdout.write(
@@ -1413,7 +1492,7 @@ if (import.meta.main) {
       notes.push(comment.problem);
     }
 
-    if (pullRequestNumber !== null && comment.mode === 'off') {
+    if (pullRequest !== null && comment.mode === 'off') {
       notes.push('No comment, because the comment input is off');
     }
 
@@ -1546,7 +1625,7 @@ if (import.meta.main) {
     const slackSkip = slackSkipReason({
       token: slackToken,
       channel: slackChannel,
-      pullRequest: pullRequestNumber,
+      pullRequest,
       lookupFailed: lookup?.kind === 'failed',
     });
 
@@ -1566,13 +1645,13 @@ if (import.meta.main) {
       const message = slackMessage(trusted?.result ?? null, {
         name,
         pullRequest:
-          pullRequestNumber === null || repository === null
+          pullRequest === null || repository === null
             ? null
-            : `${repository}/pull/${String(pullRequestNumber)}`,
+            : `${repository}/pull/${String(pullRequest)}`,
         pullRequestLabel:
-          pullRequestNumber === null
+          pullRequest === null
             ? workflow.repository
-            : `${workflow.repository}#${String(pullRequestNumber)}`,
+            : `${workflow.repository}#${String(pullRequest)}`,
         report: Schema.is(httpsUrlSchema)(page) ? page : null,
         run: runUrl,
       });

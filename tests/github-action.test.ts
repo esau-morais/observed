@@ -17,7 +17,7 @@ import {
   summarizeJourneys,
 } from '../src/comparison';
 import { comparisonSchema } from '../src/comparison-model';
-import { json } from '../src/encoding';
+import { json, sha256 } from '../src/encoding';
 import { failedJourney } from './support/failed-journey';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
@@ -603,30 +603,79 @@ async function typicalFailingRun(): Promise<string> {
   });
 }
 
-test(`a typical failing run's comment stays within ${String(visibleCommentLimit)} visible characters and shows paths from the repository root`, async () => {
-  const { markdown } = summarize({
-    output: await typicalFailingRun(),
+const head = 'b'.repeat(40);
+
+function comment(output: string, pullRequest: number | null) {
+  return summarize({
+    output,
     exitCode: 2,
     artifact: 'observed-bundle',
     page: 'https://github.com/o/r/actions/runs/1/artifacts/2',
+    repository: 'https://github.com/o/r',
+    pullRequest,
+    headSha: head,
     screenshots: {
       image: null,
       link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
       note: null,
     },
     surface: { kind: 'comment' },
-  });
-  const visible = markdown
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<details>[\s\S]*?<\/details>/g, '');
+  }).markdown.replace(/<!--[\s\S]*?-->|<details>[\s\S]*?<\/details>/g, '');
+}
 
-  expect(visible.length).toBeLessThanOrEqual(visibleCommentLimit);
-  expect(visible).toContain('thrown at `web/src/App.jsx:10`');
-  expect(visible).toContain('`web/src/App.jsx`');
+// What a reader sees: link targets are not shown.
+function readable(markdown: string): string {
+  return markdown.replace(/\]\(https:[^)]*\)/g, ']');
+}
+
+test(`a typical failing run's comment stays within ${String(visibleCommentLimit)} visible characters and shows paths from the repository root`, async () => {
+  const visible = comment(await typicalFailingRun(), 7);
+
+  expect(readable(visible).length).toBeLessThanOrEqual(visibleCommentLimit);
   expect(visible).toContain('30 files changed outside the captured source.');
   expect(visible).not.toContain('docs/page-');
   expect(visible).not.toContain('../');
   expect(visible).toContain(
     '[Before, after and changed pixels, left to right](https://github.com/o/r/actions/runs/1/artifacts/3)',
   );
+});
+
+// A link to the wrong anchor lands on the top of the diff, or on nothing.
+test('changed files and the verdict line link to their diff in the pull request, and otherwise to the head commit', async () => {
+  const output = await typicalFailingRun();
+  const diff = (file: string) =>
+    `https://github.com/o/r/pull/7/changes#diff-${sha256(file)}`;
+
+  const onPullRequest = comment(output, 7);
+
+  expect(onPullRequest).toContain(
+    `thrown at [\`web/src/App.jsx:10\`](${diff('web/src/App.jsx')}R10)`,
+  );
+  expect(onPullRequest).toContain(
+    `- [\`web/src/books.js\`](${diff('web/src/books.js')}) (added)`,
+  );
+
+  const blob = `thrown at [\`web/src/App.jsx:10\`](https://github.com/o/r/blob/${head}/web/src/App.jsx#L10)`;
+  const run = Schema.decodeUnknownSync(
+    Schema.fromJsonString(
+      Schema.Struct({ directory: Schema.String, result: comparisonSchema }),
+    ),
+  )(output);
+  const scope = run.result.changeScope;
+  const unchangedAnchor = json({
+    ...run,
+    result: {
+      ...run.result,
+      changeScope:
+        scope.kind === 'recorded'
+          ? {
+              ...scope,
+              files: scope.files.filter((file) => file.path !== 'src/App.jsx'),
+            }
+          : scope,
+    },
+  });
+
+  expect(comment(output, null)).toContain(blob);
+  expect(comment(unchangedAnchor, 7)).toContain(blob);
 });

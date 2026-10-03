@@ -5,3 +5,7 @@
 The `changeScope` field was added when the result schema moved to version 8. It was computed with `changeScope` from `src/change-scope.ts` over the fixture's own journeys, with the inputs that `bun run compare` gives: no Git file list, no base `observed.json`, and no coverage in the captures. `removedJourneys` is empty for the same reason.
 
 The `changeMap` field was computed from the same captures (artifact `observed-ubuntu-24.04` of that run) with `inspectComparison` from this change's branch and the fixture's selection, evaluated at the fixture's `evaluatedAt` so the captures were not stale. Only `changeMap` was copied in; its `changeScope` matched the fixture's.
+
+The result schema moved to version 9 when a listed Git change set began to
+record the project's directory. This fixture's Git list is unavailable, so only
+`schemaVersion` changed.

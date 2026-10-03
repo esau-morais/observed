@@ -192,15 +192,24 @@ function joined(directory: string, file: string): string {
   return parts.join('/');
 }
 
+// A project-relative path from the repository root, or null when the run
+// did not record where the project sits, as when Git listed no changes.
+export function rootedPath(
+  scope: ChangeScope,
+  projectPath: string,
+): string | null {
+  return scope.kind === 'recorded' && scope.outside.kind === 'listed'
+    ? joined(scope.outside.projectDirectory, projectPath)
+    : null;
+}
+
 // A project-relative path as people read it: from the repository root when
-// Git listed the changes, which records where the project sits.
+// the run recorded where the project sits.
 export function fromRepositoryRoot(
   scope: ChangeScope,
   projectPath: string,
 ): string {
-  return scope.kind === 'recorded' && scope.outside.kind === 'listed'
-    ? joined(scope.outside.projectDirectory, projectPath)
-    : projectPath;
+  return rootedPath(scope, projectPath) ?? projectPath;
 }
 
 // Without a change scope the place stays relative to the project.
@@ -208,7 +217,7 @@ export function anchorLocation(
   journey: Journey,
   check: CheckVerdict,
   scope?: ChangeScope,
-): { words: string; place: string } | null {
+): { words: string; place: string; path: string; line: number } | null {
   for (const finding of journey.findings) {
     if (
       finding.checks.includes(check.id) &&
@@ -222,6 +231,8 @@ export function anchorLocation(
             ? 'logged at'
             : anchorWords[anchor.basis],
         place: `${scope === undefined ? anchor.path : fromRepositoryRoot(scope, anchor.path)}:${anchor.line}`,
+        path: anchor.path,
+        line: anchor.line,
       };
     }
   }

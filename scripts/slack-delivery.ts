@@ -1,5 +1,5 @@
 import { Option, Schema } from 'effect';
-import { scopeLine } from '../src/change-scope-text';
+import { repositoryPath, scopeLine } from '../src/change-scope-text';
 import type { CheckVerdict, Comparison, Side } from '../src/comparison-model';
 import { shortSource } from '../src/provenance-text';
 import {
@@ -118,7 +118,7 @@ function scopeText(result: Comparison): string[] {
   const paths =
     scope.kind === 'recorded'
       ? scope.files.flatMap((file) =>
-          file.relation === 'not-observed' ? [file.path] : [],
+          file.relation === 'not-observed' ? [repositoryPath(scope, file)] : [],
         )
       : [];
   const shown = paths
