@@ -1,4 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
+import { useId } from 'react';
 import { fonts, geometry, media } from '../constants.stylex';
 import { colors } from '../tokens.stylex';
 import { SubHeading } from '../heading';
@@ -25,6 +26,7 @@ const styles = stylex.create({
   },
   count: { fontVariantNumeric: 'tabular-nums' },
   muted: { color: colors.textSecondary },
+  caption: { color: colors.textMuted, fontSize: '0.8125rem', margin: 0 },
   missing: {
     backgroundColor: colors.unknownFill,
     borderRadius: geometry.radius,
@@ -40,6 +42,8 @@ function Files({
   label: string;
   side: SectionSide<'coverage'>;
 }) {
+  const withoutId = useId();
+
   if (side.evidence.status === 'unavailable') {
     return (
       <section {...stylex.props(styles.stack)} aria-label={`${label} coverage`}>
@@ -86,14 +90,19 @@ function Files({
         </ul>
       )}
       {missing.length > 0 && (
-        <ul {...stylex.props(styles.list)} aria-label="Without coverage">
-          {missing.map((item) => (
-            <li key={item.name}>
-              <span {...stylex.props(styles.mono)}>{item.name}</span>:{' '}
-              {item.reason}
-            </li>
-          ))}
-        </ul>
+        <>
+          <p {...stylex.props(styles.caption)} id={withoutId}>
+            Without coverage
+          </p>
+          <ul {...stylex.props(styles.list)} aria-labelledby={withoutId}>
+            {missing.map((item) => (
+              <li key={item.name}>
+                <span {...stylex.props(styles.mono)}>{item.name}</span>:{' '}
+                {item.reason}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );
