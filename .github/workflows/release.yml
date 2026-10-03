@@ -139,35 +139,38 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      # Trusted publishing (OIDC) needs npm 11.5.1 or later and attaches
-      # provenance. The package refuses tokens.
+      # Trusted publishing (OIDC) runs `npm dist-tag` only from npm 11.21.0,
+      # newer than the npm bundled with Node 24.
+      - run: npm install -g npm@11.21.0
+      # Trusted publishing attaches provenance. The package refuses tokens.
       # Skips a version npm already has, so a failed later step can be re-run.
-      # While `latest` points at a prerelease, a higher prerelease moves it.
-      # Once `latest` is stable, a prerelease such as 0.3.0-alpha.0 goes to the
-      # dist-tag named by its identifier. Trusted publishing cannot run
-      # `npm dist-tag`, so the tag is chosen at publish time.
+      # A prerelease such as 0.2.0-alpha.0 goes to the dist-tag named by its
+      # identifier. `npm publish --tag` moves that tag even to an older
+      # version, so the step refuses one.
       - name: Publish to npm
         run: |
           set -- "$RUNNER_TEMP"/verified/package/*.tgz
           test -f "$1"
+          name="$(jq -r .name package.json)"
           version="$(jq -r .version package.json)"
-          if npm view "$(jq -r .name package.json)@$version" version >/dev/null 2>&1; then
+          if npm view "$name@$version" version >/dev/null 2>&1; then
             echo "$version is already on npm"
             exit 0
           fi
-          bun -e 'process.exit(Bun.semver.satisfies(process.argv[1], ">=11.5.1") ? 0 : 1)' "$(npm --version)" \
-            || { echo "::error::npm $(npm --version) is older than 11.5.1"; exit 1; }
+          bun -e 'process.exit(Bun.semver.satisfies(process.argv[1], ">=11.21.0") ? 0 : 1)' "$(npm --version)" \
+            || { echo "::error::npm $(npm --version) is older than 11.21.0"; exit 1; }
           # A stable version gets no --tag, so npm still refuses to move
           # `latest` below a higher release.
           tag=()
           if [[ "$version" == *-* ]]; then
-            latest="$(npm view "$(jq -r .name package.json)" dist-tags.latest)"
-            if [[ "$latest" == *-* ]] && bun -e 'process.exit(Bun.semver.order(process.argv[1], process.argv[2]) > 0 ? 0 : 1)' "$version" "$latest"; then
-              tag=(--tag latest)
-            else
-              prerelease="${version#*-}"
-              tag=(--tag "${prerelease%%.*}")
+            prerelease="${version#*-}"
+            identifier="${prerelease%%.*}"
+            current="$(npm dist-tag ls "$name" | awk -v tag="$identifier:" '$1 == tag {print $2}')"
+            if [ -n "$current" ] && bun -e 'process.exit(Bun.semver.order(process.argv[1], process.argv[2]) < 0 ? 0 : 1)' "$version" "$current"; then
+              echo "::error::$identifier points at $current, which is newer than $version"
+              exit 1
             fi
+            tag=(--tag "$identifier")
           fi
           npm publish "$1" --access public --provenance "${tag[@]}"
       # A prerelease leaves the major tag on the last release.
@@ -196,3 +199,18 @@ jobs:
             gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$GITHUB_SHA" >/dev/null
           fi
           echo "Released $TAG; $major now points at $GITHUB_SHA"
+      # While `latest` points at a prerelease, a newer prerelease takes it. A
+      # stable release takes it when published. A separate step, so a re-run
+      # retries a failed move after publishing skips the version.
+      - name: Move latest to a newer prerelease
+        run: |
+          name="$(jq -r .name package.json)"
+          version="$(jq -r .version package.json)"
+          [[ "$version" == *-* ]] || exit 0
+          latest="$(npm dist-tag ls "$name" | awk '$1 == "latest:" {print $2}')"
+          if [[ "$latest" != *-* ]] || ! bun -e 'process.exit(Bun.semver.order(process.argv[1], process.argv[2]) > 0 ? 0 : 1)' "$version" "$latest"; then
+            echo "latest stays on $latest"
+            exit 0
+          fi
+          npm dist-tag add "$name@$version" latest \
+            || { echo "::error::Could not move latest to $version. Check that the trusted publisher on npmjs.com allows npm dist-tag."; exit 1; }

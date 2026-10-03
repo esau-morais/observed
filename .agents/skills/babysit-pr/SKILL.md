@@ -139,11 +139,13 @@ The tagged commit must be on `main`.
 on Linux x64 and on macOS with Intel and Apple silicon, runs the Request lab
 example through it, and publishes that tarball to npm with provenance through
 [trusted publishing](https://docs.npmjs.com/trusted-publishers/). npm accepts
-the package only from that workflow and refuses tokens. While `latest` points
-at a prerelease, a higher prerelease moves it. Once `latest` is stable, a
-prerelease goes out under the dist-tag named after its identifier, such as
-`beta`. To check a published version on the same runners, run the workflow by
-hand with `published` set to the version.
+the package only from that workflow and refuses tokens. A prerelease goes out
+under the dist-tag named after its identifier, such as `beta`, and the workflow
+refuses one older than that tag. While `latest` points at a prerelease, the
+workflow also moves `latest` to a newer prerelease, so a plain install gets the
+newest release until a stable release takes `latest`. To check a published
+version on the same runners, run the workflow by hand with `published` set to
+the version.
 
 To release:
 
