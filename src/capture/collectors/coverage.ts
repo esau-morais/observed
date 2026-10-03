@@ -13,7 +13,7 @@ import {
   type SourceMap,
 } from '../../source-map';
 import { connectCdp, type CdpConnection } from '../cdp';
-import { findSourceMap } from '../source-maps';
+import { findSourceMap, maxMappedScripts } from '../source-maps';
 import {
   EvidenceUnavailable,
   type Collector,
@@ -25,7 +25,6 @@ const commandTimeoutMs = 20_000;
 // A slow repeat of the journey loses coverage instead of using up the
 // capture's whole timeout.
 const coverageTimeoutMs = 60_000;
-const maxScripts = 100;
 // Map fetching runs inside the capture's own timeout, so it stops starting
 // new fetches after this long.
 const deadlineMs = 20_000;
@@ -168,10 +167,12 @@ function countAt(spans: readonly Span[], at: number): number | null {
 // generated character. Lines that no segment maps to are absent.
 export type LineRuns = Map<string, Map<number, boolean>>;
 
+// Each entry of `copies` is one load of the script, with its own counts. A
+// line counts as run when it ran in any copy.
 export function lineRuns(options: {
   source: string;
   map: SourceMap;
-  functions: readonly CoveredFunction[];
+  copies: readonly (readonly CoveredFunction[])[];
   // Snapshot paths by the map's source index. Other sources are skipped.
   paths: ReadonlyMap<number, string>;
 }): LineRuns | null {
@@ -189,28 +190,31 @@ export function lineRuns(options: {
     }
   }
 
-  const spans = flattenRanges(options.functions);
   const runs: LineRuns = new Map();
 
-  for (const segment of all) {
-    const start = lineStarts[segment.generatedLine];
+  for (const functions of options.copies) {
+    const spans = flattenRanges(functions);
 
-    if (segment.original === null || start === undefined) {
-      continue;
+    for (const segment of all) {
+      const start = lineStarts[segment.generatedLine];
+
+      if (segment.original === null || start === undefined) {
+        continue;
+      }
+
+      const file = options.paths.get(segment.original.source);
+      const count = countAt(spans, start + segment.generatedColumn);
+
+      if (file === undefined || count === null) {
+        continue;
+      }
+
+      const lines = runs.get(file) ?? new Map<number, boolean>();
+      const line = segment.original.line + 1;
+
+      lines.set(line, lines.get(line) === true || count > 0);
+      runs.set(file, lines);
     }
-
-    const file = options.paths.get(segment.original.source);
-    const count = countAt(spans, start + segment.generatedColumn);
-
-    if (file === undefined || count === null) {
-      continue;
-    }
-
-    const lines = runs.get(file) ?? new Map<number, boolean>();
-    const line = segment.original.line + 1;
-
-    lines.set(line, lines.get(line) === true || count > 0);
-    runs.set(file, lines);
   }
 
   return runs;
@@ -268,8 +272,8 @@ export function coverageFiles(
 }
 
 function skipReason(index: number, elapsedMs: number): string | null {
-  if (index >= maxScripts) {
-    return `Only the first ${maxScripts} scripts are mapped`;
+  if (index >= maxMappedScripts) {
+    return `Only the first ${maxMappedScripts} scripts are mapped`;
   }
 
   return elapsedMs > deadlineMs
@@ -426,30 +430,29 @@ const resolveScript = Effect.fnUntraced(function* (
   }
 
   const { paths, excluded } = yield* snapshotSources(map, context);
-  const resolved: LineRuns[] = [];
+  const runs = lineRuns({
+    source: text,
+    map,
+    copies: script.functions,
+    paths,
+  });
 
-  for (const functions of script.functions) {
-    const runs = lineRuns({ source: text, map, functions, paths });
-
-    if (runs === null) {
-      return {
-        kind: 'unavailable',
-        reason: 'The source map has malformed mappings',
-      } as const;
-    }
-
-    resolved.push(runs);
+  if (runs === null) {
+    return {
+      kind: 'unavailable',
+      reason: 'The source map has malformed mappings',
+    } as const;
   }
 
   // A map that names only dependencies or files outside the snapshot, such
   // as a vendor chunk, is mapped and contributes no captured file.
-  const named = [...new Set(resolved.flatMap((item) => [...item.keys()]))];
+  const named = [...runs.keys()];
 
   return {
     kind: 'mapped',
     files: named.sort(),
     excluded,
-    runs: resolved,
+    runs,
   } as const;
 });
 
@@ -592,7 +595,7 @@ const collectCoverage = Effect.fnUntraced(function* (
             : ({ kind: 'unavailable', reason: skipped } as const);
 
         if (resolved.kind === 'mapped') {
-          runs.push(...resolved.runs);
+          runs.push(resolved.runs);
           scripts.push({
             script: script.location,
             kind: 'mapped',
@@ -606,16 +609,6 @@ const collectCoverage = Effect.fnUntraced(function* (
 
       return { files: coverageFiles(runs), scripts };
     }),
-  ).pipe(
-    Effect.timeoutOrElse({
-      duration: coverageTimeoutMs,
-      orElse: () =>
-        Effect.fail(
-          unavailable(
-            `Coverage took longer than ${coverageTimeoutMs / 1000} seconds`,
-          ),
-        ),
-    }),
   );
 });
 
@@ -625,5 +618,16 @@ export const coverage: Collector<'coverage'> = {
     config.enabled === false
       ? 'Coverage is turned off for this journey in observed.json'
       : null,
-  collect: (_config, context) => collectCoverage(context),
+  collect: (_config, context) =>
+    collectCoverage(context).pipe(
+      Effect.timeoutOrElse({
+        duration: coverageTimeoutMs,
+        orElse: () =>
+          Effect.fail(
+            unavailable(
+              `Coverage took longer than ${coverageTimeoutMs / 1000} seconds`,
+            ),
+          ),
+      }),
+    ),
 };

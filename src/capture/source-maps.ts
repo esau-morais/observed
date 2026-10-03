@@ -11,9 +11,10 @@ import {
   type SourceMapIndex,
 } from '../source-map';
 
-// As many as the coverage collector maps, so each map behind its lines is
-// kept.
-const maxScripts = 100;
+// The coverage collector maps as many. Scripts that error frames and React
+// sources name come first, so a map behind coverage lines can still be left
+// out.
+export const maxMappedScripts = 100;
 const maxBytes = 32 * 1024 * 1024;
 const timeoutMs = 5_000;
 // Map fetching runs inside the capture's own timeout, so it stops starting
@@ -241,8 +242,8 @@ const scriptsToMap = Effect.fnUntraced(function* (
 });
 
 function skipReason(index: number, elapsedMs: number): string | null {
-  if (index >= maxScripts) {
-    return `Only the first ${maxScripts} scripts are mapped`;
+  if (index >= maxMappedScripts) {
+    return `Only the first ${maxMappedScripts} scripts are mapped`;
   }
 
   return elapsedMs > deadlineMs

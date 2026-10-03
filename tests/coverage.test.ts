@@ -94,7 +94,7 @@ test('maps block counts through a minified bundle to original lines', () => {
   const runs = lineRuns({
     source: generated,
     map,
-    functions,
+    copies: [functions],
     paths: new Map([[0, 'src/app.ts']]),
   });
 

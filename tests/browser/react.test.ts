@@ -99,9 +99,13 @@ test('an added App render fails the react-renders check as a regression', async 
 
   // Keep component names through minification so the check can name App.
   const build = path.join(project, 'build.ts');
+  const buildText = await readFile(build, 'utf8');
+  expect(buildText).toContain(
+    "build: { outDir: 'dist', sourcemap: 'hidden' },",
+  );
   await writeFile(
     build,
-    (await readFile(build, 'utf8')).replace(
+    buildText.replace(
       "build: { outDir: 'dist', sourcemap: 'hidden' },",
       "build: { outDir: 'dist', sourcemap: 'hidden', rolldownOptions: { output: { keepNames: true } } },",
     ),

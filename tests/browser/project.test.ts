@@ -941,8 +941,7 @@ test.each([
     const fills = (await transcript(capture)).filter(
       (record) => record.args.at(-2) === 'batch',
     );
-    // The coverage session fills it again only after the journey's own
-    // session completed the step.
+    // The coverage session repeats the fill only when the journey completed.
     expect(fills).toHaveLength(exit === 0 ? 2 : 1);
 
     if (exit === 0) {
@@ -1192,7 +1191,7 @@ test('additional origins preserve previews and keep same-path request checks sep
       await cleanup(path.join(result.directory, 'journey-1', 'candidate'));
     }
 
-    // Four journeys, and a coverage repeat of the three that completed.
+    // Four runs, and a coverage repeat in each of the three that completed.
     expect(requests).toEqual(Array.from({ length: 7 }, () => 'POST /orders'));
   } finally {
     await backend.stop(true);
