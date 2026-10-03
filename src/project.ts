@@ -79,7 +79,12 @@ export type Project = typeof projectSchema.Type;
 
 export class ProjectFailure extends Schema.TaggedError<ProjectFailure>()(
   'ProjectFailure',
-  { message: Schema.String },
+  {
+    message: Schema.String,
+    problem: Schema.optionalKey(
+      Schema.Literals(['json', 'credentials', 'contract', 'journey']),
+    ),
+  },
 ) {}
 
 export const loadProject = Effect.fn('loadProject')(function* (
@@ -114,6 +119,7 @@ export const parseProject = Effect.fnUntraced(function* (
       () =>
         new ProjectFailure({
           message: 'observed.json must contain valid JSON',
+          problem: 'json',
         }),
     ),
   );
@@ -122,6 +128,7 @@ export const parseProject = Effect.fnUntraced(function* (
     return yield* new ProjectFailure({
       message:
         'observed.json contains credentials. Use disposable inputs without credentials for exported captures.',
+      problem: 'credentials',
     });
   }
 
@@ -133,6 +140,7 @@ export const parseProject = Effect.fnUntraced(function* (
       (error) =>
         new ProjectFailure({
           message: `${filename} does not match the project contract:\n${error.message}`,
+          problem: 'contract',
         }),
     ),
   );
@@ -152,6 +160,7 @@ export const parseProject = Effect.fnUntraced(function* (
         (error) =>
           new ProjectFailure({
             message: `${filename}: journey ${JSON.stringify(journey.name)} is inconsistent:\n${error.message}`,
+            problem: 'journey',
           }),
       ),
     ),

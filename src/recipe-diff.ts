@@ -58,7 +58,10 @@ function journeyFields(journey: Journey): Record<string, unknown> {
 }
 
 const jsonValue = (value: unknown): Field['base'] =>
-  Schema.decodeUnknownSync(Schema.Json)(value ?? null);
+  Schema.decodeUnknownSync(Schema.Json)(
+    // Drops undefined members, which JSON cannot hold.
+    JSON.parse(JSON.stringify(value ?? null)),
+  );
 
 function fieldDifferences(
   base: Readonly<Record<string, unknown>>,
@@ -77,8 +80,8 @@ function fieldDifferences(
     }));
 }
 
-// Whether two check definitions differ in any field, by the rule that lists
-// the differences.
+// Whether two check definitions are the same, by the rule that lists their
+// differences.
 export function sameDefinition(
   base: CheckDefinition,
   candidate: CheckDefinition,

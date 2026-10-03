@@ -447,7 +447,7 @@ const recipeDifferenceSchema = Schema.Union([
 ]);
 
 // The base file that judged the checks, by commit and the SHA-256 of its
-// bytes.
+// UTF-8 text.
 const recipeBase = Schema.Struct({
   kind: Schema.Literal('read'),
   commit: commitSchema,

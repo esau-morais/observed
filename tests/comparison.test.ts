@@ -40,11 +40,13 @@ import {
 import {
   comparisonSchema,
   journeySchema,
+  type Comparison,
   type Journey,
   type RecipeSources,
   type Selection,
   type Visual,
 } from '../src/comparison-model';
+import { recipeLines } from '../src/change-scope-text';
 import { renderComparison } from '../src/comparison-report';
 import { exportComparison } from '../src/export';
 import { encodeRgbPng } from '../src/png';
@@ -2724,7 +2726,7 @@ async function judged(options: {
     'unused',
   );
 
-  return single(
+  const result = single(
     compareJourney({
       base: await Effect.runPromise(
         inspectSide({
@@ -2739,6 +2741,13 @@ async function judged(options: {
       judgement: plan.judge(recipe.name),
     }),
   );
+
+  return result.changeScope.kind === 'recorded'
+    ? {
+        ...result,
+        changeScope: { ...result.changeScope, recipe: plan.scope },
+      }
+    : result;
 }
 
 async function selectedComparison(
@@ -2834,6 +2843,40 @@ test('a raised expectation is judged by the base, and the proposal sets no verdi
   expect(uncompared.changeScope).toMatchObject({
     recipe: { kind: 'unavailable' },
   });
+});
+
+test('an altered check without a verdict label shows no base expectation', async () => {
+  // A candidate capture that did not complete gives verdicts without labels.
+  const result = await judged({
+    base: [requestCheck],
+    captured: [allowsTwo],
+    baseCount: 1,
+    candidateCount: 2,
+  });
+  const [journey] = result.journeys;
+  const unlabeled = {
+    ...result,
+    journeys: [
+      {
+        ...journey,
+        checks: journey.checks.map(
+          ({ id, name, scope, expectation, verdict, detail }) => ({
+            id,
+            name,
+            scope,
+            expectation,
+            verdict,
+            detail,
+          }),
+        ),
+      },
+    ],
+  } satisfies Comparison;
+
+  expect(recipeLines(result).join(' ')).toContain('Base expectation');
+  expect(recipeLines(unlabeled)).toEqual([
+    'Altered by this change: One request per load action. Regression.',
+  ]);
 });
 
 test('an altered check that the candidate meets under the base definition passes', async () => {
@@ -3023,6 +3066,17 @@ test('imported tests in a journey whose collectors changed are unknown', async (
     },
   ]);
   expect(result.conclusion.kind).toBe('unavailable');
+});
+
+test('imported tests are unknown when the base file could not be read', async () => {
+  const result = await playwrightJourney({
+    base: [playwrightTest('adds an item', 'expected')],
+    candidate: [playwrightTest('adds an item', 'expected')],
+    judgement: { kind: 'unreadable', reason: 'Git failed.' },
+  });
+
+  expect(result.checks).toMatchObject([{ verdict: 'unknown' }]);
+  expect(result.checks[0]?.detail).toContain('Git failed.');
 });
 
 test('a removed journey that ran Playwright leaves an unknown imported run', async () => {

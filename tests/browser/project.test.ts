@@ -95,6 +95,12 @@ async function copyProject(name: keyof typeof projects, label: string) {
       !['node_modules', 'dist'].includes(path.basename(source)),
   });
   await command(['git', 'init', '--quiet'], directory);
+  await commitAll(directory, 'Test baseline');
+
+  return directory;
+}
+
+async function commitAll(directory: string, message: string) {
   await command(['git', 'add', '.'], directory);
   await command(
     [
@@ -108,12 +114,10 @@ async function copyProject(name: keyof typeof projects, label: string) {
       'commit',
       '--quiet',
       '-m',
-      'Test baseline',
+      message,
     ],
     directory,
   );
-
-  return directory;
 }
 
 async function observe(
@@ -651,8 +655,12 @@ test('previews a non-React app without checks and then applies its own POST expe
     1,
   );
   expect(missing.result.journeys[0].comparison.kind).toBe('unavailable');
+  // Without the base's observed.json, no definition can judge the check.
   expect(missing.result.journeys[0].candidate.checks[0]?.outcome).toBe(
-    'passed',
+    'unknown',
+  );
+  expect(missing.result.journeys[0].candidate.checks[0]?.detail).toContain(
+    "The base revision's observed.json could not be read",
   );
   expect(missing.result.journeys[0].base.unresolved.join(' ')).toContain(
     'no-such-revision',
@@ -688,7 +696,6 @@ test('a seeded thrown error fails browser-errors as a regression and matches the
 `,
   );
   expect(seeded).not.toBe(app);
-  await writeFile(path.join(project, 'app.ts'), seeded);
   await writeFile(
     path.join(project, 'observed.json'),
     json({
@@ -704,6 +711,9 @@ test('a seeded thrown error fails browser-errors as a regression and matches the
       },
     }),
   );
+  // The base defines the check, so its definition judges both captures.
+  await commitAll(project, 'Check browser errors');
+  await writeFile(path.join(project, 'app.ts'), seeded);
 
   const compared = await observe(
     project,

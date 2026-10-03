@@ -427,7 +427,7 @@ function executedPairs(
     recipe: { change: 'added' },
   });
 
-  if (sides.mode === 'preview' || judgement.kind === 'not-compared') {
+  if (judgement.kind === 'not-compared') {
     return captured.map(evaluate);
   }
 
@@ -500,8 +500,8 @@ function executedPairs(
 }
 
 // Imported tests follow the journey's judgement. Their definitions live in
-// the app's test files, so only a changed journey or an unread base file
-// keeps them from judging.
+// the app's test files: a new journey gives them no baseline, and a changed
+// journey or an unread base file leaves them unknown.
 function judgedImports(
   pairs: readonly CheckPair[],
   judgement: JourneyJudgement,
@@ -527,6 +527,7 @@ function judgedImports(
     case 'added':
       return pairs.map((pair) => ({
         ...pair,
+        base: null,
         regression: null,
         recipe: { change: 'added' },
       }));

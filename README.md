@@ -256,9 +256,11 @@ passes the job, `1` and `2` fail it.
   gives pull requests from forks the repository's secrets and a write token.
 - Observed captures both revisions with the candidate's `observed.json`. The
   base's file judges each check it defines, and a journey whose steps or other
-  fields changed leaves its checks unknown. Relaxing a check therefore cannot
-  turn a fault into a pass. The comment names each added, removed and altered
-  check, with the candidate's version beside it as proposed.
+  fields changed leaves its checks unknown. Relaxing a check in
+  `observed.json` therefore cannot turn a fault into a pass. An imported
+  Playwright test is judged by the candidate's test file, labeled when that
+  file changed. The comment names each added, removed and altered check, with
+  the candidate's version beside it as proposed.
 - The action installs Bun and the browser. When `setup` or `start` needs
   another toolchain, such as Go, Python or Node.js, install it in a step before
   Observed's.

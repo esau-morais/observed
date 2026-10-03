@@ -8,6 +8,14 @@ import { parseProject } from '../project';
 
 type BaseJourneys = RecipeSources['base'];
 
+const problems = {
+  json: "The base revision's observed.json is not valid JSON.",
+  credentials: "The base revision's observed.json contains credentials.",
+  contract:
+    "The base revision's observed.json does not match the project contract.",
+  journey: "The base revision's observed.json has an inconsistent journey.",
+} as const;
+
 // The base revision's journeys, read through Git. A base without a usable
 // observed.json is `unusable`, and every candidate check then counts as added.
 // `unavailable` means Git could not answer, and every check is then unknown.
@@ -65,7 +73,10 @@ export const readBaseJourneys = Effect.fn('readBaseJourneys')(
         Effect.succeed<BaseJourneys>({
           kind: 'unusable',
           commit,
-          reason: `The base revision's ${(firstLine(error.message) ?? '').replace(/:$/, '.')}`,
+          reason:
+            error.problem === undefined
+              ? "The base revision's observed.json could not be parsed."
+              : problems[error.problem],
         }),
       ),
     );
