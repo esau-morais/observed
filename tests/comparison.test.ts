@@ -2759,19 +2759,19 @@ test('a raised expectation is judged by the base, and the proposal sets no verdi
   });
   const [journey] = result.journeys;
 
-  expect(journey?.checks).toEqual([
-    expect.objectContaining({
+  expect(journey?.checks).toMatchObject([
+    {
       id: requestCheck.id,
       verdict: 'regression',
       expectation: 'Exactly 1 GET /api/items request(s) with status 200.',
       recipe: {
         change: 'altered',
-        proposed: expect.objectContaining({
+        proposed: {
           expectation: 'Exactly 2 GET /api/items request(s) with status 200.',
           outcome: 'passed',
-        }),
+        },
       },
-    }),
+    },
   ]);
   expect(result.conclusion.kind).toBe('regression');
   expect(result.conclusion.text).toContain(
@@ -2820,15 +2820,15 @@ test('an altered check that the candidate meets under the base definition passes
   });
 
   expect(result.conclusion.kind).toBe('no-regression');
-  expect(result.journeys[0].checks).toEqual([
-    expect.objectContaining({
+  expect(result.journeys[0].checks).toMatchObject([
+    {
       name: requestCheck.name,
       verdict: 'passed',
       recipe: {
         change: 'altered',
-        proposed: expect.objectContaining({ outcome: 'passed' }),
+        proposed: { outcome: 'passed' },
       },
-    }),
+    },
   ]);
 });
 
@@ -2840,12 +2840,12 @@ test('a removed check still reports its verdict under the base definition', asyn
     candidateCount: 2,
   });
 
-  expect(result.journeys[0].checks).toEqual([
-    expect.objectContaining({
+  expect(result.journeys[0].checks).toMatchObject([
+    {
       id: requestCheck.id,
       verdict: 'regression',
       recipe: { change: 'removed' },
-    }),
+    },
   ]);
   expect(result.conclusion.kind).toBe('regression');
   expect(result.summary).toEqual({ passed: 0, total: 1 });
@@ -2881,15 +2881,15 @@ test('altered journey steps leave every check in the journey unknown', async () 
     baseFields: { steps: [{ kind: 'network-idle' }] },
   });
 
-  expect(result.journeys[0].checks).toEqual([
-    expect.objectContaining({
+  expect(result.journeys[0].checks).toMatchObject([
+    {
       verdict: 'unknown',
       recipe: {
         change: 'journey-altered',
         fields: ['steps'],
-        proposed: expect.objectContaining({ outcome: 'passed' }),
+        proposed: { outcome: 'passed' },
       },
-    }),
+    },
   ]);
   expect(result.conclusion.kind).toBe('unavailable');
 });

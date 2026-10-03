@@ -206,6 +206,7 @@ test('the base observed.json is read from Git at the base revision, relative to 
 
     return git('rev-parse', 'HEAD').trim();
   };
+
   const project = {
     schemaVersion: 1,
     name: 'App',
