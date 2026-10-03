@@ -390,12 +390,23 @@ test('a docs-only change says no captured file changed and lists the outside fil
   const docsOnly = { ...result, changeScope: computed };
 
   expect(scopeLine(computed)).toBe(
-    'No captured file changed, so the checks ran on the same captured source. 1 file changed outside the captured source.',
+    'No captured file changed, so the checks describe unchanged behavior. 1 file changed outside the captured source.',
   );
   expect(scopeFileLines(docsOnly)).toEqual([
     'docs/guide.md (modified): Outside the captured source. Neither source snapshot contains this file.',
   ]);
   expect(renderComparison(docsOnly)).toContain('No captured file changed');
+});
+
+test('a changed observed.json says that journey and check changes were not compared', () => {
+  const computed = scope([scenario({ 'app.ts': app }, { 'app.ts': app })], {
+    kind: 'listed',
+    files: [{ path: 'observed.json', change: 'modified' }],
+  });
+
+  expect(scopeFileLines({ ...result, changeScope: computed })).toContain(
+    'Changes to journeys and checks: Recipe comparison is not implemented in this version.',
+  );
 });
 
 test('the line counts each relation and says when outside names are unknown', () => {

@@ -65,7 +65,7 @@ export function scopeLine(scope: ChangeScope): string {
 
   if (captured(scope).length === 0) {
     return [
-      'No captured file changed, so the checks ran on the same captured source.',
+      'No captured file changed, so the checks describe unchanged behavior.',
       outsideText,
     ]
       .filter((part) => part !== '')
@@ -136,6 +136,10 @@ export function scopeFileLines(result: Comparison): string[] {
     ),
     ...(scope.outside.kind === 'unavailable'
       ? [`Files outside the captured source: ${sentence(scope.outside.reason)}`]
+      : []),
+    ...(scope.recipe.kind === 'unavailable' &&
+    scope.files.some((file) => file.path === 'observed.json')
+      ? [`Changes to journeys and checks: ${sentence(scope.recipe.reason)}`]
       : []),
   ];
 }

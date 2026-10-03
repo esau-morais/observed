@@ -88,7 +88,7 @@ export const reasons = {
 
 // Files a browser or JavaScript server runtime executes. Coverage of a file
 // overrides this list, since a source map can name any original file.
-const runnable = /\.(?:[cm]?[jt]sx?)$/;
+const runnable = /\.(?:[cm]?[jt]sx?|vue|svelte)$/;
 const declaration = /\.d\.[cm]?ts$/;
 
 function collectorRuns(path: string): boolean {
