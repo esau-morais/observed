@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "mode": "comparison",
   "title": "Open Reading shelf",
   "evaluatedAt": "2026-09-27T15:34:04.958Z",
@@ -1580,5 +1580,38 @@
   "conclusion": {
     "kind": "regression",
     "text": "No browser errors: 1 error(s) on the candidate that the base did not have: step 1 page error: TypeError: Cannot read properties of undefined (reading 'reading'). Base: 0; candidate: 1."
+  },
+  "changeScope": {
+    "kind": "recorded",
+    "sources": {
+      "base": "7163244b16b6a7ea3e58ece004997948aa4bbf659b14f3cf3de8434f181b7b09",
+      "candidate": "4fbab40697c430c7502d29aff9ed46387918d787f89414d2f259ab28838fb65f"
+    },
+    "files": [
+      {
+        "path": "src/App.jsx",
+        "change": "modified",
+        "captured": true,
+        "relation": "checked",
+        "basis": "stack-frame",
+        "journeys": ["Open Reading shelf"],
+        "checks": ["no-browser-errors"]
+      }
+    ],
+    "outside": {
+      "kind": "unavailable",
+      "reason": "Git did not list changed files for this comparison, because it was made from capture directories"
+    },
+    "coverage": [
+      {
+        "journey": "Open Reading shelf",
+        "kind": "unavailable",
+        "reason": "The capture recorded no coverage"
+      }
+    ],
+    "recipe": {
+      "kind": "unavailable",
+      "reason": "Recipe comparison is not implemented in this version"
+    }
   }
 }

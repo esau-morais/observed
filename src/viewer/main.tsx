@@ -5,7 +5,7 @@ import '@fontsource/geist-pixel/latin-400.css';
 import './reset.css';
 import { Schema } from 'effect';
 import { createRoot } from 'react-dom/client';
-import { comparisonSchema } from '../comparison-model';
+import { comparisonSchema, resultVersionProblem } from '../comparison-model';
 import {
   embeddedEvidenceId,
   embeddedResultId,
@@ -43,6 +43,12 @@ async function loadReport() {
     embedded === null || embeddedResult === null
       ? await fetchReport()
       : readEmbeddedEvidence(embedded.textContent, embeddedResult.textContent);
+  const olderVersion = resultVersionProblem(input);
+
+  if (olderVersion !== null) {
+    throw new Error(olderVersion);
+  }
+
   const result = await Schema.decodeUnknownPromise(comparisonSchema, {
     onExcessProperty: 'error',
   })(input);

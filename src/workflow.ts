@@ -1,5 +1,6 @@
 import { Console, Effect, FileSystem } from 'effect';
 import path from 'node:path';
+import { gitChanges } from './capture/changed-files';
 import { captureApplication } from './capture/coordinator';
 import { processOutput } from './capture/process';
 import { json } from './encoding';
@@ -132,6 +133,16 @@ export const runProject = Effect.fn('runProject')(function* (options: {
     return yield* Effect.die('A project has at least one journey');
   }
 
+  const changes =
+    options.baseRevision === null
+      ? undefined
+      : yield* gitChanges({
+          projectRoot: root,
+          baseRevision: options.baseRevision,
+          candidateRevision: options.candidateRevision,
+          transcript: path.join(directory, 'changes-transcript.jsonl'),
+        });
+
   return yield* Effect.gen(function* () {
     const viewerDirectory = yield* buildViewer(
       options.toolRoot,
@@ -143,6 +154,7 @@ export const runProject = Effect.fn('runProject')(function* (options: {
       journeys: [first, ...rest],
       directory: path.join(directory, 'report'),
       mode: options.baseRevision === null ? 'preview' : 'comparison',
+      ...(changes === undefined ? {} : { changes }),
     });
   }).pipe(Effect.scoped);
 });

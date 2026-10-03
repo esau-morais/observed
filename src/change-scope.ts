@@ -410,15 +410,15 @@ export function changeScope({
       continue;
     }
 
-    identities.push({
-      path,
-      change:
-        base === undefined
-          ? 'added'
-          : candidate === undefined
-            ? 'removed'
-            : 'modified',
-    });
+    let change: ScopeFile['change'] = 'modified';
+
+    if (base === undefined) {
+      change = 'added';
+    } else if (candidate === undefined) {
+      change = 'removed';
+    }
+
+    identities.push({ path, change });
   }
 
   const sources =

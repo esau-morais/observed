@@ -7,6 +7,7 @@ import {
   comparisonSchema,
   conclusionExitCodes,
   everyCaptureFailed,
+  resultVersionProblem,
   type CheckVerdict,
   type Comparison,
   type Journey,
@@ -40,6 +41,7 @@ import {
 } from './slack-delivery';
 import { describeRevision, shortSource } from '../src/provenance-text';
 import { describeVisual } from '../src/visual-text';
+import { scopeFileLines, scopeLine } from '../src/change-scope-text';
 import {
   checkSummary,
   conclusionTones,
@@ -300,6 +302,23 @@ function passedChecks(result: Comparison): string | null {
         : []),
     ].join('\n'),
   );
+}
+
+const listedFiles = 10;
+
+function scopeFiles(result: Comparison): string | null {
+  const lines = scopeFileLines(result);
+
+  if (result.mode === 'preview' || lines.length === 0) {
+    return null;
+  }
+
+  return [
+    ...lines.slice(0, listedFiles).map((line) => `- ${inlineText(line)}`),
+    ...(lines.length > listedFiles
+      ? [`- ${lines.length - listedFiles} more in the report.`]
+      : []),
+  ].join('\n');
 }
 
 function unchanged(result: Comparison): string | null {
@@ -626,7 +645,11 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       kind === 'unavailable'
         ? `${counts}. Missing evidence is not a pass.`
         : counts,
+      ...(result.mode === 'preview'
+        ? []
+        : [inlineText(scopeLine(result.changeScope))]),
     ]),
+    ...extra(scopeFiles(result)),
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(unchanged(result)),
@@ -671,6 +694,17 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
   return { markdown, trusted: true, title: headline(result), kind };
 }
 
+function olderResult(output: string | null): string | null {
+  const run =
+    output === null
+      ? Option.none()
+      : Schema.decodeUnknownOption(
+          Schema.fromJsonString(Schema.Struct({ result: Schema.Unknown })),
+        )(output);
+
+  return Option.isNone(run) ? null : resultVersionProblem(run.value.result);
+}
+
 export function summarize(options: SummaryOptions): Summary {
   const decoded =
     options.output === null
@@ -694,9 +728,13 @@ export function summarize(options: SummaryOptions): Summary {
   };
 
   if (Option.isNone(decoded)) {
+    const version = olderResult(options.output);
+
     return untrustedSummary(
       frame,
-      `Observed exited with code ${formatExit(options.exitCode)} and wrote no readable result.`,
+      version === null
+        ? `Observed exited with code ${formatExit(options.exitCode)} and wrote no readable result.`
+        : version,
     );
   }
 

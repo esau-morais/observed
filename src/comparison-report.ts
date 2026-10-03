@@ -1,3 +1,4 @@
+import { scopeFileLines, scopeLine } from './change-scope-text';
 import { escapeText, link } from './markdown';
 import {
   checkLabels,
@@ -319,6 +320,16 @@ function renderJourney(
   };
 }
 
+function renderChangeScope(result: Comparison): string[] {
+  const files = scopeFileLines(result);
+
+  return [
+    '## Change scope',
+    escapeText(scopeLine(result.changeScope)),
+    ...(files.length === 0 ? [] : [list(files)]),
+  ];
+}
+
 export function renderComparison(result: Comparison): string {
   const [first, ...rest] = result.journeys;
   const single = rest.length === 0 ? renderJourney(result, first, 2) : null;
@@ -330,6 +341,7 @@ export function renderComparison(result: Comparison): string {
     `**${conclusionLabels[result.conclusion.kind]}**`,
     escapeText(result.conclusion.text),
     `${escapeText(checkSummary(result))}.`,
+    ...(result.mode === 'preview' ? [] : renderChangeScope(result)),
     `Evaluated at: ${escapeText(result.evaluatedAt)}`,
     ...(single?.details ??
       result.journeys.flatMap((journey, index) => {
