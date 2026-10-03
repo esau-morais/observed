@@ -1040,9 +1040,8 @@ test('renders captured text literally instead of injecting Markdown headings or 
   expect(report).toContain('Forged heading');
 });
 
-// report.md once ran about 2,000 words, with provenance and per-side
-// repetition before most of what a reviewer needs. The audit detail stays,
-// folded below the conclusion and the screen difference.
+// Provenance and per-side detail ahead of the conclusion bury the screen
+// difference and the checks. The audit detail must stay in the file, folded.
 test('report.md leads with the conclusion and the screen difference, and folds the audit detail', async () => {
   const fixture = Schema.decodeUnknownSync(
     Schema.fromJsonString(comparisonSchema),
@@ -1092,11 +1091,41 @@ test('report.md leads with the conclusion and the screen difference, and folds t
 
   expect(visible.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(400);
   expect(order.every((at, index) => at > (order[index - 1] ?? -1))).toBe(true);
-  expect(visible).toContain('![Changed pixels](<journey-1/visual-diff.png>)');
+  expect(visible).toMatch(/!\[Changed pixels\]\([^)]*visual-diff\.png/);
   expect(visible).not.toContain('Manifest SHA-256');
   expect(visible).not.toContain('Artifact integrity');
   expect(report).toContain('Manifest SHA-256');
   expect(report).toContain('Artifact integrity');
+});
+
+// Missing evidence folded away reads as a clean result.
+test('report.md keeps unavailable reasons and unresolved items outside the folds', async () => {
+  const fixture = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(
+    await readFile(
+      path.join(import.meta.dirname, 'fixtures/report/errors-result.json'),
+      'utf8',
+    ),
+  );
+  const [journey] = fixture.journeys;
+  const report = renderComparison({
+    ...fixture,
+    journeys: [
+      {
+        ...journey,
+        base: { ...journey.base, unresolved: ['The base capture is stale'] },
+        comparison: {
+          kind: 'unavailable',
+          reasons: ['The recipes differ between base and candidate'],
+        },
+      },
+    ],
+  });
+  const visible = report.replace(/<details>[\s\S]*?<\/details>/g, '');
+
+  expect(visible).toContain('The recipes differ between base and candidate');
+  expect(visible).toContain('Base: The base capture is stale');
 });
 
 test.each(['application', 'conditions', 'producer', 'observed'] as const)(

@@ -105,7 +105,66 @@ async function results(): Promise<Comparison[]> {
       }),
     ),
     ...(await recipeResults()),
+    await changedResult(),
   ];
+}
+
+// The fixture's regression with changed screenshots and files outside the
+// captured source, so the report's screen difference and folds are checked.
+async function changedResult(): Promise<Comparison> {
+  const fixture = await errorsResult();
+  const [journey] = fixture.journeys;
+  const scope = fixture.changeScope;
+
+  if (
+    journey === undefined ||
+    journey.comparison.kind !== 'available' ||
+    scope.kind !== 'recorded'
+  ) {
+    throw new Error('The fixture compares one journey with a recorded scope');
+  }
+
+  return {
+    ...fixture,
+    journeys: [
+      {
+        ...journey,
+        comparison: {
+          ...journey.comparison,
+          visual: {
+            kind: 'changed',
+            width: 1280,
+            height: 800,
+            threshold: 0.1,
+            differingPixels: 3_000,
+            changedPixels: 2_747,
+            regionCount: 1,
+            regions: [
+              { x: 286, y: 129, width: 205, height: 29, changedPixels: 2_747 },
+            ],
+            diff: { path: 'journey-1/visual-diff.png', sha256: 'a'.repeat(64) },
+          },
+        },
+      },
+    ],
+    changeScope: {
+      ...scope,
+      outside: { kind: 'listed', projectDirectory: '.' },
+      files: [
+        ...scope.files,
+        {
+          path: 'README.md',
+          change: 'modified',
+          captured: false,
+          relation: 'outside-captured-source',
+          basis: 'none',
+          reason: 'Neither source snapshot contains this file.',
+          journeys: [],
+          checks: [],
+        },
+      ],
+    },
+  };
 }
 
 // The fixture journey judged against base observed.json files that alter

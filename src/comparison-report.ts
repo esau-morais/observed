@@ -1,5 +1,6 @@
 import {
   capturedFiles,
+  relationLabels,
   recipeLabels,
   recipeLine,
   recipeLines,
@@ -28,14 +29,15 @@ import type {
   Visual,
 } from './comparison-model';
 import { evidenceKinds } from './evidence-kinds';
+import { statusWords } from './status-words';
 import { journeySections, renderMarkdownSection } from './report-sections';
 import { describeObserved, describeRevision } from './provenance-text';
 import { describeStatus } from './request-text';
 import {
+  changedShare,
   describeRegion,
   describeVisual,
   diffLegend,
-  visualChange,
 } from './visual-text';
 
 function heading(level: number, text: string): string {
@@ -46,8 +48,7 @@ function list(values: readonly string[]): string {
   return values.map((value) => `- ${escapeText(value)}`).join('\n');
 }
 
-// Raw detail stays in the report for audit, folded so the conclusion and the
-// visual difference lead. A summary is HTML, so Markdown escapes would show.
+// A summary is HTML, so Markdown escapes would show in it.
 function collapsed(summary: string, body: readonly string[]): string {
   return [
     `<details><summary>${summary.replace(/[&<>]/g, (character) => `&#${character.charCodeAt(0)};`)}</summary>`,
@@ -120,38 +121,40 @@ function renderVisual(visual: Visual): string {
 
 function image(label: string, side: Side): string {
   return side.screenshot === null
-    ? 'Unavailable'
-    : `!${link(label, side.screenshot)}`;
+    ? 'Screenshot unavailable'
+    : `!${link(`${label} captured application`, side.screenshot)}`;
 }
 
-// Before and after side by side, with the changed pixels when the
-// screenshots differ beyond the threshold.
-function renderScreens(
-  result: Comparison,
-  journey: Journey,
-  level: number,
-): string[] {
+function screenshotLinks(journey: Journey): string {
+  return [
+    { name: 'before', path: journey.base.screenshot },
+    { name: 'after', path: journey.candidate.screenshot },
+  ]
+    .map(({ name, path }) =>
+      path === null
+        ? `The ${name} screenshot is unavailable`
+        : link(`Open the ${name} screenshot`, path),
+    )
+    .join(' · ');
+}
+
+function renderScreens(journey: Journey, level: number): string[] {
   const comparison = journey.comparison;
 
   if (comparison.kind === 'preview') {
-    return [
-      heading(level, 'Screenshot'),
-      image('Current capture', journey.candidate),
-    ];
+    return [heading(level, 'Screenshot'), image('Current', journey.candidate)];
   }
 
-  const visual = comparison.kind === 'available' ? comparison.visual : null;
-  const change = visual === null ? null : visualChange(visual);
-  const pair = [
-    '| Before | After |',
-    '| --- | --- |',
-    `| ${image('Before', journey.base)} | ${image('After', journey.candidate)} |`,
-  ].join('\n');
+  if (comparison.kind === 'unavailable') {
+    return [screenshotLinks(journey)];
+  }
 
-  if (visual?.kind === 'changed') {
+  const visual = comparison.visual;
+
+  if (visual.kind === 'changed') {
     return [
       heading(level, 'What changed on screen'),
-      `${escapeText(change ?? '')} An observation, not a check.`,
+      `${escapeText(changedShare(visual))} An observation, not a check.`,
       [
         '| Before | After | Changed pixels |',
         '| --- | --- | --- |',
@@ -161,18 +164,22 @@ function renderScreens(
     ];
   }
 
-  if (change !== null) {
+  if (visual.kind === 'size-differs') {
     return [
       heading(level, 'What changed on screen'),
-      `${escapeText(change)} An observation, not a check.`,
-      pair,
+      escapeText(describeVisual(visual)),
+      [
+        '| Before | After |',
+        '| --- | --- |',
+        `| ${image('Before', journey.base)} | ${image('After', journey.candidate)} |`,
+      ].join('\n'),
     ];
   }
 
   return [
     heading(level, 'Screenshots'),
-    visual === null ? 'Not compared.' : escapeText(describeVisual(visual)),
-    collapsed('Before and after', [pair]),
+    escapeText(describeVisual(visual)),
+    screenshotLinks(journey),
   ];
 }
 
@@ -344,6 +351,7 @@ function renderJourney(
     ...journey.candidate.unresolved
       .filter((reason) => !shared.has(reason))
       .map((reason) => `Candidate: ${reason}`),
+    ...journey.limitations,
   ];
   const single = result.journeys.length === 1;
   const comparison = journey.comparison;
@@ -356,27 +364,34 @@ function renderJourney(
             `**${conclusionLabels[journey.conclusion.kind]}** · ${escapeText(journey.conclusion.text)}`,
           ]),
       ...(comparison.kind === 'unavailable'
-        ? [heading(level, 'Not compared'), list(comparison.reasons)]
+        ? [
+            heading(
+              level,
+              `Comparison ${statusWords.unavailable.word.toLowerCase()}`,
+            ),
+            list(comparison.reasons),
+          ]
         : []),
-      ...renderScreens(result, journey, level),
+      ...renderScreens(journey, level),
       heading(level, 'Checks'),
       journey.checks.length === 0
         ? 'No named check configured.'
         : journey.checks.map(renderVerdict).join('\n'),
-      ...(unresolved.length === 0
-        ? []
-        : [heading(level, 'Unresolved evidence'), list(unresolved)]),
+      heading(level, 'Unresolved evidence and limits'),
+      unresolved.length === 0
+        ? 'No unresolved items reported. Coverage is limited to the named checks and recorded capture windows.'
+        : list(unresolved),
     ],
     details: [
-      collapsed('Limits of this comparison', [
-        journey.limitations.length === 0
-          ? 'Coverage is limited to the named checks and recorded capture windows.'
-          : list(journey.limitations),
-      ]),
-      collapsed('Each check on base and candidate', [
-        'Observed executed its own checks against each capture\'s evidence. A check whose scope starts with "Imported from" reports another tool\'s result.',
-        ...sides((side, label) => renderChecks(side, label, level + 1)),
-      ]),
+      collapsed(
+        preview
+          ? 'Each check on the current capture'
+          : 'Each check on base and candidate',
+        [
+          'Observed executed its own checks against each capture\'s evidence. A check whose scope starts with "Imported from" reports another tool\'s result. Each result covers its stated expectation and scope; comparison availability is separate.',
+          ...sides((side, label) => renderChecks(side, label, level + 1)),
+        ],
+      ),
       collapsed('Request ledger', [
         'Collector measurements from the recorded windows. A recorded response status is not a named check result.',
         ...sides((side, label) => renderLedger(side, label, level + 1)),
@@ -392,8 +407,10 @@ function renderJourney(
         ...sides((side, label) => renderArtifacts(side, label, level + 1)),
       ]),
       collapsed('Captures, producer, conditions and recipe', [
-        ...sides((side, label) => renderIdentity(side, label, level + 1)),
-        ...sides((side, label) => renderProvenance(side, label, level + 1)),
+        ...sides(
+          (side, label) =>
+            `${renderIdentity(side, label, level + 1)}\n\n${renderProvenance(side, `${label}: provenance`, level + 2)}`,
+        ),
       ]),
     ],
   };
@@ -402,8 +419,7 @@ function renderJourney(
 function renderChangeScope(result: Comparison): string[] {
   const scope = result.changeScope;
   const files = capturedFiles(result).map(
-    (file) =>
-      `${file.path}${file.change === 'modified' ? '' : ` (${file.change})`}: ${file.relation}. ${file.detail}`,
+    (file) => `${file.path} (${file.change}): ${file.relation}. ${file.detail}`,
   );
   const outside =
     scope.kind === 'recorded'
@@ -426,10 +442,32 @@ function renderChangeScope(result: Comparison): string[] {
       ? []
       : [
           collapsed(`Files outside the captured source (${outside.length})`, [
+            escapeText(
+              `${relationLabels['outside-captured-source']}. ${statusWords.outsideCapturedSource.meaning}`,
+            ),
             list(outside),
           ]),
         ]),
   ];
+}
+
+// The base and candidate revisions, so the pair stays in view.
+function revisionLine(result: Comparison): string {
+  const revision = (side: 'base' | 'candidate') => {
+    const capture = result.journeys
+      .map((journey) => journey[side].capture)
+      .find((item) => item !== null);
+
+    return capture === undefined
+      ? 'capture unavailable'
+      : describeRevision(capture.manifest.source.revision);
+  };
+
+  return escapeText(
+    result.mode === 'preview'
+      ? `Current: ${revision('candidate')}`
+      : `Base: ${revision('base')} · Candidate: ${revision('candidate')}`,
+  );
 }
 
 export function renderComparison(result: Comparison): string {
@@ -438,7 +476,7 @@ export function renderComparison(result: Comparison): string {
   const journeys =
     single === null
       ? result.journeys.map((journey, index) => ({
-          title: `## Journey ${index + 1}: ${escapeText(journey.title)}`,
+          title: `Journey ${index + 1}: ${escapeText(journey.title)}`,
           rendered: renderJourney(result, journey, 3),
         }))
       : [];
@@ -451,14 +489,18 @@ export function renderComparison(result: Comparison): string {
       : `**${runLabel(result)}**`,
     escapeText(result.conclusion.text),
     `${escapeText(checkSummary(result))}.`,
+    revisionLine(result),
     ...(single?.lead ??
-      journeys.flatMap(({ title, rendered }) => [title, ...rendered.lead])),
+      journeys.flatMap(({ title, rendered }) => [
+        heading(2, title),
+        ...rendered.lead,
+      ])),
     ...(result.mode === 'preview' ? [] : renderChangeScope(result)),
     '## Evidence for audit',
     `Evaluated at: ${escapeText(result.evaluatedAt)}`,
     ...(single?.details ??
       journeys.flatMap(({ title, rendered }) => [
-        title.replace(/^## /, '### '),
+        heading(3, title),
         ...rendered.details,
       ])),
     'Observed renders the saved comparison result. Imported Phase 0 evidence reports are generated separately by the CLI.',
