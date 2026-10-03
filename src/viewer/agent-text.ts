@@ -1,3 +1,4 @@
+import { scopeLine } from '../change-scope-text';
 import type { Comparison, Journey, Side } from '../comparison-model';
 import { describeRevision } from '../provenance-text';
 import {
@@ -112,10 +113,25 @@ function journeyText(
   ];
 }
 
+function notObserved(result: Comparison): string[] {
+  const scope = result.changeScope;
+
+  return scope.kind === 'recorded'
+    ? scope.files.flatMap((file) =>
+        file.relation === 'not-observed'
+          ? [
+              `- ${file.path} (${file.change}): ${/[.!?]$/.test(file.reason) ? file.reason : `${file.reason}.`}`,
+            ]
+          : [],
+      )
+    : [];
+}
+
 // Deterministic text for a coding agent: the facts first, then the next
 // steps, one instruction each. It never adds a suggestion about the code.
 export function agentText(result: Comparison): string {
   const multiple = result.journeys.length > 1;
+  const unobserved = notObserved(result);
 
   return [
     `## Observed: ${runLabel(result)} · ${result.title}${unobservedAfterPassing(result) > 0 ? ` · ${unobservedText(unobservedAfterPassing(result))}` : ''}`,
@@ -138,6 +154,18 @@ export function agentText(result: Comparison): string {
       ),
       '',
     ]),
+    ...(unobserved.length === 0
+      ? []
+      : [
+          '#### Changed files not observed',
+          '',
+          scopeLine(result.changeScope),
+          '',
+          ...unobserved,
+          '',
+          'A journey that you write for these files is a proposal. It sets no verdict until Observed runs it.',
+          '',
+        ]),
     'A changed value is not a regression by itself.',
     '',
     '### Next steps',
@@ -145,6 +173,12 @@ export function agentText(result: Comparison): string {
     '- Read result.json and the evidence files listed above.',
     '- Compare each value with its artifact before you change code.',
     '- Name the evidence that your change addresses.',
+    ...(unobserved.length === 0
+      ? []
+      : [
+          '- Write journeys that reach the changed files that are not observed.',
+          '- Run Observed again with those journeys.',
+        ]),
     '',
   ].join('\n');
 }

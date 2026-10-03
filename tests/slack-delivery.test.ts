@@ -219,6 +219,43 @@ test('a failing Slack message leads with the values and the source location, wit
   expect(text).not.toContain('Captured');
 });
 
+test('the Slack message counts the change scope and names files not observed, without their reasons', async () => {
+  const result = await unavailable();
+  const sha = 'a'.repeat(64);
+  const files = ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => ({
+    path: `src/${name}.ts`,
+    change: 'modified' as const,
+    captured: true as const,
+    relation: 'not-observed' as const,
+    basis: 'none' as const,
+    reason: "Coverage could not map this file's lines: Captured coverage text",
+    journeys: [],
+    checks: [],
+  }));
+  const text = JSON.stringify(
+    slackMessage(
+      {
+        ...result,
+        changeScope: {
+          kind: 'recorded',
+          sources: { base: sha, candidate: sha },
+          files,
+          outside: { kind: 'listed' },
+          coverage: [],
+          recipe: { kind: 'unchanged' },
+        },
+      },
+      links,
+    ),
+  );
+
+  expect(text).toContain('6 captured files changed: 6 not observed.');
+  expect(text).toContain('Not observed: `src/a.ts`');
+  expect(text).toContain('`src/e.ts` and 1 more');
+  expect(text).not.toContain('src/f.ts');
+  expect(text).not.toContain('Captured');
+});
+
 test('the Slack image is one changed region with a margin, clamped to the screenshot', () => {
   const width = 100;
   const rgb = new Uint8Array(width * width * 3).map((_, index) => index % 251);

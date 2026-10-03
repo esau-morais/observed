@@ -39,7 +39,7 @@ const banned = [
   /\bAI detected\b/i,
 ];
 const imperative =
-  /^(Download|Run|Read|Open|Compare|Treat|Name|Fix|Give|Ask|Tell|Use|Follow)\b/;
+  /^(Download|Run|Read|Open|Compare|Treat|Name|Fix|Give|Ask|Tell|Use|Follow|Write)\b/;
 
 const fixture = path.join(import.meta.dirname, 'fixtures');
 const evaluatedAt = '2026-09-27T15:34:04.958Z';
@@ -416,6 +416,51 @@ test('agent handoffs list facts, then one instruction per next step', async () =
         .map((sentence) => sentence.text),
     ).toEqual([]);
   }
+});
+
+test('a handoff lists changed files not observed and says a journey written for them sets no verdict', async () => {
+  const result = await errorsResult();
+
+  if (result.changeScope.kind !== 'recorded') {
+    throw new Error('The fixture records a change scope');
+  }
+
+  const unobserved: Comparison = {
+    ...result,
+    changeScope: {
+      ...result.changeScope,
+      files: [
+        ...result.changeScope.files,
+        {
+          path: 'src/server.ts',
+          change: 'modified',
+          captured: true,
+          relation: 'not-observed',
+          basis: 'none',
+          reason:
+            'No journey recorded coverage, so no evidence shows that this file ran.',
+          journeys: [],
+          checks: [],
+        },
+      ],
+    },
+  };
+  const text = agentText(unobserved);
+  const steps = text.split('### Next steps')[1] ?? '';
+
+  expect(text.split('### Next steps')[0]).toContain(
+    '- src/server.ts (modified): No journey recorded coverage, so no evidence shows that this file ran.',
+  );
+  expect(text).toContain('It sets no verdict until Observed runs it.');
+  expect(steps).toMatch(/^- Write journeys .*not observed\.$/m);
+  expect(agentText(result)).not.toContain('not observed');
+  expect(
+    sentences(text, supplied(unobserved)).filter(
+      (sentence) =>
+        sentence.words >
+        (sentence.instruction ? instructionWords : statementWords),
+    ),
+  ).toEqual([]);
 });
 
 test('a check one side lacks is unknown without a complete capture, and not run with one', async () => {

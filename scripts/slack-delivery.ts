@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import { scopeLine } from '../src/change-scope-text';
 import type {
   CheckVerdict,
   Comparison,
@@ -112,6 +113,32 @@ function checkCount(result: Comparison): string {
   }
 }
 
+// Paths only: a file's reason can quote coverage tool output.
+function scopeText(result: Comparison): string[] {
+  const scope = result.changeScope;
+
+  if (result.mode === 'preview') {
+    return [];
+  }
+
+  const paths =
+    scope.kind === 'recorded'
+      ? scope.files.flatMap((file) =>
+          file.relation === 'not-observed' ? [file.path] : [],
+        )
+      : [];
+  const shown = paths
+    .slice(0, 5)
+    .map((path) => `\`${slackText(path)}\``)
+    .join(', ');
+  const more = paths.length > 5 ? ` and ${paths.length - 5} more` : '';
+
+  return [
+    slackText(scopeLine(scope)),
+    ...(paths.length === 0 ? [] : [`Not observed: ${shown}${more}`]),
+  ];
+}
+
 function button(text: string, url: string | null, id: string) {
   return url !== null && Schema.is(httpsUrl)(url)
     ? [
@@ -182,7 +209,15 @@ export function slackMessage(result: Comparison | null, links: SlackLinks) {
       },
       {
         type: 'context',
-        elements: [{ type: 'mrkdwn', text: context.join(' · ') }],
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: [
+              context.join(' · '),
+              ...(result === null ? [] : scopeText(result)),
+            ].join('\n'),
+          },
+        ],
       },
       ...(buttons.length === 0 ? [] : [{ type: 'actions', elements: buttons }]),
     ],
