@@ -1,7 +1,6 @@
 # Change map rework: research
 
 Session D, 2026-10-03. Branch `feat/change-map-rework`, rebased on `d46e3b2`.
-Status: draft. The decision and prototype sections are filled in after the prototype runs.
 
 The maintainer's words, thread `84ca547e`: "bro wtf is this map. it's ugly these paths + is it going to be small like this? it should at least be a proper section for better visibility and maybe using actually interactive nodes. research first". Later: "if possible, even replicate it", about the _overment repo map.
 
@@ -47,7 +46,12 @@ Motion, from frame-by-frame luma and the strips in `/tmp/dref`:
 | typescript-best-practices | For the build: parse at the boundary, discriminated unions for block kinds and selection, no assertions. |
 | unslop | Applied to this file. |
 
-Graph and diagram skills from registries: see "Other tools" below once the search finishes.
+Graph and diagram skills found in registries, searched 2026-10-03:
+
+- [framara/react-flow-skill](https://github.com/framara/react-flow-skill) (MIT). Its `references/accessibility.md` covers `ariaLabelConfig`, labels, focusable props and keyboard alternatives to dragging. The most useful skill for a React Flow map. Not loaded, since React Flow was not chosen.
+- [openai/plugins build-web-data-visualization](https://github.com/openai/plugins/tree/main/plugins/build-web-data-visualization/skills) (MIT). `node-link-and-diagram-layout` and `accessibility-and-inclusive-visualization` say to keep layout stable across revisions and to keep a text outline of nodes, groups and edges. Both ideas are in the build: the layout is deterministic, and the table view is the outline.
+- [existential-birds/beagle](https://github.com/existential-birds/beagle) (Apache-2.0) has React Flow and dagre skills with almost nothing on accessibility.
+- anthropics/skills has nothing for graphs. No skill found covers an accessible read-only node map end to end. cursor/plugins and the awesome lists were not searched.
 
 ## Bundle
 
@@ -76,12 +80,68 @@ One drill level at a time, 176x72 px cards, file and directory children only:
 
 Both engines put most of `src` in a few wide ranks, about three viewport widths at 1440 px. ELK's `wrapping.strategy: MULTI_EDGE` with aspect ratio 1.6 changed nothing on these graphs. The reference never shows more than about 12 cards in a level, so it never meets this problem. Our levels can hold 40.
 
+## Other tools
+
+Checked 2026-10-03 from docs and source; screenshots of several are in `references/external/`.
+
+| Tool | Engine | Pattern worth taking |
+| --- | --- | --- |
+| Nx graph | cytoscape + cytoscape-dagre | Folder containers labeled `./apps (5 / 5)`; a side panel with direct dependencies and dependents; focus a project with a depth control; clicking an edge lists the files behind it |
+| Turborepo devtools (2.7) | reactflow 11 with its `base.css`, hand-written depth layout | Title is the package name, subtitle the path; selection modes "depends on" and "affects"; others drop to 0.2 opacity |
+| CodeSee review maps | not found | Added, modified and removed colors; unchanged files that depend on a changed file get their own state; a "show unchanged files" toggle |
+| dependency-cruiser | Graphviz | Hover highlights, click pins, Escape clears; `--affected <rev>` shows changed modules and what reaches them; `--collapse` to folders |
+| GitHub dependency graph | table | Search and filters; "Show paths" explains how a transitive dependency got in |
+| Structurizr | not found | Keyboard model: `n` select by name, `i` legend, `c` fit, `b` back, arrow keys |
+| Archify (external screenshot) | not found | Upstream and downstream reach counts on the selected node |
+
+Taken into the build: name plus path subtitle, unchanged context files hidden on crowded levels (CodeSee's toggle), Escape to clear then go up (dependency-cruiser), edge tooltip listing the connections behind it (Nx), packages and routes folded into one card each (Nx's composite nodes).
+
 ## Map and page constraints
 
 - CSP. `src/report-page.ts:85` allows one hashed script and one hashed stylesheet, with no `unsafe-inline`. React sets styles through the DOM, which CSP allows, so StyleX dynamic styles and React Flow's transforms both work. A library's base CSS would join the one hashed stylesheet at build time.
-- Styling. AGENTS.md: StyleX only, no second styling system. React Flow needs `base.css` for its pane, viewport and handle positioning, so adopting it needs a maintainer exception.
+- Styling. AGENTS.md: StyleX only, no second styling system. React Flow needs `base.css` (13.6 KB) for its pane, viewport and handle positioning, so adopting it needs a maintainer exception.
+- React Flow's accessibility, from its docs and the 12.12.0 source: nodes are focusable groups, Enter selects, Escape deselects, arrows move a selected node. Nothing moves focus between neighbors, the wrapper has `role="application"`, edge labels default to raw IDs, and the default descriptions say "Press delete to remove it". A read-only map would override most of that.
 - Accessibility. DESIGN.md:292 asks for every block and connection reachable by keyboard in reading order, Enter to open, Escape to go up, and agent text in the inference color with an "Agent description" label.
 
 ## Decision
 
-Pending the prototype. Leading option: keep the custom SVG plus HTML button renderer, replace elkjs with a small layered layout of our own that caps a rank's width and wraps it, and route edges through the gaps between cards the way the reference does.
+Keep our own renderer: HTML buttons for blocks and one SVG for connections, all StyleX. Replace elkjs with a layered layout written for this map (`src/viewer/map-layout.ts`, about 500 lines).
+
+- Bundle. elkjs is 443 KB of the 587 KB viewer. The prototype build is 158 KB gzipped, 429 KB less. React Flow would add 60 KB back, plus a layout engine.
+- Width. Neither ELK nor dagre caps a rank's width, and our levels hold up to 42 blocks. Our layout wraps a rank onto extra rows at the measured width, so the map fits 1440 and 390 px without sideways scrolling in the common case.
+- Look. The reference routes edges as parallel strands through the gaps between cards. A layered layout with lane slots for long edges gives the same result; the prototype draws one strand per connection type with a count badge.
+- Interaction. The reference has no pan, zoom or drag. Cards are native buttons, so focus, Enter, forced colors and screen readers work without the `role="application"` wrapper and the overrides React Flow would need.
+- Styling. No stack exception. React Flow would need `base.css`, which AGENTS.md rules out without the maintainer.
+- License. Dropping elkjs also drops an EPL-2.0 dependency from the bundle.
+- Rejected. Cytoscape, sigma and G6 draw on canvas and give nodes no keyboard or ARIA model. dagre is small (17 KB) but has open bugs with nested graphs and no rank width cap.
+
+The layout is deterministic: the same level at the same width gives the same picture, with ties broken by ID.
+
+## Prototype
+
+Built in the real files on this branch, on real bundles, served with `D/serve.ts` so each report loads the new viewer build. Screenshots in `D/shots/proto/`.
+
+| View | Reference | Prototype |
+| --- | --- | --- |
+| Top level | `f_01.jpg` | `large-1440-map.png`, side by side in `compare-root.png` |
+| A small level | `f_05.jpg` | `exercised-1440.png`, side by side in `compare-small.png` |
+| Phone | none | `exercised-390.png` |
+| A crowded level | none | `large-src-1440-map.png` |
+
+![top level](shots/proto/compare-root.png)
+
+![small level](shots/proto/compare-small.png)
+
+What the prototype showed:
+
+- The structure carries over. Top level: Scripts and Source directories with "5 files · 3 changed", root files, a dashed outside row, and the journey row with links on hover. The badges (15, 11, 65, 4) say how many imports each strand carries.
+- 18 package cards swamped the outside row, so packages became one "Packages" card that lists them in the panel. 12 route cards did the same to the journey row and became one "Requested routes" card.
+- `bun.lock` was named "Bun". Only JavaScript and TypeScript files get a readable name now ("Change map" for `change-map.tsx`); other files keep their filename.
+- The `src` level is the hard case: 42 blocks and 224 connections. Tightening the ranks cut it from 16 rows deep, and resting edges are faded when a level has more than 40 strands, but it still reads as a tangle. The build hides unchanged context files on crowded levels behind a "Show unchanged files" control, as CodeSee does.
+- At 390 px a rank holds one card per row, and the header's legend takes most of the first screen. The build moves the legend into a disclosure on narrow screens.
+- The DESIGN.md connection colors don't separate (dataviz validator above). The build picks new ones and reruns the validator in both themes.
+
+## Unresolved
+
+- Agent descriptions: the result has no field for them, so the interpretation lane stays empty and the core works without a model, as AGENTS.md requires.
+- Session B's `projectDirectory` (schema 9) isn't on main yet. The map reads it when present (`repoPath` in `map-view.ts`); until then outside files show as a count, which needs no path.

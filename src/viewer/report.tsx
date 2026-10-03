@@ -134,6 +134,18 @@ const styles = stylex.create({
     gridRow: { default: 'auto', [media.desktop]: '2' },
     minWidth: 0,
   },
+  // A change map takes the full width under the verdict; the index and the
+  // journeys follow it.
+  mapLayout: {
+    gridTemplateRows: { default: 'auto', [media.desktop]: 'auto auto 1fr' },
+  },
+  mapVerdict: { gridColumn: { default: 'auto', [media.desktop]: '1 / -1' } },
+  mapArea: {
+    gridColumn: { default: 'auto', [media.desktop]: '1 / -1' },
+    gridRow: { default: 'auto', [media.desktop]: '2' },
+    minWidth: 0,
+  },
+  mapRest: { gridRow: { default: 'auto', [media.desktop]: '3' } },
   section: { display: 'grid', gap: 20, minWidth: 0 },
   stack: { display: 'grid', gap: 12, minWidth: 0 },
   verdictWord: {
@@ -1473,6 +1485,16 @@ export function ComparisonReport({ result }: { result: Comparison }) {
   const theme = useTheme();
   const multiple = result.journeys.length > 1;
   const outlines = result.journeys.map(outlineJourney);
+  const scope =
+    result.mode === 'comparison' && result.changeScope.kind === 'recorded'
+      ? result.changeScope
+      : null;
+  // The map leads only when it has a captured file to draw; otherwise the
+  // journeys' evidence explains the verdict and the files follow it.
+  const mapFirst =
+    scope !== null &&
+    result.changeMap.kind === 'recorded' &&
+    scope.files.some((file) => file.captured);
 
   return (
     <div {...stylex.props(styles.canvas)}>
@@ -1491,11 +1513,22 @@ export function ComparisonReport({ result }: { result: Comparison }) {
           </span>
           <ThemeControl {...theme} />
         </header>
-        <main id="report" tabIndex={-1} {...stylex.props(styles.layout)}>
-          <div {...stylex.props(styles.verdictArea)}>
+        <main
+          id="report"
+          tabIndex={-1}
+          {...stylex.props(styles.layout, mapFirst && styles.mapLayout)}
+        >
+          <div
+            {...stylex.props(styles.verdictArea, mapFirst && styles.mapVerdict)}
+          >
             <Verdict result={result} />
           </div>
-          <div {...stylex.props(styles.railArea)}>
+          {mapFirst && scope !== null ? (
+            <div {...stylex.props(styles.mapArea)}>
+              <ChangeScopeView result={result} scope={scope} />
+            </div>
+          ) : null}
+          <div {...stylex.props(styles.railArea, mapFirst && styles.mapRest)}>
             <div {...stylex.props(styles.wide)}>
               <Rail outlines={outlines} journeys={result.journeys} />
             </div>
@@ -1511,11 +1544,7 @@ export function ComparisonReport({ result }: { result: Comparison }) {
               <Rail outlines={outlines} journeys={result.journeys} />
             </details>
           </div>
-          <div {...stylex.props(styles.bodyArea)}>
-            {result.mode === 'comparison' &&
-            result.changeScope.kind === 'recorded' ? (
-              <ChangeScopeView result={result} scope={result.changeScope} />
-            ) : null}
+          <div {...stylex.props(styles.bodyArea, mapFirst && styles.mapRest)}>
             {result.journeys.map((journey, index) => {
               const outline = outlines[index];
 
@@ -1535,6 +1564,9 @@ export function ComparisonReport({ result }: { result: Comparison }) {
                 />
               );
             })}
+            {!mapFirst && scope !== null ? (
+              <ChangeScopeView result={result} scope={scope} />
+            ) : null}
             <nav aria-label="Report files" {...stylex.props(styles.nav)}>
               <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
               <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
