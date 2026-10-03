@@ -309,7 +309,7 @@ const listedFiles = 10;
 function scopeFiles(result: Comparison): string | null {
   const lines = scopeFileLines(result);
 
-  if (result.mode === 'preview' || lines.length === 0) {
+  if (lines.length === 0) {
     return null;
   }
 

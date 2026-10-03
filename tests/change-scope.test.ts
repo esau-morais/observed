@@ -355,7 +355,7 @@ test('a stylesheet is not observed because no collector runs it', () => {
   });
 });
 
-test('server code that no journey covers is not observed, as in probe E2', () => {
+test('server code that no journey covers is not observed', () => {
   const server = file(
     scope([
       scenario(
@@ -390,7 +390,7 @@ test('a docs-only change says no captured file changed and lists the outside fil
   const docsOnly = { ...result, changeScope: computed };
 
   expect(scopeLine(computed)).toBe(
-    'No captured file changed, so the checks describe unchanged behavior. 1 file changed outside the captured source.',
+    'No captured file changed, so the checks ran on the same captured source. 1 file changed outside the captured source.',
   );
   expect(scopeFileLines(docsOnly)).toEqual([
     'docs/guide.md (modified): Outside the captured source. Neither source snapshot contains this file.',
@@ -442,7 +442,7 @@ test('Git lists working tree and untracked changes relative to the project direc
   await writeFile(path.join(root, 'app/server.ts'), 'one\n');
   await writeFile(path.join(root, 'README.md'), 'readme\n');
   git('add', '.');
-  git('commit', '--quiet', '-m', 'base');
+  git('-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'base');
   await writeFile(path.join(root, 'app/server.ts'), 'two\n');
   await writeFile(path.join(root, 'app/new.ts'), 'new\n');
   await writeFile(path.join(root, 'README.md'), 'changed\n');

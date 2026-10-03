@@ -13,8 +13,7 @@ const basisWords = {
   'stack-frame': 'an error stack frame',
   'component-source': 'a component source',
   'test-location': 'a test location',
-  'diff-name-match':
-    'a name that matches a changed line, not a resolved location',
+  'diff-name-match': 'a name that matches a changed line',
 } as const;
 
 function sentence(value: string): string {
@@ -66,7 +65,7 @@ export function scopeLine(scope: ChangeScope): string {
 
   if (captured(scope).length === 0) {
     return [
-      'No captured file changed, so the checks describe unchanged behavior.',
+      'No captured file changed, so the checks ran on the same captured source.',
       outsideText,
     ]
       .filter((part) => part !== '')
@@ -104,6 +103,10 @@ function fileDetail(result: Comparison, file: ScopeFile): string {
     return `${plural(lineCount(file.lines.ran), 'changed line', 'changed lines')} ran in ${journeys}, and ${lineCount(file.lines.notRan)} did not.`;
   }
 
+  if (file.relation === 'exercised' && file.basis === 'diff-name-match') {
+    return `${journeys} recorded ${basisWords[file.basis]} in this file. The match is not a resolved location.`;
+  }
+
   if (file.relation === 'exercised') {
     return `${journeys} recorded ${basisWords[file.basis]} in this file.`;
   }
@@ -111,7 +114,7 @@ function fileDetail(result: Comparison, file: ScopeFile): string {
   return file.reason;
 }
 
-// One line per changed file: its path, change, relation, and basis or reason.
+// One line per changed file, then any missing coverage or Git listing.
 export function scopeFileLines(result: Comparison): string[] {
   const scope = result.changeScope;
 

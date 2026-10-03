@@ -52,6 +52,8 @@ export const gitChanges = Effect.fn('gitChanges')(
       '--name-status',
       '-z',
       '--no-renames',
+      // A user's diff.relative setting would drop files outside the project.
+      '--no-relative',
       '--end-of-options',
       options.baseRevision,
       ...(options.candidateRevision === null

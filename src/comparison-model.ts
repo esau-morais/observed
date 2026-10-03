@@ -442,7 +442,8 @@ export const changeScopeSchema = Schema.Union([
     kind: Schema.Literal('recorded'),
     sources: Schema.Struct({ base: digest, candidate: digest }),
     files: Schema.Array(scopeFileSchema),
-    // Whether Git listed changed files that neither snapshot contains.
+    // Whether Git listed the changed files, including any that neither
+    // snapshot contains.
     outside: Schema.Union([
       Schema.Struct({ kind: Schema.Literal('listed') }),
       unavailableSchema,
