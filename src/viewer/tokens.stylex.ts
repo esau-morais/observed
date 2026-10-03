@@ -23,6 +23,11 @@ export const colors = stylex.defineVars({
   regressionFill: '#F8E4DF',
   unknown: '#506473',
   unknownFill: '#E7EDF1',
+  linkImports: '#45595E',
+  linkRanIn: '#276A6A',
+  linkRequested: '#80570F',
+  linkThrewAt: '#8E3B63',
+  linkCheckedBy: '#3D4F99',
 });
 
 export const effects = stylex.defineVars({

@@ -74,6 +74,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
     "effect": "4.0.0-rc.117",
+    "elkjs": "0.12.0",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.9",

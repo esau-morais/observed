@@ -31,6 +31,7 @@ import {
 import { statusWords } from '../status-words';
 import { describeVisual, diffLegend } from '../visual-text';
 import { AgentCopy } from './agent-copy';
+import { ChangeScopeView } from './change-map';
 import { fonts, geometry, media } from './constants.stylex';
 import {
   Artifacts,
@@ -1511,6 +1512,10 @@ export function ComparisonReport({ result }: { result: Comparison }) {
             </details>
           </div>
           <div {...stylex.props(styles.bodyArea)}>
+            {result.mode === 'comparison' &&
+            result.changeScope.kind === 'recorded' ? (
+              <ChangeScopeView result={result} scope={result.changeScope} />
+            ) : null}
             {result.journeys.map((journey, index) => {
               const outline = outlines[index];
 

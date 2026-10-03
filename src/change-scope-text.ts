@@ -105,7 +105,7 @@ export function scopeLine(scope: ChangeScope): string {
     .join(' ');
 }
 
-function fileDetail(result: Comparison, file: ScopeFile): string {
+export function fileDetail(result: Comparison, file: ScopeFile): string {
   const journeys = listed(file.journeys);
 
   if (file.relation === 'checked') {

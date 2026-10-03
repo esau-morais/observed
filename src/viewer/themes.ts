@@ -24,6 +24,11 @@ export const darkColors = stylex.createTheme(colors, {
   regressionFill: '#442724',
   unknown: '#BAD0DF',
   unknownFill: '#263540',
+  linkImports: '#C0CDCC',
+  linkRanIn: '#86C9C0',
+  linkRequested: '#E1C17A',
+  linkThrewAt: '#EBA3C4',
+  linkCheckedBy: '#AFC0F5',
 });
 
 export const darkEffects = stylex.createTheme(effects, {
