@@ -66,7 +66,7 @@ function withSource(side: Side, files: Files): Side {
         },
       },
     },
-  } as Side;
+  };
 }
 
 const noCoverage: CoverageRecord = {
