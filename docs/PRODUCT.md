@@ -153,7 +153,8 @@ the table lacks.
 - A block is a changed file, or a file that imports one or is imported by one.
   Blocks group by directory. Selecting a directory opens it, and Escape goes
   back up. A package outside the captured source is one block, outside the
-  directory groups.
+  directory groups. Journeys and the routes they requested are blocks of
+  their own layer.
 - A changed file's chip is its relation: checked, exercised, not observed, or
   outside the captured source. Unchanged files give context and have no chip.
 - Each connection comes from evidence records of one type, and each type has

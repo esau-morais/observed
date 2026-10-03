@@ -1,5 +1,11 @@
 import * as stylex from '@stylexjs/stylex';
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { fileDetail, scopeLine } from '../change-scope-text';
 import type {
   Comparison,
@@ -15,7 +21,7 @@ import {
   verdictTones,
   type Tone,
 } from '../result-text';
-import { fonts, geometry, media } from './constants.stylex';
+import { fonts, geometry, media, motion } from './constants.stylex';
 import { EvidenceLink, Screenshot } from './evidence';
 import { HeadingLevel } from './heading';
 import { layoutMap, type Box, type Layout } from './map-layout';
@@ -25,6 +31,7 @@ import {
   commonDirectory,
   connectionKinds,
   connectionLabels,
+  connectionShort,
   connectionSources,
   connectionText,
   isJourneyConnection,
@@ -117,7 +124,7 @@ const styles = stylex.create({
       ':focus-visible': colors.focus,
       [media.forcedColors]: 'Highlight',
     },
-    outlineOffset: 2,
+    outlineOffset: 3,
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
   },
@@ -167,7 +174,7 @@ const styles = stylex.create({
       ':focus-visible': colors.focus,
       [media.forcedColors]: 'Highlight',
     },
-    outlineOffset: 1,
+    outlineOffset: 3,
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
     paddingInline: 6,
@@ -205,21 +212,22 @@ const styles = stylex.create({
       ':focus-visible': colors.focus,
       [media.forcedColors]: 'Highlight',
     },
-    outlineOffset: 2,
+    outlineOffset: 3,
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
     paddingBlock: 6,
     paddingInline: 10,
     position: 'absolute',
     textAlign: 'start',
-    transitionDuration: { default: '120ms', [media.reduceMotion]: '0ms' },
+    transitionDuration: { default: motion.fast, [media.reduceMotion]: '0ms' },
     transitionProperty: 'opacity',
   },
   context: { backgroundColor: colors.surface, borderStyle: 'dashed' },
   selected: {
-    borderColor: colors.focus,
-    boxShadow: `0 0 0 2px ${colors.focus}`,
+    borderColor: { default: colors.focus, [media.forcedColors]: 'Highlight' },
+    borderWidth: 3,
   },
+
   dimmed: { opacity: 0.35 },
   blockName: {
     fontSize: '0.8125rem',
@@ -259,7 +267,16 @@ const styles = stylex.create({
   unknown: { backgroundColor: colors.unknownFill, color: colors.unknown },
   line: { fill: 'none', strokeWidth: 1.75 },
   faint: { opacity: 0.25 },
-  removed: { opacity: 0.6 },
+  edgeLabel: {
+    fill: colors.text,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    paintOrder: 'stroke',
+    stroke: colors.surface,
+    strokeLinejoin: 'round',
+    strokeWidth: 4,
+  },
+  removed: { strokeDasharray: '3 3' },
   imports: { color: colors.linkImports, stroke: colors.linkImports },
   'ran-in': {
     color: colors.linkRanIn,
@@ -299,6 +316,14 @@ const styles = stylex.create({
   },
   panel: {
     alignContent: 'start',
+    outlineColor: {
+      default: 'transparent',
+      ':focus-visible': colors.focus,
+      [media.forcedColors]: 'Highlight',
+    },
+    outlineOffset: 3,
+    outlineStyle: 'solid',
+    outlineWidth: { default: 0, ':focus-visible': 2 },
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: geometry.radius,
@@ -329,7 +354,7 @@ const styles = stylex.create({
       ':focus-visible': colors.focus,
       [media.forcedColors]: 'Highlight',
     },
-    outlineOffset: 1,
+    outlineOffset: 3,
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
     padding: 0,
@@ -375,7 +400,13 @@ function ToneChip({ tone, label }: { tone: Tone; label: string }) {
   return <Chip chip={{ tone, label, symbol: toneSymbols[tone] }} />;
 }
 
-function LineSample({ kind }: { kind: MapConnection['kind'] }) {
+function LineSample({
+  kind,
+  removed = false,
+}: {
+  kind: MapConnection['kind'];
+  removed?: boolean;
+}) {
   return (
     <svg aria-hidden="true" viewBox="0 0 28 10" {...stylex.props(styles.path)}>
       <line
@@ -383,10 +414,14 @@ function LineSample({ kind }: { kind: MapConnection['kind'] }) {
         y1="5"
         x2="28"
         y2="5"
-        {...stylex.props(styles.line, styles[kind])}
+        {...stylex.props(styles.line, styles[kind], removed && styles.removed)}
       />
     </svg>
   );
+}
+
+function isRemoved(connection: MapConnection): boolean {
+  return connection.kind === 'imports' && connection.change === 'removed';
 }
 
 function Legend() {
@@ -398,6 +433,10 @@ function Legend() {
           {connectionLabels[kind]}
         </li>
       ))}
+      <li {...stylex.props(styles.legendItem)}>
+        <LineSample kind="imports" removed />
+        Import the change removed
+      </li>
     </ul>
   );
 }
@@ -438,7 +477,7 @@ function ConnectionList({
           key={map.connections.indexOf(connection)}
           {...stylex.props(styles.connectionRow)}
         >
-          <LineSample kind={connection.kind} />
+          <LineSample kind={connection.kind} removed={isRemoved(connection)} />
           <button
             type="button"
             onClick={() =>
@@ -608,10 +647,12 @@ function ConnectionPanel({
 function VerdictPanel({
   result,
   map,
+  blocks,
   select,
 }: {
   result: Comparison;
   map: RecordedMap;
+  blocks: ReadonlyMap<string, MapBlock>;
   select: (selection: Selection) => void;
 }) {
   const failing = verdictChecks(result);
@@ -648,8 +689,17 @@ function VerdictPanel({
           const location = anchorLocation(journey, check);
           const files = map.connections.filter(
             (connection) =>
-              connection.kind === 'checked-by' && connection.check === check.id,
+              connection.kind === 'checked-by' &&
+              connection.check === check.id &&
+              connection.to === `journey:${index + 1}`,
           );
+          const evidence = [
+            ...new Map(
+              files
+                .flatMap((connection) => connection.evidence)
+                .map((item) => [JSON.stringify(item), item]),
+            ).values(),
+          ];
           const prefix = multiple ? `journey-${index + 1}-` : '';
 
           return (
@@ -666,16 +716,23 @@ function VerdictPanel({
                   <span {...stylex.props(styles.mono)}>{location.place}</span>
                 </p>
               )}
-              {files.map((connection) => (
-                <button
-                  key={connection.from}
-                  type="button"
-                  onClick={() => select({ kind: 'block', id: connection.from })}
-                  {...stylex.props(styles.linkButton)}
-                >
-                  Show {connection.from.slice('file:'.length)} on the map
-                </button>
-              ))}
+              {files.map((connection) => {
+                const block = blocks.get(connection.from);
+
+                return block === undefined ? null : (
+                  <button
+                    key={`${connection.from} ${connection.to}`}
+                    type="button"
+                    onClick={() =>
+                      select({ kind: 'block', id: connection.from })
+                    }
+                    {...stylex.props(styles.linkButton)}
+                  >
+                    Show {blockTitle(block)} on the map
+                  </button>
+                );
+              })}
+              {evidence.length === 0 ? null : <Evidence evidence={evidence} />}
               <a href={`#${prefix}checks`} {...stylex.props(styles.linkButton)}>
                 Open the checks of this journey
               </a>
@@ -777,8 +834,10 @@ function MapCanvas({
   setDirectory,
   selection,
   select,
+  blocks,
 }: {
   map: RecordedMap;
+  blocks: ReadonlyMap<string, MapBlock>;
   scope: RecordedScope;
   directory: string;
   root: string;
@@ -882,122 +941,197 @@ function MapCanvas({
   });
 
   return (
+    <>
+      <div
+        role="region"
+        aria-label={`Change map of ${directory === '' ? 'the project' : directory}`}
+        tabIndex={0}
+        {...stylex.props(styles.scroller)}
+      >
+        <div
+          {...stylex.props(
+            styles.canvas,
+            styles.size(placed.width, placed.height),
+          )}
+        >
+          <svg
+            aria-hidden="true"
+            width={placed.width}
+            height={placed.height}
+            {...stylex.props(styles.edges)}
+          >
+            <defs>
+              {connectionKinds.map((kind) => (
+                <marker
+                  key={kind}
+                  id={`arrow-${kind}`}
+                  viewBox="0 0 8 8"
+                  refX="7"
+                  refY="4"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                  {...stylex.props(styles[kind])}
+                >
+                  <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
+                </marker>
+              ))}
+            </defs>
+            {shownConnections.map((connection) => {
+              const from = placed.blocks.get(connection.from);
+              const to = placed.blocks.get(connection.to);
+              const touches =
+                focus === null ||
+                connection.from === focus ||
+                connection.to === focus;
+
+              const label =
+                (focus !== null && touches) || connection === selectedConnection
+                  ? connectionShort(connection)
+                  : '';
+
+              return from === undefined || to === undefined ? null : (
+                <g key={map.connections.indexOf(connection)}>
+                  <path
+                    d={edgePath(from, to)}
+                    markerEnd={`url(#arrow-${connection.kind})`}
+                    {...stylex.props(
+                      styles.line,
+                      styles[connection.kind],
+                      isRemoved(connection) && styles.removed,
+                      !touches && styles.faint,
+                    )}
+                  />
+                  {label === '' ? null : (
+                    <text
+                      x={(from.x + from.width / 2 + to.x + to.width / 2) / 2}
+                      y={(from.y + from.height + to.y) / 2}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      {...stylex.props(styles.edgeLabel)}
+                    >
+                      {label}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {placed.journeys === null ? null : (
+            <div
+              aria-hidden="true"
+              {...stylex.props(
+                styles.group,
+                styles.journeyGroup,
+                styles.place(placed.journeys),
+              )}
+            >
+              <span {...stylex.props(styles.layerLabel)}>Journeys</span>
+            </div>
+          )}
+          {items.map((item) =>
+            item.kind === 'directory' ? (
+              <div
+                key={`directory:${item.path}`}
+                {...stylex.props(styles.group, styles.place(item.box))}
+              >
+                <button
+                  type="button"
+                  aria-label={
+                    item.path === directory
+                      ? `Directory ${item.path === '' ? 'project root' : item.path}, shown`
+                      : `Open directory ${item.path}`
+                  }
+                  onClick={() => setDirectory(item.path)}
+                  {...stylex.props(styles.groupLabel)}
+                >
+                  {item.path === '' ? './' : `${item.path}/`}
+                </button>
+              </div>
+            ) : (
+              <MapBlockButton
+                key={item.block.id}
+                block={item.block}
+                box={item.box}
+                scope={scope}
+                count={counts.get(item.block.id) ?? 0}
+                dimmed={near !== null && !near.has(item.block.id)}
+                selected={
+                  selection?.kind === 'block' && selection.id === item.block.id
+                }
+                onActive={setActive}
+                select={select}
+              />
+            ),
+          )}
+        </div>
+        {visible.hidden > 0 && directory !== root ? (
+          <p {...stylex.props(styles.small)}>
+            {visible.hidden === 1
+              ? '1 connection leads'
+              : `${visible.hidden} connections lead`}{' '}
+            outside this directory.
+          </p>
+        ) : null}
+      </div>
+      <h3 {...stylex.props(styles.subheading)}>Connections in this view</h3>
+      <ConnectionList
+        map={map}
+        blocks={blocks}
+        connections={visible.connections}
+        select={select}
+      />
+    </>
+  );
+}
+
+function ConnectionTable({
+  map,
+  blocks,
+}: {
+  map: RecordedMap;
+  blocks: ReadonlyMap<string, MapBlock>;
+}) {
+  return map.connections.length === 0 ? null : (
     <div
       role="region"
-      aria-label={`Change map of ${directory === '' ? 'the project' : directory}`}
+      aria-label="Connections table"
       tabIndex={0}
-      {...stylex.props(styles.scroller)}
+      {...stylex.props(styles.tableWrap)}
     >
-      <div
-        {...stylex.props(
-          styles.canvas,
-          styles.size(placed.width, placed.height),
-        )}
-      >
-        <svg
-          aria-hidden="true"
-          width={placed.width}
-          height={placed.height}
-          {...stylex.props(styles.edges)}
-        >
-          <defs>
-            {connectionKinds.map((kind) => (
-              <marker
-                key={kind}
-                id={`arrow-${kind}`}
-                viewBox="0 0 8 8"
-                refX="7"
-                refY="4"
-                markerWidth="7"
-                markerHeight="7"
-                orient="auto-start-reverse"
-                {...stylex.props(styles[kind])}
+      <table {...stylex.props(styles.table)}>
+        <caption {...stylex.props(styles.caption)}>
+          Each connection on the map and the records it came from
+        </caption>
+        <thead>
+          <tr>
+            {['Type', 'Connection', 'Evidence'].map((label) => (
+              <th
+                key={label}
+                scope="col"
+                {...stylex.props(styles.cell, styles.headCell)}
               >
-                <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
-              </marker>
+                {label}
+              </th>
             ))}
-          </defs>
-          {shownConnections.map((connection) => {
-            const from = placed.blocks.get(connection.from);
-            const to = placed.blocks.get(connection.to);
-            const touches =
-              focus === null ||
-              connection.from === focus ||
-              connection.to === focus;
-
-            return from === undefined || to === undefined ? null : (
-              <path
-                key={map.connections.indexOf(connection)}
-                d={edgePath(from, to)}
-                markerEnd={`url(#arrow-${connection.kind})`}
-                {...stylex.props(
-                  styles.line,
-                  styles[connection.kind],
-                  connection.kind === 'imports' &&
-                    connection.change === 'removed' &&
-                    styles.removed,
-                  !touches && styles.faint,
-                )}
-              />
-            );
-          })}
-        </svg>
-        {placed.journeys === null ? null : (
-          <div
-            aria-hidden="true"
-            {...stylex.props(
-              styles.group,
-              styles.journeyGroup,
-              styles.place(placed.journeys),
-            )}
-          >
-            <span {...stylex.props(styles.layerLabel)}>Journeys</span>
-          </div>
-        )}
-        {items.map((item) =>
-          item.kind === 'directory' ? (
-            <div
-              key={`directory:${item.path}`}
-              {...stylex.props(styles.group, styles.place(item.box))}
-            >
-              <button
-                type="button"
-                aria-label={
-                  item.path === directory
-                    ? `Directory ${item.path === '' ? 'project root' : item.path}, shown`
-                    : `Open directory ${item.path}`
-                }
-                onClick={() => setDirectory(item.path)}
-                {...stylex.props(styles.groupLabel)}
-              >
-                {item.path === '' ? './' : `${item.path}/`}
-              </button>
-            </div>
-          ) : (
-            <MapBlockButton
-              key={item.block.id}
-              block={item.block}
-              box={item.box}
-              scope={scope}
-              count={counts.get(item.block.id) ?? 0}
-              dimmed={near !== null && !near.has(item.block.id)}
-              selected={
-                selection?.kind === 'block' && selection.id === item.block.id
-              }
-              onActive={setActive}
-              select={select}
-            />
-          ),
-        )}
-      </div>
-      {visible.hidden > 0 && directory !== root ? (
-        <p {...stylex.props(styles.small)}>
-          {visible.hidden === 1
-            ? '1 connection leads'
-            : `${visible.hidden} connections lead`}{' '}
-          outside this directory.
-        </p>
-      ) : null}
+          </tr>
+        </thead>
+        <tbody>
+          {map.connections.map((connection, index) => (
+            <tr key={index}>
+              <td {...stylex.props(styles.cell)}>
+                {connectionLabels[connection.kind]}
+              </td>
+              <td {...stylex.props(styles.cell, styles.text)}>
+                {connectionText(connection, blocks)}
+              </td>
+              <td {...stylex.props(styles.cell)}>
+                <Evidence evidence={connection.evidence} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1075,6 +1209,22 @@ export function ChangeScopeView({
   );
   const [directory, setDirectory] = useState(root);
   const [selection, select] = useState<Selection>(null);
+  const panel = useRef<HTMLElement>(null);
+  const focusPanel = useRef(false);
+
+  // A button inside the panel is replaced when it changes the selection, so
+  // focus moves to the panel instead of falling back to the page.
+  const selectInPanel = (next: Selection) => {
+    focusPanel.current = true;
+    select(next);
+  };
+
+  useEffect(() => {
+    if (focusPanel.current) {
+      focusPanel.current = false;
+      panel.current?.focus();
+    }
+  }, [selection]);
   const blocks = useMemo(
     () => new Map((map?.blocks ?? []).map((block) => [block.id, block])),
     [map],
@@ -1147,7 +1297,10 @@ export function ChangeScopeView({
         </p>
       ) : null}
       {view === 'table' || map === null ? (
-        <ScopeTable result={result} />
+        <>
+          <ScopeTable result={result} />
+          {map === null ? null : <ConnectionTable map={map} blocks={blocks} />}
+        </>
       ) : (
         <div {...stylex.props(styles.workspace)}>
           <div {...stylex.props(styles.mapArea)}>
@@ -1170,6 +1323,7 @@ export function ChangeScopeView({
             </nav>
             <MapCanvas
               map={map}
+              blocks={blocks}
               scope={scope}
               directory={directory}
               root={root}
@@ -1178,7 +1332,12 @@ export function ChangeScopeView({
               select={select}
             />
           </div>
-          <aside aria-label="Selection" {...stylex.props(styles.panel)}>
+          <aside
+            ref={panel}
+            tabIndex={-1}
+            aria-label="Selection"
+            {...stylex.props(styles.panel)}
+          >
             {selectedBlock !== undefined ? (
               <BlockPanel
                 result={result}
@@ -1186,18 +1345,23 @@ export function ChangeScopeView({
                 scope={scope}
                 blocks={blocks}
                 block={selectedBlock}
-                select={select}
+                select={selectInPanel}
               />
             ) : null}
             {selectedConnection !== undefined ? (
               <ConnectionPanel
                 connection={selectedConnection}
                 blocks={blocks}
-                select={select}
+                select={selectInPanel}
               />
             ) : null}
             {selection === null ? (
-              <VerdictPanel result={result} map={map} select={select} />
+              <VerdictPanel
+                result={result}
+                map={map}
+                blocks={blocks}
+                select={selectInPanel}
+              />
             ) : null}
           </aside>
         </div>

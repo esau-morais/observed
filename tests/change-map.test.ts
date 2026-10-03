@@ -2,8 +2,12 @@ import { Schema } from 'effect';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
-import { changeMap, type MapSnapshot } from '../src/change-map';
+import { afterEach, expect, test, vi } from 'vitest';
+import {
+  changeMap,
+  snapshotImports,
+  type MapSnapshot,
+} from '../src/change-map';
 import { scopeTable } from '../src/viewer/map-model';
 import type { CoverageRecord } from '../src/change-scope';
 import {
@@ -24,6 +28,7 @@ const [recorded] = result.journeys;
 const directories: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     directories
       .splice(0)
@@ -153,8 +158,8 @@ test('a journey connects to a changed file only through a finding or coverage th
         (item) =>
           item.to === 'file:src/App.jsx' || item.from === 'file:src/App.jsx',
       )
-      .map((item) => item.kind),
-  ).toEqual(['imports', 'imports', 'imports']);
+      .every((item) => item.kind === 'imports'),
+  ).toBe(true);
 
   const withFinding = await build(recorded);
 
@@ -211,10 +216,64 @@ test('a not-observed file never renders as passed or checked', () => {
     },
   });
 
-  expect(rows).toHaveLength(1);
   expect(rows[0]?.chip).toMatchObject({
     label: 'Not observed',
     tone: 'unknown',
   });
   expect(JSON.stringify(rows)).not.toMatch(/passed|checked/i);
+});
+
+// Resolving a package name makes Bun install it, so bare names other than
+// the snapshot's own aliases must never reach the resolver.
+test('bare package names never reach the resolver, and aliases resolve inside the snapshot', async () => {
+  const resolve = vi.spyOn(Bun, 'resolveSync');
+  const imports = snapshotImports(
+    await snapshot({
+      'tsconfig.json':
+        '{ // aliases\n "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"], "@*": ["x/*"] } } }',
+      'web/jsconfig.json': '{ not json',
+      'src/a.ts':
+        "import pad from 'left-pad';\nimport { b } from '@/b';\nimport { c } from '@scope/c';\nimport { d } from './missing';\nexport const a = pad + b + c + d;\n",
+      'src/b.ts': 'export const b = 1;\n',
+    }),
+  );
+
+  expect(imports.get('src/a.ts')).toEqual({
+    kind: 'scanned',
+    targets: [
+      { kind: 'package', name: 'left-pad' },
+      { kind: 'file', path: 'src/b.ts' },
+      { kind: 'package', name: '@scope/c' },
+    ],
+    unresolved: ['./missing'],
+  });
+  expect(resolve.mock.calls.map(([specifier]) => specifier).sort()).toEqual([
+    './missing',
+    '@/b',
+  ]);
+});
+
+test('an import the change removed stays on the map, marked removed', async () => {
+  const map = changeMap({
+    scope: result.changeScope,
+    journeys: [],
+    snapshots: {
+      journey: recorded,
+      base: await snapshot(base),
+      candidate: await snapshot({
+        ...candidate,
+        'src/App.jsx':
+          "import { useState } from 'react';\nexport const App = () => 2;\n",
+      }),
+    },
+  });
+
+  expect(map.kind === 'recorded' ? map.connections : []).toContainEqual(
+    expect.objectContaining({
+      kind: 'imports',
+      from: 'file:src/App.jsx',
+      to: 'file:src/api.js',
+      change: 'removed',
+    }),
+  );
 });

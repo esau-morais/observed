@@ -144,12 +144,15 @@ viewer lays out and draws the map and never adds a block or a connection.
   Request lab's `App.tsx` and resolved all four. The map draws the
   candidate's imports and marks the imports the change removed. Files in
   other languages have no import connections, and the map says so. The scan
-  drops type-only imports.
+  drops type-only imports and keeps dynamic `import()` calls with a literal
+  path.
 - `Bun.resolveSync` installs a package it cannot find: on 2026-10-03 with
   Bun 1.4.2, resolving `left-pad` from a directory without it downloaded the
   package into Bun's cache. The comparator therefore resolves only relative
   specifiers and those matching a `paths` alias in a `tsconfig.json` or
-  `jsconfig.json` of the snapshot. It does not follow `extends`. Any other
+  `jsconfig.json` of the snapshot. A wildcard alias counts only up to a
+  slash, as in `@/*`, so a key such as `@*` cannot pass scoped package names
+  to the resolver. It does not follow `extends`. Any other
   specifier is a package block named after the package.
 - Layout is presentation, not evidence. The viewer uses
   [elkjs](https://github.com/kieler/elkjs) for layered layout with nested

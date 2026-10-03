@@ -567,8 +567,8 @@ const connectionIdentity = {
   evidence: Schema.NonEmptyArray(mapEvidenceSchema),
 };
 
-// Each connection has one type and one source of evidence. `from` and `to`
-// name blocks of the same map.
+// Each connection type has one kind of source, and each connection lists the
+// records it came from. `from` and `to` name blocks of the same map.
 const mapConnectionSchema = Schema.Union([
   Schema.Struct({
     ...connectionIdentity,

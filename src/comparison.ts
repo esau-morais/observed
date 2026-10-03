@@ -1776,7 +1776,7 @@ export function summarizeJourneys({
         ? scope
         : {
             kind: 'unavailable',
-            reason: 'The change map is built only from capture directories',
+            reason: 'The change map is built only from capture directories.',
           },
   };
 }

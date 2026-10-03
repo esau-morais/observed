@@ -242,7 +242,7 @@ test('the Slack message counts the change scope and names files not observed, wi
           files,
           outside: { kind: 'listed' },
           coverage: [],
-          recipe: { kind: 'unchanged' },
+          recipe: { kind: 'unavailable', reason: 'Not compared in this test' },
         },
       },
       links,

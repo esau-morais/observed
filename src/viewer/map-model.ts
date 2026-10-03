@@ -51,7 +51,7 @@ export const connectionLabels = {
   'checked-by': 'Checked by',
 } satisfies Record<MapConnection['kind'], string>;
 
-// What each connection type is drawn from, for the legend.
+// What each connection type is drawn from.
 export const connectionSources = {
   imports: 'The static import graph of each snapshot',
   'ran-in': 'Execution coverage of the changed lines',
@@ -303,7 +303,7 @@ export function isJourneyConnection(connection: MapConnection): boolean {
   return connection.kind !== 'imports';
 }
 
-// Checks whose verdict the side panel opens on: failed or unknown first.
+// The failed and unknown checks the side panel opens on.
 export function verdictChecks(result: Comparison) {
   return result.journeys.flatMap((journey, index) =>
     journey.checks
@@ -312,4 +312,21 @@ export function verdictChecks(result: Comparison) {
       )
       .map((check) => ({ journey, index, check })),
   );
+}
+
+// The short label drawn on a connection: its count or its evidence in a few
+// words.
+export function connectionShort(connection: MapConnection): string {
+  switch (connection.kind) {
+    case 'imports':
+      return connection.change === 'unchanged' ? '' : connection.change;
+    case 'ran-in':
+      return `${connection.ran} ran, ${connection.notRan} not`;
+    case 'requested':
+      return `${connection.candidate.count}, base ${connection.base === null ? 'unknown' : connection.base.count}`;
+    case 'threw-at':
+      return `line ${connection.line}`;
+    case 'checked-by':
+      return connection.name;
+  }
 }

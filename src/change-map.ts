@@ -1,3 +1,4 @@
+import { Option, Schema } from 'effect';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -69,12 +70,21 @@ function isRelative(specifier: string): boolean {
   );
 }
 
-// Prefixes of the `paths` aliases in the snapshot's tsconfig and jsconfig
-// files. A bare specifier is resolved only when it matches one: resolving a
-// package name makes Bun install a package it cannot find (Bun 1.4.2,
-// checked 2026-10-03).
-function aliasPrefixes(files: ReadonlyMap<string, string>): string[] {
-  const prefixes: string[] = [];
+const configSchema = Schema.Struct({
+  compilerOptions: Schema.optionalKey(
+    Schema.Struct({
+      paths: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+    }),
+  ),
+});
+
+type Aliases = { exact: Set<string>; prefixes: string[] };
+
+// The `paths` aliases in the snapshot's tsconfig and jsconfig files. A bare
+// specifier is resolved only when it matches one: resolving a package name
+// makes Bun install a package it cannot find (Bun 1.4.2, checked 2026-10-03).
+function aliasesOf(files: ReadonlyMap<string, string>): Aliases {
+  const aliases: Aliases = { exact: new Set(), prefixes: [] };
 
   for (const [file, text] of files) {
     if (!/(?:^|\/)[tj]sconfig(?:\.[^/]*)?\.json$/.test(file)) {
@@ -89,22 +99,33 @@ function aliasPrefixes(files: ReadonlyMap<string, string>): string[] {
       continue;
     }
 
-    const paths =
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'compilerOptions' in parsed &&
-      typeof parsed.compilerOptions === 'object' &&
-      parsed.compilerOptions !== null &&
-      'paths' in parsed.compilerOptions &&
-      typeof parsed.compilerOptions.paths === 'object' &&
-      parsed.compilerOptions.paths !== null
-        ? Object.keys(parsed.compilerOptions.paths)
-        : [];
+    const config = Schema.decodeUnknownOption(configSchema)(parsed);
+    const keys = Option.match(config, {
+      onNone: () => [],
+      onSome: (value) => Object.keys(value.compilerOptions?.paths ?? {}),
+    });
 
-    prefixes.push(...paths.map((key) => key.replace(/\*.*$/, '')));
+    for (const key of keys) {
+      const star = key.indexOf('*');
+
+      // A wildcard alias counts only up to a slash, so a key such as `@*`
+      // cannot send scoped package names to the resolver.
+      if (star === -1) {
+        aliases.exact.add(key);
+      } else if (star > 1 && key[star - 1] === '/') {
+        aliases.prefixes.push(key.slice(0, star));
+      }
+    }
   }
 
-  return prefixes.filter((prefix) => prefix !== '');
+  return aliases;
+}
+
+function isAlias(aliases: Aliases, specifier: string): boolean {
+  return (
+    aliases.exact.has(specifier) ||
+    aliases.prefixes.some((prefix) => specifier.startsWith(prefix))
+  );
 }
 
 function resolveIn(
@@ -138,7 +159,7 @@ export function snapshotImports(
   snapshot: MapSnapshot,
 ): Map<string, FileImports> {
   const real = { ...snapshot, real: realpathSync(snapshot.root) };
-  const aliases = aliasPrefixes(snapshot.files);
+  const aliases = aliasesOf(snapshot.files);
   const result = new Map<string, FileImports>();
 
   for (const [file, text] of snapshot.files) {
@@ -169,9 +190,7 @@ export function snapshotImports(
     const unresolved: string[] = [];
 
     for (const specifier of new Set(specifiers)) {
-      const local =
-        isRelative(specifier) ||
-        aliases.some((prefix) => specifier.startsWith(prefix));
+      const local = isRelative(specifier) || isAlias(aliases, specifier);
       const resolved = local ? resolveIn(real, file, specifier) : null;
 
       if (resolved !== null) {
@@ -330,14 +349,23 @@ function journeyConnections(
     };
 
     for (const anchor of finding.location.anchors) {
-      if (!changed.has(anchor.path) || anchor.basis === 'diff-name-match') {
+      // The map draws the candidate, so a line counted in the base snapshot
+      // has no place on it.
+      if (
+        !changed.has(anchor.path) ||
+        anchor.side !== 'candidate' ||
+        anchor.basis === 'diff-name-match'
+      ) {
         continue;
       }
 
-      const artifacts = anchor.artifacts.map((item): MapEvidence => ({
-        kind: 'artifact',
-        path: item,
-      }));
+      const artifacts = anchor.artifacts.flatMap((item): MapEvidence[] =>
+        journey.candidate.artifacts.some(
+          (shown) => shown.integrity === 'verified' && shown.path === item,
+        )
+          ? [{ kind: 'artifact', path: item }]
+          : [],
+      );
 
       if (finding.evidence === 'browser-errors') {
         connections.push({
@@ -512,20 +540,20 @@ export function changeMap({
   }
 
   const changedLines = new Map(
-    [...changedPaths].map((file) => {
-      const change =
-        scope.files.find((item) => item.path === file)?.change ?? 'modified';
-
-      return [
-        file,
-        addedLines(
-          file,
-          change,
-          snapshots.base.files,
-          snapshots.candidate.files,
-        ),
-      ] as const;
-    }),
+    scope.files
+      .filter((file) => file.captured)
+      .map(
+        (file) =>
+          [
+            file.path,
+            addedLines(
+              file.path,
+              file.change,
+              snapshots.base.files,
+              snapshots.candidate.files,
+            ),
+          ] as const,
+      ),
   );
   const fileBlocks: MapBlock[] = [...filePaths].sort().map((file) => {
     const read = candidateImports.get(file) ?? baseImports.get(file);
