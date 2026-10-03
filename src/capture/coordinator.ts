@@ -287,6 +287,7 @@ export const captureApplication = Effect.fn('captureApplication')(
         dependenciesHash:
           dependencies.length === 0 ? null : sha256(json(dependencies)),
         workspace,
+        sourceFiles: new Set(source.files.map((file) => file.path)),
         timeoutMs: options.timeoutMs ?? 120_000,
       });
 

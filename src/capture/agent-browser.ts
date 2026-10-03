@@ -155,6 +155,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   inputsHash: string;
   dependenciesHash: string | null;
   workspace: string;
+  sourceFiles: ReadonlySet<string>;
   timeoutMs: number;
 }) {
   const fs = yield* FileSystem.FileSystem;
@@ -360,6 +361,20 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     final: ErrorReading | null;
   } = { before: null, steps: [], final: null };
 
+  const saveText = Effect.fnUntraced(function* (
+    id: string,
+    filename: string,
+    description: string,
+    text: string,
+  ) {
+    options.addArtifact(id, filename, `${description}; credentials redacted`);
+    yield* fs.writeFileString(
+      path.join(options.directory, filename),
+      redactText(text, concealed),
+      { flag: 'wx' },
+    );
+  });
+
   const context: CollectorContext = {
     directory: options.directory,
     url: options.url,
@@ -367,8 +382,25 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     concealed,
     browser: command,
     saveOutput,
+    saveText,
     addArtifact: options.addArtifact,
+    sourceFiles: options.sourceFiles,
     steps: stepLog,
+  };
+
+  const skipped = (config: (typeof recipe.collectors)[number]) => {
+    const reason = collectorFor(config).skip?.(config) ?? null;
+
+    if (reason !== null) {
+      options.addEvidence({
+        kind: config.kind,
+        schemaVersion: evidenceKinds[config.kind].schemaVersion,
+        status: 'unavailable',
+        reason,
+      });
+    }
+
+    return reason !== null;
   };
 
   const collectEvidence = Effect.fnUntraced(function* (
@@ -513,7 +545,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
         if (
           collector.phase !== 'journey' ||
-          (onFailure && collector.onFailure !== true)
+          (onFailure && collector.onFailure !== true) ||
+          (!onFailure && skipped(config))
         ) {
           return Effect.void;
         }
@@ -640,6 +673,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   for (const [index, config] of recipe.collectors.entries()) {
     const collector = collectorFor(config);
 
+    if (collector.phase !== 'journey' && skipped(config)) {
+      continue;
+    }
+
     if (collector.phase === 'no-browser') {
       yield* collectEvidence(
         config.kind,
@@ -689,7 +726,10 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   for (const config of recipe.collectors) {
     const collector = collectorFor(config);
 
-    if (collector.phase === 'command') {
+    if (
+      collector.phase === 'command' &&
+      (collector.skip?.(config) ?? null) === null
+    ) {
       let producer = collector.producerFor(null);
 
       yield* collectEvidence(

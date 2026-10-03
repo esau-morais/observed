@@ -53,6 +53,15 @@ export type CollectorContext = {
     filename: string,
     description: string,
   ) => void;
+  // Writes text as an artifact with credentials redacted.
+  readonly saveText: (
+    id: string,
+    filename: string,
+    description: string,
+    text: string,
+  ) => Effect.Effect<void, CollectorError, CollectorServices>;
+  // Paths in the capture's source snapshot, relative to the project.
+  readonly sourceFiles: ReadonlySet<string>;
   readonly steps: StepLog;
 };
 
@@ -114,6 +123,9 @@ type Common<K extends EvidenceKind> = {
   // setup, fails the capture when one is missing or empty, and conceals their
   // values in all evidence as it does fill values.
   readonly environment?: (config: CollectorConfig<K>) => readonly string[];
+  // A reason to record the evidence as unavailable without running the
+  // collector or opening its browser session.
+  readonly skip?: (config: CollectorConfig<K>) => string | null;
 };
 
 export type Collector<K extends EvidenceKind> =

@@ -70,22 +70,28 @@ export type OriginalPosition = {
   name: string | null;
 };
 
-// Lines and columns are 1-based on both sides, as V8 stack frames print them.
-// The mapping that starts at or before the column on that generated line
-// wins; a position before the first mapping on its line resolves to nothing.
-export function originalPosition(
-  map: SourceMap,
-  line: number,
-  column: number,
-): OriginalPosition | null {
+export type Segment = {
+  // 0-based, as the mappings field counts them.
+  generatedLine: number;
+  generatedColumn: number;
+  // Null for a segment that maps its generated text to no source.
+  original: {
+    source: number;
+    line: number;
+    column: number;
+    name: number | null;
+  } | null;
+};
+
+// Every segment in order, or null when the mappings are malformed.
+export function segments(map: SourceMap): Segment[] | null {
   let source = 0;
   let sourceLine = 0;
   let sourceColumn = 0;
   let name = 0;
-  let best: OriginalPosition | null = null;
-  const rows = map.mappings.split(';');
+  const result: Segment[] = [];
 
-  for (const [index, row] of rows.entries()) {
+  for (const [generatedLine, row] of map.mappings.split(';').entries()) {
     let generatedColumn = 0;
 
     for (const segment of row.split(',')) {
@@ -108,10 +114,7 @@ export function originalPosition(
         lineDelta === undefined ||
         columnOffset === undefined
       ) {
-        if (index === line - 1 && generatedColumn <= column - 1) {
-          best = null;
-        }
-
+        result.push({ generatedLine, generatedColumn, original: null });
         continue;
       }
 
@@ -123,29 +126,69 @@ export function originalPosition(
         name += nameDelta;
       }
 
-      if (index === line - 1 && generatedColumn <= column - 1) {
-        const file = map.sources[source];
-
-        best =
-          file === undefined || file === null
-            ? null
-            : {
-                source: withRoot(map.sourceRoot ?? '', file),
-                content: map.sourcesContent?.[source] ?? null,
-                line: sourceLine + 1,
-                column: sourceColumn + 1,
-                name:
-                  nameDelta === undefined ? null : (map.names?.[name] ?? null),
-              };
-      }
-    }
-
-    if (index === line - 1) {
-      return best;
+      result.push({
+        generatedLine,
+        generatedColumn,
+        original: {
+          source,
+          line: sourceLine,
+          column: sourceColumn,
+          name: nameDelta === undefined ? null : name,
+        },
+      });
     }
   }
 
-  return null;
+  return result;
+}
+
+export function sourceName(map: SourceMap, index: number): string | null {
+  const file = map.sources[index];
+
+  return file === undefined || file === null
+    ? null
+    : withRoot(map.sourceRoot ?? '', file);
+}
+
+// Lines and columns are 1-based on both sides, as V8 stack frames print them.
+// The mapping that starts at or before the column on that generated line
+// wins; a position before the first mapping on its line resolves to nothing.
+export function originalPosition(
+  map: SourceMap,
+  line: number,
+  column: number,
+): OriginalPosition | null {
+  const all = segments(map);
+  let best: OriginalPosition | null = null;
+
+  for (const segment of all ?? []) {
+    if (segment.generatedLine !== line - 1) {
+      continue;
+    }
+
+    if (segment.generatedColumn > column - 1) {
+      break;
+    }
+
+    const original = segment.original;
+    const source = original === null ? null : sourceName(map, original.source);
+
+    best =
+      original === null || source === null
+        ? null
+        : {
+            source,
+            content: map.sourcesContent?.[original.source] ?? null,
+            line: original.line + 1,
+            column: original.column + 1,
+            name:
+              original.name === null
+                ? null
+                : (map.names?.[original.name] ?? null),
+          };
+  }
+
+  return best;
 }
 
 // Bundlers write sources relative to the map, such as `../../src/App.jsx`

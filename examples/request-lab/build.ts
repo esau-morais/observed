@@ -10,5 +10,5 @@ await build({
   configFile: false,
   root: import.meta.dirname,
   plugins: [stylexPlugin, react()],
-  build: { outDir: 'dist' },
+  build: { outDir: 'dist', sourcemap: 'hidden' },
 });

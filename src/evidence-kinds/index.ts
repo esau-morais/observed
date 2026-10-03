@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { text as nonEmpty } from '../capture/model';
 import { accessibility } from './accessibility';
 import { api } from './api';
+import { coverage } from './coverage';
 import { performance } from './performance';
 import { playwright } from './playwright';
 import { react } from './react';
@@ -18,6 +19,7 @@ export const evidenceKinds = {
   'browser-errors': browserErrors,
   api,
   playwright,
+  coverage,
 } as const;
 
 const kinds = Object.values(evidenceKinds);
@@ -41,6 +43,7 @@ export const defaultCollectors: readonly CollectorConfig[] = [
   { kind: 'accessibility' },
   { kind: 'timeline' },
   { kind: 'browser-errors' },
+  { kind: 'coverage' },
 ];
 
 export const unavailableEvidenceSchema = Schema.Struct({

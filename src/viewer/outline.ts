@@ -124,6 +124,8 @@ function evidenceCount(section: JourneySection): string {
       return plural(view.value.tests.length, 'test');
     case 'text':
       return plural(view.value.elements.length, 'element');
+    case 'coverage':
+      return plural(view.value.files.length, 'file');
   }
 }
 

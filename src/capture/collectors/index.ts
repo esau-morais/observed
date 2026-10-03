@@ -3,6 +3,7 @@ import type { CollectorConfig, EvidenceKind } from '../../evidence-kinds';
 import { EnvironmentValueFailure, type Collector } from './define';
 import { accessibility } from './accessibility';
 import { api } from './api';
+import { coverage } from './coverage';
 import { performance } from './performance';
 import { playwright } from './playwright';
 import { react } from './react';
@@ -19,6 +20,7 @@ export const collectors: { readonly [K in EvidenceKind]: Collector<K> } = {
   'browser-errors': browserErrors,
   api,
   playwright,
+  coverage,
 };
 
 export function collectorFor<K extends EvidenceKind>(

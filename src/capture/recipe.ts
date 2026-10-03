@@ -103,12 +103,18 @@ function checkIssues<K extends CheckDefinition['kind']>(
   return entry.validate?.(check, collectors) ?? [];
 }
 
-// Adds the collectors checks need, unless the journey already lists that kind.
+// Adds the default collectors and the collectors checks need, unless the
+// journey already lists that kind.
 export function journeyCollectors(
   checks: readonly CheckDefinition[],
   listed: readonly CollectorConfig[],
 ): CollectorConfig[] {
-  const collectors = [...listed, ...defaultCollectors];
+  const collectors = [
+    ...listed,
+    ...defaultCollectors.filter(
+      (collector) => !listed.some((item) => item.kind === collector.kind),
+    ),
+  ];
 
   for (const kind of new Set(checks.map((check) => check.kind))) {
     const definitions = checks.filter((check) => check.kind === kind);
@@ -120,7 +126,13 @@ export function journeyCollectors(
     }
   }
 
-  return collectors;
+  // Separate sessions run in list order. Coverage goes last so its repeat of
+  // the journey cannot change what an earlier session, such as the timing
+  // samples, measures.
+  return collectors.toSorted(
+    (left, right) =>
+      Number(left.kind === 'coverage') - Number(right.kind === 'coverage'),
+  );
 }
 
 function collectorsFor<K extends CheckDefinition['kind']>(

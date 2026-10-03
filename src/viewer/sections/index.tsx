@@ -3,6 +3,7 @@ import type { JourneySection } from '../../report-sections';
 import type { ViewerSection } from './define';
 import { AccessibilitySection } from './accessibility';
 import { ApiSection } from './api';
+import { CoverageSection } from './coverage';
 import { PerformanceSection } from './performance';
 import { PlaywrightSection } from './playwright';
 import { ReactSection } from './react';
@@ -21,6 +22,7 @@ export const viewerSections: {
   'browser-errors': BrowserErrorsSection,
   api: ApiSection,
   playwright: PlaywrightSection,
+  coverage: CoverageSection,
 };
 
 export function EvidenceSection<K extends EvidenceKind>({

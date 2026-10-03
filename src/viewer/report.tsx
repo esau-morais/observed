@@ -1209,6 +1209,7 @@ function SectionBody({
     case 'browser-errors':
     case 'api':
     case 'playwright':
+    case 'coverage':
       return (
         <>
           <SectionChecks

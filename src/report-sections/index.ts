@@ -3,6 +3,7 @@ import { isEvidenceKind, type EvidenceKind } from '../evidence-kinds';
 import type { MarkdownSection, SectionInput, SectionSide } from './define';
 import { accessibility } from './accessibility';
 import { api } from './api';
+import { coverage } from './coverage';
 import { performance } from './performance';
 import { playwright } from './playwright';
 import { react } from './react';
@@ -21,6 +22,7 @@ export const markdownSections: {
   'browser-errors': browserErrors,
   api,
   playwright,
+  coverage,
 };
 
 function sectionSide<K extends EvidenceKind>(

@@ -9,7 +9,6 @@ import shop from '../examples/shop/observed.json';
 import { loadProject } from '../src/project';
 import { checkSchema } from '../src/checks';
 import { json } from '../src/encoding';
-import { defaultCollectors } from '../src/evidence-kinds';
 
 test.each(['/orders?category=books', '/orders#submitted'])(
   'rejects unsupported request matching syntax %s',
@@ -176,15 +175,55 @@ test('keeps a single check working and adds the collectors checks need', async (
     {
       id: 'Browse',
       checks: [requestLab.capture.check.id],
-      collectors: defaultCollectors,
+      collectors: [
+        { kind: 'accessibility' },
+        { kind: 'timeline' },
+        { kind: 'browser-errors' },
+        { kind: 'coverage' },
+      ],
     },
     {
       id: 'Order',
       checks: [requestLab.capture.check.id, 'status', 'total'],
       collectors: [
-        ...defaultCollectors,
+        { kind: 'accessibility' },
+        { kind: 'timeline' },
+        { kind: 'browser-errors' },
         { kind: 'text', selectors: ['#status', '#total'] },
+        { kind: 'coverage' },
       ],
     },
+  ]);
+});
+
+test('lets a journey turn coverage off and runs coverage after the timing samples', async () => {
+  const result = await load({
+    ...requestLab,
+    capture: {
+      ...requestLab.capture,
+      collectors: [{ kind: 'coverage', enabled: false }],
+    },
+  });
+  const timed = await load({
+    ...requestLab,
+    capture: { ...requestLab.capture, collectors: [{ kind: 'performance' }] },
+  });
+
+  expect(
+    result.ok && result.loaded.recipes[0].collectors.map((item) => item),
+  ).toEqual([
+    { kind: 'accessibility' },
+    { kind: 'timeline' },
+    { kind: 'browser-errors' },
+    { kind: 'coverage', enabled: false },
+  ]);
+  expect(
+    timed.ok && timed.loaded.recipes[0].collectors.map((item) => item.kind),
+  ).toEqual([
+    'performance',
+    'accessibility',
+    'timeline',
+    'browser-errors',
+    'coverage',
   ]);
 });
