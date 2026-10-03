@@ -8,49 +8,10 @@ import type {
   LineRange,
   ScopeFile,
 } from './comparison-model';
-import { lineRangeSchema } from './comparison-model';
-import { text } from './capture/model';
+import { evidenceKinds } from './evidence-kinds';
 import { diffLines, lines } from './source-diff';
 
-export const coverageSchemaVersion = 1;
-
-// The evidence file the coverage collector writes. Replace with
-// evidenceKinds.coverage.file once that kind is registered.
-const coverageFileSchema = Schema.Struct({
-  kind: Schema.Literal('coverage'),
-  schemaVersion: Schema.Literal(coverageSchemaVersion),
-  value: Schema.Struct({
-    files: Schema.Array(
-      Schema.Struct({
-        path: text,
-        executed: Schema.Array(lineRangeSchema),
-        unexecuted: Schema.Array(lineRangeSchema),
-      }),
-    ),
-    scripts: Schema.Array(
-      Schema.Union([
-        Schema.Struct({
-          script: text,
-          kind: Schema.Literal('mapped'),
-          files: Schema.Array(text),
-          excluded: Schema.Array(Schema.Struct({ path: text, reason: text })),
-        }),
-        Schema.Struct({
-          script: text,
-          kind: Schema.Literal('unavailable'),
-          reason: text,
-        }),
-      ]),
-    ),
-  }).check(
-    Schema.makeFilter(
-      (value) =>
-        new Set(value.files.map((file) => file.path)).size ===
-        value.files.length,
-      { message: 'Coverage lists each file once' },
-    ),
-  ),
-});
+export const coverageSchemaVersion = evidenceKinds.coverage.schemaVersion;
 
 type FileCoverage = {
   executed: readonly LineRange[];
@@ -71,7 +32,7 @@ export type CoverageRecord =
 
 export function parseCoverage(input: string): CoverageRecord {
   const decoded = Schema.decodeUnknownOption(
-    Schema.fromJsonString(coverageFileSchema),
+    Schema.fromJsonString(evidenceKinds.coverage.file),
   )(input);
 
   return Option.match(decoded, {
