@@ -301,7 +301,167 @@ export const journeySchema = Schema.Struct({
 
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-export const resultSchemaVersion = 7;
+export const lineRangeSchema = Schema.Tuple([lineNumber, lineNumber]).check(
+  Schema.makeFilter(([start, end]) => start <= end, {
+    message: 'A line range must not end before it starts',
+  }),
+);
+
+// Candidate line numbers of the changed lines, split by what coverage
+// recorded. Changed lines with no generated code are in neither list.
+const changedLinesSchema = Schema.Struct({
+  ran: Schema.Array(lineRangeSchema),
+  notRan: Schema.Array(lineRangeSchema),
+});
+
+const scopeFileIdentity = {
+  path: text,
+  change: Schema.Literals(['added', 'removed', 'modified']),
+};
+
+const anchorBasis = Schema.Literals([
+  'stack-frame',
+  'component-source',
+  'test-location',
+]);
+
+// One file that differs between base and candidate. A relation comes only
+// from recorded evidence; without any, the file is not observed.
+const scopeFileSchema = Schema.Union([
+  Schema.Struct({
+    ...scopeFileIdentity,
+    captured: Schema.Literal(true),
+    relation: Schema.Literal('checked'),
+    basis: anchorBasis,
+    journeys: Schema.NonEmptyArray(text),
+    checks: Schema.NonEmptyArray(text),
+  }),
+  Schema.Struct({
+    ...scopeFileIdentity,
+    captured: Schema.Literal(true),
+    relation: Schema.Literal('exercised'),
+    basis: Schema.Literal('coverage'),
+    lines: changedLinesSchema,
+    journeys: Schema.NonEmptyArray(text),
+    checks: Schema.Array(text),
+  }),
+  Schema.Struct({
+    ...scopeFileIdentity,
+    captured: Schema.Literal(true),
+    relation: Schema.Literal('exercised'),
+    basis: Schema.Literals([...anchorBasis.literals, 'diff-name-match']),
+    journeys: Schema.NonEmptyArray(text),
+    checks: Schema.Array(text),
+  }),
+  Schema.Struct({
+    ...scopeFileIdentity,
+    captured: Schema.Literal(true),
+    relation: Schema.Literal('not-observed'),
+    basis: Schema.Literal('coverage'),
+    lines: changedLinesSchema,
+    reason: text,
+    journeys: Schema.NonEmptyArray(text),
+    checks: Schema.Array(text),
+  }),
+  Schema.Struct({
+    ...scopeFileIdentity,
+    captured: Schema.Literal(true),
+    relation: Schema.Literal('not-observed'),
+    basis: Schema.Literal('none'),
+    reason: text,
+    journeys: Schema.Array(text),
+    checks: Schema.Array(text),
+  }),
+  Schema.Struct({
+    ...scopeFileIdentity,
+    captured: Schema.Literal(false),
+    relation: Schema.Literal('outside-captured-source'),
+    basis: Schema.Literal('none'),
+    reason: text,
+    journeys: Schema.Array(text),
+    checks: Schema.Array(text),
+  }),
+]);
+
+// One field that differs between the base and candidate definitions, with
+// both values as they appear in observed.json.
+const recipeFieldSchema = Schema.Struct({
+  field: text,
+  base: Schema.Json,
+  candidate: Schema.Json,
+});
+
+const recipeSubject = {
+  journey: text,
+  // Absent when the difference is the journey itself.
+  check: Schema.optionalKey(text),
+};
+
+const recipeDifferenceSchema = Schema.Union([
+  Schema.Struct({
+    ...recipeSubject,
+    change: Schema.Literals(['added', 'removed']),
+  }),
+  Schema.Struct({
+    ...recipeSubject,
+    change: Schema.Literal('altered'),
+    fields: Schema.NonEmptyArray(recipeFieldSchema),
+  }),
+]);
+
+const recipeScopeSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('unchanged') }),
+  Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+  Schema.Struct({
+    kind: Schema.Literal('changed'),
+    differences: Schema.NonEmptyArray(recipeDifferenceSchema),
+  }),
+]);
+
+const reasonOr = <S extends Schema.Top>(listed: S) =>
+  Schema.Union([
+    listed,
+    Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+  ]);
+
+export const changeScopeSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+  Schema.Struct({
+    kind: Schema.Literal('recorded'),
+    sources: Schema.Struct({ base: digest, candidate: digest }),
+    files: Schema.Array(scopeFileSchema),
+    // Git names changed files that neither snapshot contains.
+    outside: reasonOr(Schema.Struct({ kind: Schema.Literal('listed') })),
+    coverage: Schema.Array(
+      Schema.Union([
+        Schema.Struct({ journey: text, kind: Schema.Literal('recorded') }),
+        Schema.Struct({
+          journey: text,
+          kind: Schema.Literal('unavailable'),
+          reason: text,
+        }),
+      ]),
+    ),
+    recipe: recipeScopeSchema,
+  }).check(
+    Schema.makeFilter(
+      (scope) =>
+        new Set(scope.files.map((file) => file.path)).size ===
+        scope.files.length,
+      { message: 'Each changed file appears once' },
+    ),
+  ),
+]);
+
+export type ChangeScope = typeof changeScopeSchema.Type;
+
+export type ScopeFile = typeof scopeFileSchema.Type;
+
+export type ChangedLines = typeof changedLinesSchema.Type;
+
+export type LineRange = typeof lineRangeSchema.Type;
+
+export const resultSchemaVersion = 8;
 
 export const comparisonSchema = Schema.Struct({
   schemaVersion: Schema.Literal(resultSchemaVersion),
@@ -311,6 +471,7 @@ export const comparisonSchema = Schema.Struct({
   journeys: Schema.NonEmptyArray(journeySchema),
   summary: Schema.Struct({ passed: count, total: count }),
   conclusion: conclusionSchema,
+  changeScope: changeScopeSchema,
 }).check(
   Schema.makeFilter(
     (result) =>
