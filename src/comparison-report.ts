@@ -47,10 +47,10 @@ function list(values: readonly string[]): string {
 }
 
 // Raw detail stays in the report for audit, folded so the conclusion and the
-// visual difference lead.
+// visual difference lead. A summary is HTML, so Markdown escapes would show.
 function collapsed(summary: string, body: readonly string[]): string {
   return [
-    `<details><summary>${escapeText(summary)}</summary>`,
+    `<details><summary>${summary.replace(/[&<>]/g, (character) => `&#${character.charCodeAt(0)};`)}</summary>`,
     ...body,
     '</details>',
   ].join('\n\n');

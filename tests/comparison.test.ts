@@ -1040,6 +1040,65 @@ test('renders captured text literally instead of injecting Markdown headings or 
   expect(report).toContain('Forged heading');
 });
 
+// report.md once ran about 2,000 words, with provenance and per-side
+// repetition before most of what a reviewer needs. The audit detail stays,
+// folded below the conclusion and the screen difference.
+test('report.md leads with the conclusion and the screen difference, and folds the audit detail', async () => {
+  const fixture = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(
+    await readFile(
+      path.join(import.meta.dirname, 'fixtures/report/errors-result.json'),
+      'utf8',
+    ),
+  );
+  const [journey] = fixture.journeys;
+
+  if (journey.comparison.kind !== 'available') {
+    throw new Error('The fixture compares its captures');
+  }
+
+  const report = renderComparison({
+    ...fixture,
+    journeys: [
+      {
+        ...journey,
+        comparison: {
+          ...journey.comparison,
+          visual: {
+            kind: 'changed',
+            width: 1280,
+            height: 800,
+            threshold: 0.1,
+            differingPixels: 3_000,
+            changedPixels: 2_747,
+            regionCount: 1,
+            regions: [
+              { x: 286, y: 129, width: 205, height: 29, changedPixels: 2_747 },
+            ],
+            diff: { path: 'journey-1/visual-diff.png', sha256: 'a'.repeat(64) },
+          },
+        },
+      },
+    ],
+  });
+  const visible = report.replace(/<details>[\s\S]*?<\/details>/g, '');
+  const order = [
+    '## Conclusion',
+    '## What changed on screen',
+    '## Checks',
+    '## Change scope',
+  ].map((heading) => visible.indexOf(heading));
+
+  expect(visible.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(400);
+  expect(order.every((at, index) => at > (order[index - 1] ?? -1))).toBe(true);
+  expect(visible).toContain('![Changed pixels](<journey-1/visual-diff.png>)');
+  expect(visible).not.toContain('Manifest SHA-256');
+  expect(visible).not.toContain('Artifact integrity');
+  expect(report).toContain('Manifest SHA-256');
+  expect(report).toContain('Artifact integrity');
+});
+
 test.each(['application', 'conditions', 'producer', 'observed'] as const)(
   'rejects incompatible %s while preserving independent checks',
   async (field) => {
