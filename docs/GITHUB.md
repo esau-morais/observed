@@ -39,9 +39,9 @@ The full commit SHA pins the action to one release, and the comment beside it
 names the tag. The action installs `@observed-software/cli` at the same
 version. To upgrade, use the commit of a newer
 [release](https://github.com/esau-morais/observed/releases) tag, or let
-Dependabot's `github-actions` updates propose it. Until 0.2.0 is released,
-`@v0` points at 0.1.0, which lacks inputs such as `github-token` and
-`slack-images`, so pin a SHA instead.
+Dependabot's `github-actions` updates propose it. `@v0` follows the latest
+stable 0.x release and can move, so pin a SHA. 0.1.0 lacks inputs such as
+`github-token` and `slack-images`.
 
 `uses:` works for any public repository. The GitHub Marketplace listing is
 only for finding the action.

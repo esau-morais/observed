@@ -115,6 +115,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm
+    # Dist-tag checks read then write, so two release tags must not interleave.
+    concurrency:
+      group: npm-publish
+      cancel-in-progress: false
     permissions:
       contents: write
       id-token: write
@@ -139,9 +143,12 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      # Trusted publishing (OIDC) runs `npm dist-tag` only from npm 11.21.0,
+      # `npm dist-tag` accepts trusted publishing (OIDC) only from npm 11.21.0,
       # newer than the npm bundled with Node 24.
-      - run: npm install -g npm@11.21.0
+      - name: Install npm 11.21.0
+        run: |
+          npm install -g npm@11.21.0
+          test "$(npm --version)" = 11.21.0
       # Trusted publishing attaches provenance. The package refuses tokens.
       # Skips a version npm already has, so a failed later step can be re-run.
       # A prerelease such as 0.2.0-alpha.0 goes to the dist-tag named by its
@@ -157,8 +164,6 @@ jobs:
             echo "$version is already on npm"
             exit 0
           fi
-          bun -e 'process.exit(Bun.semver.satisfies(process.argv[1], ">=11.21.0") ? 0 : 1)' "$(npm --version)" \
-            || { echo "::error::npm $(npm --version) is older than 11.21.0"; exit 1; }
           # A stable version gets no --tag, so npm still refuses to move
           # `latest` below a higher release.
           tag=()
@@ -199,9 +204,8 @@ jobs:
             gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$GITHUB_SHA" >/dev/null
           fi
           echo "Released $TAG; $major now points at $GITHUB_SHA"
-      # While `latest` points at a prerelease, a newer prerelease takes it. A
-      # stable release takes it when published. A separate step, so a re-run
-      # retries a failed move after publishing skips the version.
+      # A stable release takes `latest` when published. This is its own step
+      # so a re-run retries a failed move after publishing skips the version.
       - name: Move latest to a newer prerelease
         run: |
           name="$(jq -r .name package.json)"

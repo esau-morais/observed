@@ -22,7 +22,7 @@ Observed compares software changes using runtime evidence. Its core must work wi
 | Tests | Vitest for runtime contracts. Existing browser journeys and agent-browser for real application checks |
 | Evidence | Versioned JSON manifests and artifact files. Add SQLite when history or queue requirements justify it |
 | Capture | A thin agent-browser adapter first. Keep producer-specific details outside the comparator |
-| Distribution | One npm package, `@observed-software/cli`, holding the bundled CLI, action script, and built viewer. No install scripts; runtime dependencies stay limited to agent-browser. The tag-driven release workflow runs the npm CLI only for `npm publish`, because Bun cannot publish with provenance or trusted publishing. Contributors never install with npm. A standalone `bun build --compile` binary measured 62 to 82 MB per platform before agent-browser and is deferred until a participant cannot install Bun |
+| Distribution | One npm package, `@observed-software/cli`, holding the bundled CLI, action script, and built viewer. No install scripts; runtime dependencies stay limited to agent-browser. The tag-driven release workflow installs a pinned npm CLI and runs it only to publish and to read and move dist-tags, because Bun cannot do either through trusted publishing. Contributors never install with npm. A standalone `bun build --compile` binary measured 62 to 82 MB per platform before agent-browser and is deferred until a participant cannot install Bun |
 
 Pin compatible versions during application setup. Stack changes need an explicit request or a documented decision accepted by the maintainer. Routine dependency fixes within this stack need no new approval.
 
