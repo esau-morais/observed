@@ -15,6 +15,6 @@ Read the whole passage. Revise without changing technical meaning.
 - Use lists for parallel items and tables for comparisons. Do not force a fixed number of bullets.
 - Avoid em dashes, decorative emojis, curly quotes, and rhetorical contrast formulas.
 - Preserve commands, identifiers, paths, quotations, and source links. Concision must not create ambiguity.
-- For generated report text, apply the [writing rules](../../../docs/PRODUCT.md#writing): one meaning per status word, at most 20 words per instruction and 25 per statement, facts apart from instructions.
+- For generated report text, apply the [writing rules](../../../docs/PRODUCT.md#writing).
 
 Read again for unsupported claims and repeated instructions. Delete duplication rather than rephrasing it elsewhere.

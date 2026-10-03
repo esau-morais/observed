@@ -73,18 +73,18 @@ corpus replaces them with pairs anyone can run.
 | 2026-09-29 | No proof tool is an MVP requirement or a CI dependency. Lean stays the default for a production proof adapter unless evidence favors another tool for a specific case | See [optional experiments](#optional-experiments) |
 | 2026-09-29 | Three developers for gate 10, then the pilot's six to eight | Enough to find wording that misleads before recruiting more |
 | 2026-09-29 | Repair starts when gates 1 to 8 hold, without waiting for the pilot | Repair depends on protected expectations and change scope, not on adoption |
-| 2026-10-03 | The first release is not limited to the minimum. Phase 3a also ships the change map, the repository map, agent descriptions, and replay. The gates stay as written | Maintainer. A map with typed connections and detail on demand reads faster than a list of files |
+| 2026-10-03 | The first release is not limited to the minimum. Phase 3a also ships the change map, the repository map, agent descriptions, and replay. Gate 10 reads the change map, and the other gates stay as written | Maintainer's judgment that a map with typed connections and detail on demand reads faster than a list of files. Gate 10 tests it |
 | 2026-10-03 | The change map is the main view of a comparison with a change scope. Its side panel opens on the evidence that explains the verdict, and the file table stays as its text version | Gate 10 asks readers to name what was checked and what was not |
 | 2026-10-03 | Generated text follows a reduced ASD-STE100: one meaning per status word, 20 words per instruction, 25 per statement, facts apart from instructions. No analogies and no "explain like I'm five" mode | An analogy adds claims the evidence does not make. ASD holds the copyright to the dictionary, so Observed copies only the rules |
-| 2026-10-03 | Check names describe the protected behavior, and the PR comment leads with them | Plain words for reviewers without a model at run time |
-| 2026-10-03 | Agent descriptions are explanation records in the interpretation color. They never set a chip, a count, or a verdict | Observed separates measurements from interpretation |
-| 2026-10-03 | Imports come from `Bun.Transpiler.scan`, and the viewer lays out the map with elkjs | A probe resolved every import of the Request lab's `App.tsx` with no new parser. elkjs handles nested directories |
-| 2026-10-03 | Replay records the session that produced the checked evidence, when ffmpeg is installed. Without ffmpeg the replay is unavailable and nothing else changes | Recording can change timing, so a journey with a timing check records its coverage session instead |
+| 2026-10-03 | Check names describe the protected behavior, and journeys are named after the user's action. The PR comment leads with the names of failed or unknown checks, then the count line | Plain words for reviewers without a model at run time |
+| 2026-10-03 | Agent descriptions are explanation records in the inference color. They never set a chip, a count, or a verdict | Observed separates measurements from interpretation |
+| 2026-10-03 | Imports come from `Bun.Transpiler.scan`, resolved with `Bun.resolveSync`, and the viewer lays out the map with elkjs | A probe resolved every import of the Request lab's `App.tsx` with no new parser. elkjs handles nested directories |
+| 2026-10-03 | Replay records the session that produced the checked evidence, when ffmpeg is installed. Without ffmpeg the replay is unavailable and nothing else changes. A journey with a timing check records its coverage session, labeled as a separate run | Recording can change timing |
 
 The maintainer delegated the 2026-09-29 rows and every 2026-10-03 row after
-the first. Reverse any of them here. Two
-things stay with the maintainer. One is recruiting the people for gates 9 and
-10. The other is whether a required Observed job gets a bypass rule.
+the first. Reverse any of them here. Two things stay with the maintainer. One
+is recruiting the people for gates 9 and 10. The other is whether a required
+Observed job gets a bypass rule.
 
 ## Pilot and continuation gates
 

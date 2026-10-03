@@ -235,8 +235,8 @@ Execution, comparison, check result, and interpretation are separate dimensions.
 | Dimension | Examples | Display rule |
 | --- | --- | --- |
 | Execution | Queued, Running, Complete, Capture failed | Operational state; complete does not mean correct |
-| Difference | Unchanged, Changed, Unknown | Only compare compatible captures |
-| Check result | Passed, Failed, Not run | Name the check and its scope |
+| Difference | Unchanged, Changed, Unavailable | Only compare compatible captures |
+| Check result | Passed, Failed, Unknown, Not run | Name the check and its scope |
 | Interpretation | Expected change, Regression, Suggested cause | Link the basis; label inference explicitly |
 
 "Checked" is shorthand for a named passing check. "Regression" requires a violated expectation. Missing baselines, blocked captures, unobserved behavior, and skipped checks never become a green success state. Keep those rules consistent in the website, product, GitHub summaries, Slack cards, and mobile reports.

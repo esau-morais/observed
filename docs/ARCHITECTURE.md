@@ -137,8 +137,9 @@ viewer lays out and draws the map and never adds a block or a connection.
   other languages have no import connections, and the map says so.
 - Layout is presentation, not evidence. The viewer uses
   [elkjs](https://github.com/kieler/elkjs) for layered layout with nested
-  directories. Observed uses its EPL-2.0 license option, and its notice goes
-  into the third-party notices.
+  directories. It is bundled into the built viewer, not installed as a
+  package runtime dependency. Observed uses its EPL-2.0 license option, and
+  its notice goes into the third-party notices.
 - A repository map is a single capture's scope over every file in
   `source.paths`.
 
