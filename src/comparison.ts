@@ -62,7 +62,11 @@ import {
   resultSchemaVersion,
   runVerdicts,
 } from './comparison-model';
-import { recipePlan, type JourneyJudgement } from './recipe-diff';
+import {
+  recipePlan,
+  type JourneyJudgement,
+  type RecipePlan,
+} from './recipe-diff';
 import {
   inspectArtifact,
   readVerifiedArtifact,
@@ -2021,6 +2025,25 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
   };
 });
 
+// Journeys only the base defines were never captured, so each check is
+// unknown.
+export function removedJourneys(
+  removed: RecipePlan['removed'],
+): Comparison['removedJourneys'] {
+  return removed.map((journey) => ({
+    journey: journey.journey,
+    checks: journey.checks.map((definition) => ({
+      id: definition.id,
+      name: definition.name,
+      scope: definition.scope,
+      expectation: expectationFor(definition),
+      verdict: 'unknown',
+      detail: 'This change removes the journey, so no capture ran this check.',
+      recipe: { change: 'removed' },
+    })),
+  }));
+}
+
 // Inspects each selected journey under root/<directory>/{base,candidate}.
 export const inspectComparison = Effect.fn('inspectComparison')(function* ({
   root,
@@ -2063,21 +2086,7 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
         recipe: plan.scope,
       }),
       removedJourneys:
-        selection.mode === 'preview'
-          ? []
-          : plan.removed.map((removed) => ({
-              journey: removed.journey,
-              checks: removed.checks.map((definition) => ({
-                id: definition.id,
-                name: definition.name,
-                scope: definition.scope,
-                expectation: expectationFor(definition),
-                verdict: 'unknown',
-                detail:
-                  'This change removes the journey, so no capture ran this check.',
-                recipe: { change: 'removed' },
-              })),
-            })),
+        selection.mode === 'preview' ? [] : removedJourneys(plan.removed),
     }),
     visualDiffs: inspected.flatMap((item) =>
       item.visualDiff === null ? [] : [item.visualDiff],

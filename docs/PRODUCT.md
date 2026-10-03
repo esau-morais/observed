@@ -76,6 +76,7 @@ Keep these dimensions separate:
 | Run conclusion | Regression, check failed, unavailable, no regression, no regression in the named checks, not checked, preview |
 | Artifact integrity | Hash matched, unavailable |
 | Changed file | Checked, exercised, not observed, outside the captured source |
+| Recipe difference | Added by this change, removed by this change, altered by this change, proposed, test file changed |
 | Interpretation | Expected change, suspected regression, confirmed regression |
 
 - A behavior can change while its checks pass.

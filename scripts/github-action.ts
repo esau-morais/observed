@@ -41,7 +41,13 @@ import {
 } from './slack-delivery';
 import { describeRevision, shortSource } from '../src/provenance-text';
 import { describeVisual } from '../src/visual-text';
-import { scopeFileLines, scopeLine } from '../src/change-scope-text';
+import {
+  recipeLabels,
+  recipeLine,
+  recipeLines,
+  scopeFileLines,
+  scopeLine,
+} from '../src/change-scope-text';
 import {
   checkSummary,
   runTone,
@@ -219,13 +225,19 @@ function rowName(result: Comparison, open: Open): string {
     : `${open.journey.title}: ${open.check.name}`;
 }
 
+function label(check: CheckVerdict): string {
+  return check.recipe === undefined
+    ? ''
+    : ` · ${recipeLabels[check.recipe.change].toLowerCase()}`;
+}
+
 function rowText(result: Comparison, open: Open): string {
   const { journey, check } = open;
   const where =
     result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
   const location = rowLocation(open);
 
-  return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}`;
+  return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}${label(check)}`;
 }
 
 // Every check shares the capture failure, so the rows name the checks once
@@ -295,7 +307,7 @@ function passedChecks(result: Comparison): string | null {
             ? ''
             : ` · ${inlineText(describeMeasure(check.measure, result.mode))}`;
 
-        return `- ${where}${inlineText(check.name)}${measured} · scope: ${inlineText(check.scope)}`;
+        return `- ${where}${inlineText(check.name)}${measured} · scope: ${inlineText(check.scope)}${label(check)}`;
       }),
       ...(passed.length > listedChecks
         ? [`- ${passed.length - listedChecks} more in the report.`]
@@ -305,6 +317,15 @@ function passedChecks(result: Comparison): string | null {
 }
 
 const listedFiles = 10;
+const shownValue = 80;
+
+function recipeList(result: Comparison): string | null {
+  const lines = recipeLines(result, shownValue);
+
+  return lines.length === 0
+    ? null
+    : lines.map((line) => `- ${inlineText(line)}`).join('\n');
+}
 
 function scopeFiles(result: Comparison): string | null {
   const lines = scopeFileLines(result);
@@ -633,6 +654,8 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       ? first
       : undefined;
   const rows = allFailed ? groupedRows(result, open) : checkRows(result, lead);
+  const recipeSummary =
+    result.mode === 'preview' ? null : recipeLine(result.changeScope);
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -648,8 +671,10 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       ...(result.mode === 'preview'
         ? []
         : [inlineText(scopeLine(result.changeScope))]),
+      ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
     ...extra(scopeFiles(result)),
+    ...extra(recipeList(result)),
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(unchanged(result)),

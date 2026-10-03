@@ -84,4 +84,29 @@ export const statusWords = {
     word: 'Outside the captured source',
     meaning: 'The file changed, and neither source snapshot contains it.',
   },
+  addedByChange: {
+    word: 'Added by this change',
+    meaning:
+      "Only the candidate's observed.json defines the check or journey. It has no baseline, so it cannot be a regression.",
+  },
+  removedByChange: {
+    word: 'Removed by this change',
+    meaning:
+      "Only the base's observed.json defines the check or journey. The base's definition judges the captures when they hold the evidence it needs.",
+  },
+  alteredByChange: {
+    word: 'Altered by this change',
+    meaning:
+      "The check or journey differs between the two observed.json files. The base's definition judges an altered check. An altered journey leaves its checks unknown.",
+  },
+  proposed: {
+    word: 'Proposed',
+    meaning:
+      "The candidate's version of an altered check. Its outcome sets no verdict.",
+  },
+  testFileChanged: {
+    word: 'Test file changed',
+    meaning:
+      "The imported test's file differs from the base's. The candidate's file judges the test, and a failure is not a regression.",
+  },
 } as const;

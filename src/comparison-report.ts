@@ -1,4 +1,10 @@
-import { scopeFileLines, scopeLine } from './change-scope-text';
+import {
+  recipeLabels,
+  recipeLine,
+  recipeLines,
+  scopeFileLines,
+  scopeLine,
+} from './change-scope-text';
 import { escapeText, link } from './markdown';
 import {
   checkLabels,
@@ -52,7 +58,7 @@ function renderIdentity(side: Side, label: string, level: number): string {
 
 function renderVerdict(verdict: CheckVerdict): string {
   return [
-    `- **${verdictLabels[verdict.verdict]}**: ${escapeText(verdict.name)}`,
+    `- **${verdictLabels[verdict.verdict]}**: ${escapeText(verdict.name)}${verdict.recipe === undefined ? '' : ` · ${recipeLabels[verdict.recipe.change]}`}`,
     `  - Scope: ${escapeText(verdict.scope)}`,
     `  - ${escapeText(verdict.detail)}`,
   ].join('\n');
@@ -325,11 +331,15 @@ function renderJourney(
 
 function renderChangeScope(result: Comparison): string[] {
   const files = scopeFileLines(result);
+  const recipe = recipeLine(result.changeScope);
+  const differences = recipeLines(result);
 
   return [
     '## Change scope',
     escapeText(scopeLine(result.changeScope)),
     ...(files.length === 0 ? [] : [list(files)]),
+    ...(recipe === null ? [] : [escapeText(recipe)]),
+    ...(differences.length === 0 ? [] : [list(differences)]),
   ];
 }
 

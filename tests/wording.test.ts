@@ -6,6 +6,7 @@ import { summarize, type Surface } from '../scripts/github-action';
 import {
   compareJourney,
   inspectSide,
+  removedJourneys,
   summarizeJourneys,
 } from '../src/comparison';
 import { comparisonSchema, type Comparison } from '../src/comparison-model';
@@ -15,6 +16,8 @@ import { inspectEvidence } from '../src/evidence';
 import { escapeText } from '../src/markdown';
 import { renderReport } from '../src/report';
 import { sideOutcome } from '../src/result-text';
+import type { Journey as ProjectJourney } from '../src/project';
+import { recipePlan } from '../src/recipe-diff';
 import { parseManifest } from '../src/schema';
 import { statusWords } from '../src/status-words';
 import { agentText } from '../src/viewer/agent-text';
@@ -93,16 +96,106 @@ async function results(): Promise<Comparison[]> {
     { base: missing, candidate },
   ];
 
-  return pairs.map((pair) =>
-    summarizeJourneys({
-      journeys: [compareJourney({ ...pair, evaluatedAt, visual })],
+  return [
+    ...pairs.map((pair) =>
+      summarizeJourneys({
+        journeys: [compareJourney({ ...pair, evaluatedAt, visual })],
+        evaluatedAt,
+        mode: 'comparison',
+      }),
+    ),
+    ...(await recipeResults()),
+  ];
+}
+
+// The fixture journey judged against base observed.json files that alter
+// its check, remove a check and a journey, alter its steps, or are unusable.
+async function recipeResults(): Promise<Comparison[]> {
+  const fixtureResult = await errorsResult();
+  const { base, candidate } = await fixtureJourney();
+  const { recipe } = candidate;
+  const [check] = recipe.checks;
+  const scope = fixtureResult.changeScope;
+  const visual = { kind: 'identical', width: 1280, height: 800 } as const;
+
+  if (check === undefined || scope.kind !== 'recorded') {
+    throw new Error('The fixture has a check and a recorded change scope');
+  }
+
+  const journey = (fields: Partial<ProjectJourney> = {}): ProjectJourney => ({
+    name: recipe.name,
+    path: recipe.path,
+    ready: recipe.ready,
+    steps: recipe.steps,
+    checks: recipe.checks,
+    collectors: recipe.collectors,
+    viewport: recipe.viewport,
+    browserArguments: recipe.browserArguments,
+    maxAgeMs: recipe.maxAgeMs,
+    ...fields,
+  });
+  const removedCheck = {
+    kind: 'request-count',
+    id: 'one-books-request',
+    name: 'Each Reading click sends one books request',
+    scope: 'One Reading click.',
+    method: 'GET',
+    path: '/api/books',
+    expectedCount: 1,
+    status: 200,
+  } as const;
+  const bases = [
+    {
+      kind: 'read',
+      journeys: [
+        journey({
+          checks: [
+            { ...check, scope: 'The first Reading click.' },
+            removedCheck,
+          ],
+        }),
+        journey({ name: 'Close Reading shelf' }),
+      ],
+    },
+    { kind: 'read', journeys: [journey({ steps: [] })] },
+    { kind: 'unusable', reason: 'The base revision has no observed.json.' },
+  ] as const;
+
+  return bases.map((recipeBase) => {
+    const plan = recipePlan(
+      { base: recipeBase, candidate: [journey()] },
+      'unused',
+    );
+
+    return summarizeJourneys({
+      journeys: [
+        compareJourney({
+          base,
+          candidate,
+          evaluatedAt,
+          visual,
+          judgement: plan.judge(recipe.name),
+        }),
+      ],
       evaluatedAt,
       mode: 'comparison',
-    }),
-  );
+      scope: { ...scope, recipe: plan.scope },
+      removedJourneys: removedJourneys(plan.removed),
+    });
+  });
 }
 
 function supplied(result: Comparison): string[] {
+  return [
+    ...result.removedJourneys.flatMap((journey) => [
+      journey.journey,
+      ...journey.checks.flatMap((check) => [check.name, check.scope]),
+    ]),
+    ...suppliedByJourneys(result),
+  ];
+}
+
+function suppliedByJourneys(result: Comparison): string[] {
   return result.journeys.flatMap((journey) => [
     result.title,
     journey.title,

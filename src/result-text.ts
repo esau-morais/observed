@@ -7,7 +7,7 @@ import type {
   Measure,
   Side,
 } from './comparison-model';
-import { everyCaptureFailed } from './comparison-model';
+import { everyCaptureFailed, runVerdicts } from './comparison-model';
 import { statusWords } from './status-words';
 
 type Kind = Comparison['conclusion']['kind'];
@@ -107,9 +107,7 @@ function plural(count: number, one: string, many: string): string {
 }
 
 export function resultCounts(result: Comparison): string {
-  const verdicts = result.journeys.flatMap((journey) =>
-    journey.checks.map((check) => check.verdict),
-  );
+  const verdicts = runVerdicts(result).map((check) => check.verdict);
   const count = (...kinds: CheckVerdict['verdict'][]) =>
     verdicts.filter((verdict) => kinds.includes(verdict)).length;
 

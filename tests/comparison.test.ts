@@ -2287,10 +2287,11 @@ test('an imported test that passed on base and fails with the same test file is 
       scope: 'Imported from Playwright: cart.spec.ts:3, project chromium.',
     }),
   ]);
+  expect(result.checks[0]?.recipe).toBeUndefined();
   expect(result.conclusion.kind).toBe('regression');
 });
 
-test('a failing imported test whose file changed is failed, not a regression', async () => {
+test('an imported test whose file changed carries the label, and its failure is not a regression', async () => {
   const result = await playwrightJourney({
     base: [playwrightTest('adds an item', 'expected')],
     candidate: [playwrightTest('adds an item', 'unexpected')],
@@ -2302,6 +2303,20 @@ test('a failing imported test whose file changed is failed, not a regression', a
   expect(result.checks[0]?.detail).toMatch(
     /e2e\/cart\.spec\.ts changed between base and candidate, so a regression is not established\.$/,
   );
+  expect(result.checks[0]?.recipe).toEqual({ change: 'test-file-changed' });
+
+  const passing = await playwrightJourney({
+    base: [playwrightTest('adds an item', 'expected')],
+    candidate: [playwrightTest('adds an item', 'expected')],
+    candidateSpec: 'test("adds two items")\n',
+  });
+
+  expect(passing.checks).toEqual([
+    expect.objectContaining({
+      verdict: 'passed',
+      recipe: { change: 'test-file-changed' },
+    }),
+  ]);
 });
 
 test('a test the candidate adds keeps the captures comparable, and a flaky one is unknown', async () => {
