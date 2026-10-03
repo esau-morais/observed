@@ -63,9 +63,13 @@ export function scopeLine(scope: ChangeScope): string {
     outsideText = `${plural(outside, 'file', 'files')} changed outside the captured source.`;
   }
 
+  // The checks describe unchanged behavior only when nothing else changed
+  // either; otherwise the result claims nothing about the change.
   if (captured(scope).length === 0) {
     return [
-      'No captured file changed, so the checks describe unchanged behavior.',
+      scope.outside.kind === 'listed' && outside === 0
+        ? 'No captured file changed, so the checks describe unchanged behavior.'
+        : 'No captured file changed.',
       outsideText,
     ]
       .filter((part) => part !== '')
@@ -114,7 +118,8 @@ function fileDetail(result: Comparison, file: ScopeFile): string {
   return sentence(file.reason);
 }
 
-// One line per changed file, then any missing coverage or Git listing.
+// One line per changed file, then any missing coverage, Git listing, or
+// recipe comparison.
 export function scopeFileLines(result: Comparison): string[] {
   const scope = result.changeScope;
 

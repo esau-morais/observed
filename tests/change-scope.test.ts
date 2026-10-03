@@ -169,10 +169,7 @@ function coverageFile(
         {
           script: 'http://127.0.0.1:4010/assets/index.js',
           kind: 'mapped',
-          files: [
-            ...files.map((file) => file.path),
-            ...excluded.map((file) => file.path),
-          ],
+          files: files.map((file) => file.path),
           excluded,
         },
       ],
@@ -445,6 +442,27 @@ test('a script coverage could not map leaves files unknown, not unexecuted', () 
   );
 });
 
+test('an excluded stylesheet gives the exclusion, not the file type', () => {
+  const stylesheet = file(
+    scope([
+      scenario(
+        { 'app.css': 'a {}\n' },
+        { 'app.css': 'b {}\n' },
+        {
+          coverage: parseCoverage(
+            coverageFile([], [{ path: 'app.css', reason: 'Map copy differs' }]),
+          ),
+        },
+      ),
+    ]),
+    'app.css',
+  );
+
+  expect(stylesheet.relation === 'not-observed' && stylesheet.reason).toBe(
+    "Coverage could not map this file's lines: Map copy differs",
+  );
+});
+
 test('a file whose lines coverage could not map says why, not that it never ran', () => {
   const unmapped = file(
     scope([
@@ -483,12 +501,42 @@ test('a docs-only change says no captured file changed and lists the outside fil
   const docsOnly = { ...result, changeScope: computed };
 
   expect(scopeLine(computed)).toBe(
-    'No captured file changed, so the checks describe unchanged behavior. 1 file changed outside the captured source.',
+    'No captured file changed. 1 file changed outside the captured source.',
   );
   expect(scopeFileLines(docsOnly)).toEqual([
     'docs/guide.md (modified): Outside the captured source. Neither source snapshot contains this file.',
   ]);
   expect(renderComparison(docsOnly)).toContain('No captured file changed');
+});
+
+test('with nothing changed at all, the checks describe unchanged behavior', () => {
+  const computed = scope([scenario({ 'app.ts': app }, { 'app.ts': app })], {
+    kind: 'listed',
+    files: [],
+  });
+
+  expect(scopeLine(computed)).toBe(
+    'No captured file changed, so the checks describe unchanged behavior.',
+  );
+});
+
+test("a file absent from one journey's coverage is not called unexecuted when another journey has none", () => {
+  const pair = [{ 'app.ts': app }, { 'app.ts': changedApp }] as const;
+  const covered = scenario(...pair, {
+    coverage: coverageOf('other.ts', [[1, 1]], []),
+  });
+  const uncovered = scenario(...pair);
+  const partly = file(scope([covered, uncovered]), 'app.ts');
+
+  expect(partly.relation === 'not-observed' && partly.reason).toBe(
+    'Coverage recorded no execution of this file, and some journeys recorded no coverage.',
+  );
+});
+
+test('a coverage file that lists a path twice is unavailable', () => {
+  const entry = { path: 'app.ts', executed: [[1, 1]], unexecuted: [] };
+
+  expect(parseCoverage(coverageFile([entry, entry])).kind).toBe('unavailable');
 });
 
 test('a changed observed.json says that journey and check changes were not compared', () => {
@@ -542,6 +590,7 @@ test('Git lists working tree and untracked changes relative to the project direc
   git('init', '--quiet');
   git('config', 'user.email', 'test@example.invalid');
   git('config', 'user.name', 'Test');
+  git('config', 'diff.relative', 'true');
   await mkdir(path.join(root, 'app'));
   await writeFile(path.join(root, 'app/server.ts'), 'one\n');
   await writeFile(path.join(root, 'README.md'), 'readme\n');

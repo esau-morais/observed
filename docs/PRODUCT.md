@@ -247,7 +247,10 @@ policy, not a verdict.
 A run whose checks all pass while files are not observed reads "No regression
 in the named checks", followed by the count of files not observed. It never
 reads as a verified change. When no captured file changed, say so, because
-the checks then describe unchanged behavior.
+the checks then describe unchanged behavior. If files outside the captured
+source changed, or Git could not list them, say only that no captured file
+changed. A change outside the snapshot can still change behavior, and gate 7
+asks the result to claim nothing about the change.
 
 ## What each source establishes
 

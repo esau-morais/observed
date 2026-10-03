@@ -42,7 +42,14 @@ const coverageFileSchema = Schema.Struct({
         }),
       ]),
     ),
-  }),
+  }).check(
+    Schema.makeFilter(
+      (value) =>
+        new Set(value.files.map((file) => file.path)).size ===
+        value.files.length,
+      { message: 'Coverage lists each file once' },
+    ),
+  ),
 });
 
 type FileCoverage = {
@@ -116,6 +123,8 @@ export const reasons = {
   noCoverage:
     'No journey recorded coverage, so no evidence shows that this file ran.',
   notInCoverage: 'Coverage recorded no execution of this file.',
+  partlyCovered:
+    'Coverage recorded no execution of this file, and some journeys recorded no coverage.',
   noChangedLineRan: 'No changed line ran in a journey that recorded coverage.',
   onlyRemoved:
     'The change only removes lines, and coverage cannot show that removed lines ran.',
@@ -275,6 +284,11 @@ function capturedFile(
     }
   }
 
+  const unmappedReason = journeys
+    .flatMap(({ coverage }) =>
+      coverage.kind === 'recorded' ? coverage.unmapped : [],
+    )
+    .at(0);
   const changed = addedLines(
     identity.path,
     identity.change,
@@ -330,7 +344,10 @@ function capturedFile(
         relation: 'not-observed',
         basis: 'coverage',
         lines,
-        reason: reasons.noChangedLineRan,
+        reason:
+          unmappedReason === undefined
+            ? reasons.noChangedLineRan
+            : `No changed line ran in the mapped scripts, and coverage could not map another script: ${unmappedReason}`,
         journeys: [listedFirst, ...listedRest],
         checks: [],
       };
@@ -370,11 +387,6 @@ function capturedFile(
         : undefined,
     )
     .find((value) => value !== undefined);
-  const unmappedReason = journeys
-    .flatMap(({ coverage }) =>
-      coverage.kind === 'recorded' ? coverage.unmapped : [],
-    )
-    .at(0);
   let reason: string;
 
   if (identity.change === 'removed') {
@@ -387,8 +399,10 @@ function capturedFile(
     reason = reasons.fileType;
   } else if (unmappedReason !== undefined) {
     reason = `Coverage could not map a script to source files, so no evidence shows whether this file ran: ${unmappedReason}`;
-  } else if (journeys.some(({ coverage }) => coverage.kind === 'recorded')) {
+  } else if (journeys.every(({ coverage }) => coverage.kind === 'recorded')) {
     reason = reasons.notInCoverage;
+  } else if (journeys.some(({ coverage }) => coverage.kind === 'recorded')) {
+    reason = reasons.partlyCovered;
   } else {
     reason = reasons.noCoverage;
   }
