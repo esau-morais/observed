@@ -41,6 +41,7 @@ import {
   comparisonSchema,
   journeySchema,
   type Journey,
+  type RecipeSources,
   type Selection,
   type Visual,
 } from '../src/comparison-model';
@@ -52,7 +53,7 @@ import { checkRows } from '../scripts/github-action';
 import { resultCounts } from '../src/result-text';
 import { collectReport } from '../src/playwright/collect';
 import type { Journey as ProjectJourney } from '../src/project';
-import { recipePlan } from '../src/recipe-diff';
+import { recipePlan, type JourneyJudgement } from '../src/recipe-diff';
 import { parseJsonReport } from '../src/playwright/report';
 
 const evaluatedAt = '2026-09-23T12:00:00.000Z';
@@ -2253,6 +2254,7 @@ async function playwrightJourney(options: {
   base: EvidenceValue<'playwright'>['tests'][number][];
   candidate: EvidenceValue<'playwright'>['tests'][number][];
   candidateSpec?: string;
+  judgement?: JourneyJudgement;
 }) {
   const base = await syntheticBundle({
     contract: withPlaywright,
@@ -2270,6 +2272,9 @@ async function playwrightJourney(options: {
     base: await inspect(base.directory),
     candidate: await inspect(candidate.directory),
     evaluatedAt,
+    ...(options.judgement === undefined
+      ? {}
+      : { judgement: options.judgement }),
   });
 }
 
@@ -2653,9 +2658,6 @@ test('a source map built from other code than the snapshot gives no line', async
   });
 });
 
-// observed.json differences. Both sides are captured with the candidate's
-// journey; the base's definitions judge them.
-
 function projectJourney(
   checks: readonly CheckDefinition[],
   fields: Partial<ProjectJourney> = {},
@@ -2691,23 +2693,30 @@ async function judgedSides(options: {
 }
 
 async function judged(options: {
-  base: readonly CheckDefinition[] | 'unusable';
+  base: readonly CheckDefinition[] | 'unusable' | 'unreadable';
   captured: readonly CheckDefinition[];
   baseCount: number;
   candidateCount: number;
   baseFields?: Partial<ProjectJourney>;
 }) {
   const bundles = await judgedSides(options);
+  const sources: Record<'unreadable' | 'unusable', RecipeSources['base']> = {
+    unreadable: { kind: 'unavailable', reason: 'Git failed.' },
+    unusable: {
+      kind: 'unusable',
+      commit: 'c'.repeat(40),
+      reason: 'The base revision has no observed.json.',
+    },
+  };
   const plan = recipePlan(
     {
       base:
-        options.base === 'unusable'
-          ? {
-              kind: 'unusable',
-              reason: 'The base revision has no observed.json.',
-            }
+        typeof options.base === 'string'
+          ? sources[options.base]
           : {
               kind: 'read',
+              commit: 'c'.repeat(40),
+              sha256: 'd'.repeat(64),
               journeys: [projectJourney(options.base, options.baseFields)],
             },
       candidate: [projectJourney(options.captured)],
@@ -2762,14 +2771,19 @@ async function selectedComparison(
 }
 
 test('a raised expectation is judged by the base, and the proposal sets no verdict', async () => {
-  // Probe E1: a duplicate request ships with expectedCount raised to 2.
+  // A duplicate request ships with expectedCount raised from 1 to 2.
   const bundles = await judgedSides({
     captured: [allowsTwo],
     baseCount: 1,
     candidateCount: 2,
   });
   const result = await selectedComparison(bundles, {
-    base: { kind: 'read', journeys: [projectJourney([requestCheck])] },
+    base: {
+      kind: 'read',
+      commit: 'c'.repeat(40),
+      sha256: 'd'.repeat(64),
+      journeys: [projectJourney([requestCheck])],
+    },
     candidate: [projectJourney([allowsTwo])],
   });
   const [journey] = result.journeys;
@@ -2798,7 +2812,7 @@ test('a raised expectation is judged by the base, and the proposal sets no verdi
   expect(journey?.comparison).toMatchObject({ kind: 'available' });
   expect(
     journey?.comparison.kind === 'available' && journey.comparison.basis,
-  ).not.toMatch(/protected/);
+  ).toContain("The base's observed.json defines this journey differently.");
   expect(result.changeScope).toMatchObject({
     kind: 'recorded',
     recipe: {
@@ -2813,7 +2827,7 @@ test('a raised expectation is judged by the base, and the proposal sets no verdi
     },
   });
 
-  // Without the base file, the captured definition judges, as before.
+  // Without the base file, the captured definition judges both sides.
   const uncompared = await selectedComparison(bundles, undefined);
 
   expect(uncompared.conclusion.kind).toBe('no-regression');
@@ -2918,6 +2932,8 @@ test('a removed journey leaves its checks unknown and the run unavailable', asyn
   const result = await selectedComparison(bundles, {
     base: {
       kind: 'read',
+      commit: 'c'.repeat(40),
+      sha256: 'd'.repeat(64),
       journeys: [
         projectJourney([requestCheck]),
         projectJourney([requestCheck], { name: 'Reload items' }),
@@ -2946,4 +2962,96 @@ test('a removed journey leaves its checks unknown and the run unavailable', asyn
   expect(result.conclusion.text).toContain(
     'Reload items: this change removes the journey, so no capture ran its checks.',
   );
+});
+
+test('an unreadable base file leaves every check unknown, never judged by the candidate', async () => {
+  const result = await judged({
+    base: 'unreadable',
+    captured: [allowsTwo],
+    baseCount: 1,
+    candidateCount: 2,
+  });
+
+  expect(result.journeys[0].checks).toMatchObject([{ verdict: 'unknown' }]);
+  expect(result.journeys[0].checks[0]?.detail).toContain('Git failed.');
+  expect(result.conclusion.kind).toBe('unavailable');
+});
+
+test('imported tests in a journey whose collectors changed are unknown', async () => {
+  const playwright = (command: readonly [string, ...string[]]) => ({
+    collectors: [{ kind: 'playwright' as const, command }],
+  });
+  const plan = recipePlan(
+    {
+      base: {
+        kind: 'read',
+        commit: 'c'.repeat(40),
+        sha256: 'd'.repeat(64),
+        journeys: [
+          projectJourney([], playwright(['npx', 'playwright', 'test'])),
+        ],
+      },
+      candidate: [
+        projectJourney(
+          [],
+          playwright([
+            'npx',
+            'playwright',
+            'test',
+            '--grep-invert',
+            'checkout',
+          ]),
+        ),
+      ],
+    },
+    'unused',
+  );
+  const result = await playwrightJourney({
+    base: [playwrightTest('adds an item', 'expected')],
+    candidate: [playwrightTest('adds an item', 'expected')],
+    judgement: plan.judge(recipe.name),
+  });
+
+  expect(result.checks).toMatchObject([
+    {
+      verdict: 'unknown',
+      recipe: {
+        change: 'journey-altered',
+        fields: ['collectors'],
+        proposed: { outcome: 'passed' },
+      },
+    },
+  ]);
+  expect(result.conclusion.kind).toBe('unavailable');
+});
+
+test('a removed journey that ran Playwright leaves an unknown imported run', async () => {
+  const bundles = await judgedSides({
+    captured: [requestCheck],
+    baseCount: 1,
+    candidateCount: 1,
+  });
+  const result = await selectedComparison(bundles, {
+    base: {
+      kind: 'read',
+      commit: 'c'.repeat(40),
+      sha256: 'd'.repeat(64),
+      journeys: [
+        projectJourney([requestCheck]),
+        projectJourney([], {
+          name: 'Run end-to-end tests',
+          collectors: withPlaywright.collectors,
+        }),
+      ],
+    },
+    candidate: [projectJourney([requestCheck])],
+  });
+
+  expect(result.removedJourneys).toMatchObject([
+    {
+      journey: 'Run end-to-end tests',
+      checks: [{ id: 'playwright-run', verdict: 'unknown' }],
+    },
+  ]);
+  expect(result.conclusion.kind).toBe('unavailable');
 });

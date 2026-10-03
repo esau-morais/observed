@@ -147,6 +147,8 @@ async function recipeResults(): Promise<Comparison[]> {
   const bases = [
     {
       kind: 'read',
+      commit: 'c'.repeat(40),
+      sha256: 'd'.repeat(64),
       journeys: [
         journey({
           checks: [
@@ -157,8 +159,17 @@ async function recipeResults(): Promise<Comparison[]> {
         journey({ name: 'Close Reading shelf' }),
       ],
     },
-    { kind: 'read', journeys: [journey({ steps: [] })] },
-    { kind: 'unusable', reason: 'The base revision has no observed.json.' },
+    {
+      kind: 'read',
+      commit: 'c'.repeat(40),
+      sha256: 'd'.repeat(64),
+      journeys: [journey({ steps: [] })],
+    },
+    {
+      kind: 'unusable',
+      commit: 'c'.repeat(40),
+      reason: 'The base revision has no observed.json.',
+    },
   ] as const;
 
   return bases.map((recipeBase) => {

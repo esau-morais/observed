@@ -15,6 +15,7 @@ import {
   importedAuthority,
   playwrightPairs,
   unknownPlaywrightChecks,
+  unknownRun,
 } from './checks/playwright';
 import type {
   CheckIdentity,
@@ -59,11 +60,13 @@ import type {
 import {
   conclusionKinds,
   everyCaptureFailed,
+  proposedOf,
   resultSchemaVersion,
   runVerdicts,
 } from './comparison-model';
 import {
   recipePlan,
+  sameDefinition,
   type JourneyJudgement,
   type RecipePlan,
 } from './recipe-diff';
@@ -384,7 +387,7 @@ function proposed({ candidate, measure }: CheckPair): Proposed {
 function unknownPair(
   definition: CheckDefinition,
   detail: string,
-  recipe: VerdictRecipe,
+  recipe?: VerdictRecipe,
 ): CheckPair {
   const check = checkResult(
     definition,
@@ -392,7 +395,12 @@ function unknownPair(
     unknownEvaluation(detail),
   );
 
-  return { base: check, candidate: check, regression: null, recipe };
+  return {
+    base: check,
+    candidate: check,
+    regression: null,
+    ...(recipe === undefined ? {} : { recipe }),
+  };
 }
 
 function listed(values: readonly string[]): string {
@@ -425,6 +433,15 @@ function executedPairs(
 
   if (judgement.kind === 'added') {
     return captured.map(added);
+  }
+
+  if (judgement.kind === 'unreadable') {
+    return captured.map((definition) =>
+      unknownPair(
+        definition,
+        `The base revision's observed.json could not be read, so no check can be judged. ${judgement.reason}`,
+      ),
+    );
   }
 
   const baseOnly = judgement.base.filter(
@@ -465,7 +482,7 @@ function executedPairs(
         return added(definition);
       }
 
-      return isDeepStrictEqual(previous, definition)
+      return sameDefinition(previous, definition)
         ? evaluate(definition)
         : {
             ...evaluate(previous),
@@ -482,6 +499,66 @@ function executedPairs(
   ];
 }
 
+// Imported tests follow the journey's judgement. Their definitions live in
+// the app's test files, so only a changed journey or an unread base file
+// keeps them from judging.
+function judgedImports(
+  pairs: readonly CheckPair[],
+  judgement: JourneyJudgement,
+): CheckPair[] {
+  const unknown = (pair: CheckPair, detail: string): CheckPair => {
+    const check: Check = {
+      ...pair.candidate,
+      outcome: 'unknown',
+      actual: null,
+      detail,
+    };
+
+    return {
+      base: pair.base === null ? null : check,
+      candidate: check,
+      regression: null,
+    };
+  };
+
+  switch (judgement.kind) {
+    case 'not-compared':
+      return [...pairs];
+    case 'added':
+      return pairs.map((pair) => ({
+        ...pair,
+        regression: null,
+        recipe: { change: 'added' },
+      }));
+    case 'unreadable':
+      return pairs.map((pair) =>
+        unknown(
+          pair,
+          `The base revision's observed.json could not be read, so no check can be judged. ${judgement.reason}`,
+        ),
+      );
+    case 'compared': {
+      const [field, ...fields] = judgement.fields;
+
+      return field === undefined
+        ? [...pairs]
+        : pairs.map((pair) => ({
+            ...unknown(
+              pair,
+              `This change alters the journey's ${listed([field, ...fields])}, so the captures cannot apply the base's checks.`,
+            ),
+            recipe: {
+              change: 'journey-altered',
+              fields: [field, ...fields],
+              proposed: proposed(pair),
+            },
+          }));
+    }
+    default:
+      return judgement satisfies never;
+  }
+}
+
 function evaluatePairs(
   base: CompleteSide | null,
   candidate: CompleteSide,
@@ -490,10 +567,12 @@ function evaluatePairs(
   judgement: JourneyJudgement = { kind: 'not-compared' },
 ): { executed: CheckPair[]; imported: CheckPair[] } {
   const sides = { base, candidate, mode, comparable };
+  const judged: JourneyJudgement =
+    mode === 'preview' ? { kind: 'not-compared' } : judgement;
 
   return {
-    executed: executedPairs(sides, judgement),
-    imported: playwrightPairs(sides),
+    executed: executedPairs(sides, judged),
+    imported: judgedImports(playwrightPairs(sides), judged),
   };
 }
 
@@ -1296,24 +1375,27 @@ const proposedOutcomes = {
 
 const addedText = 'This change adds the check, so it has no baseline.';
 
-// What the recipe label adds to a check's sentence in the conclusion.
 function recipeNote({ recipe, verdict }: CheckVerdict): string {
-  if (
-    (recipe?.change === 'altered' || recipe?.change === 'journey-altered') &&
-    recipe.proposed !== undefined
-  ) {
-    return ` The candidate's proposed version ${proposedOutcomes[recipe.proposed.outcome]} and sets no verdict.`;
-  }
+  const proposal = proposedOf(recipe);
 
-  if (recipe?.change === 'removed' && verdict !== 'unknown') {
-    return " This change removes the check, so the base's definition judged both captures.";
+  switch (recipe?.change) {
+    case undefined:
+    case 'added':
+      return '';
+    case 'altered':
+    case 'journey-altered':
+      return proposal === undefined
+        ? ''
+        : ` The candidate's proposed version ${proposedOutcomes[proposal.outcome]} and sets no verdict.`;
+    case 'removed':
+      return verdict === 'unknown'
+        ? ''
+        : " This change removes the check, so the base's definition judged both captures.";
+    case 'test-file-changed':
+      return verdict === 'passed' ? ' This change alters its test file.' : '';
+    default:
+      return recipe satisfies never;
   }
-
-  if (recipe?.change === 'test-file-changed' && verdict === 'passed') {
-    return ' This change alters its test file.';
-  }
-
-  return '';
 }
 
 function journeyConclusion(
@@ -2030,15 +2112,24 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
 export function removedJourneys(
   removed: RecipePlan['removed'],
 ): Comparison['removedJourneys'] {
+  const detail =
+    'This change removes the journey, so no capture ran this check.';
+
   return removed.map((journey) => ({
     journey: journey.journey,
-    checks: journey.checks.map((definition) => ({
-      id: definition.id,
-      name: definition.name,
-      scope: definition.scope,
-      expectation: expectationFor(definition),
+    checks: [
+      ...journey.checks.map((definition) => ({
+        ...definition,
+        expectation: expectationFor(definition),
+      })),
+      ...(journey.imports ? [unknownRun(detail)] : []),
+    ].map(({ id, name, scope, expectation }) => ({
+      id,
+      name,
+      scope,
+      expectation,
       verdict: 'unknown',
-      detail: 'This change removes the journey, so no capture ran this check.',
+      detail,
       recipe: { change: 'removed' },
     })),
   }));

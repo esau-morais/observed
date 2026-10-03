@@ -5,6 +5,7 @@ import type {
   ScopeFile,
   VerdictRecipe,
 } from './comparison-model';
+import { proposedOf } from './comparison-model';
 import { verdictLabels } from './result-text';
 import { statusWords } from './status-words';
 
@@ -174,7 +175,6 @@ type RecipeField = Extract<
   { change: 'altered' }
 >['fields'][number];
 
-// observed.json differences in one line, after the change scope line.
 export function recipeLine(scope: ChangeScope): string | null {
   if (scope.kind !== 'recorded' || scope.recipe.kind !== 'changed') {
     return null;
@@ -233,6 +233,59 @@ function namedVerdicts(verdicts: readonly CheckVerdict[]): string {
     .join(', ');
 }
 
+function journeyLine(
+  difference: RecipeChange,
+  checks: readonly CheckVerdict[],
+  limit: number | null,
+): string {
+  const lead = `${recipeLabels[difference.change]}: journey ${difference.journey}.`;
+
+  switch (difference.change) {
+    case 'added':
+      return `${lead} Its checks have no baseline${checks.length === 0 ? '.' : `: ${namedVerdicts(checks)}.`}`;
+    case 'removed':
+      return `${lead} No capture ran its checks${checks.length === 0 ? '.' : `, so they are unknown: ${checks.map((check) => check.name).join(', ')}.`}`;
+    case 'altered':
+      return `${lead} Every check in it is unknown. ${fieldsText(difference.fields, limit)}`;
+    default:
+      return difference satisfies never;
+  }
+}
+
+function checkLine(
+  difference: RecipeChange,
+  name: string,
+  verdict: CheckVerdict,
+  limit: number | null,
+): string {
+  const lead = `${recipeLabels[difference.change]}: ${name}.`;
+  const base = `Base expectation, ${verdictWord(verdict)}: ${verdict.expectation}`;
+
+  switch (difference.change) {
+    case 'added':
+      return `${lead} ${verdictLabels[verdict.verdict]}, with no baseline: ${verdict.expectation}`;
+    case 'removed':
+      return `${lead} ${base}`;
+    case 'altered': {
+      const proposed = proposedOf(verdict.recipe);
+
+      return [
+        lead,
+        base,
+        ...(proposed === undefined
+          ? []
+          : [
+              `${statusWords.proposed.word}, ${verdictLabels[proposed.outcome].toLowerCase()}: ${proposed.expectation}`,
+              'The proposal sets no verdict.',
+            ]),
+        fieldsText(difference.fields, limit),
+      ].join(' ');
+    }
+    default:
+      return difference satisfies never;
+  }
+}
+
 // One line per added, removed or altered journey and check, then each
 // imported test whose file changed. Values longer than `limit` characters
 // are cut.
@@ -255,60 +308,21 @@ export function recipeLines(
   for (const difference of recipe?.kind === 'changed'
     ? recipe.differences
     : []) {
-    const label = recipeLabels[difference.change];
     const checks = journeyChecks(difference.journey);
 
     if (difference.check === undefined) {
-      if (difference.change === 'added') {
-        lines.push(
-          `${label}: journey ${difference.journey}. Its checks have no baseline${checks.length === 0 ? '.' : `: ${namedVerdicts(checks)}.`}`,
-        );
-      } else if (difference.change === 'removed') {
-        lines.push(
-          `${label}: journey ${difference.journey}. No capture ran its checks${checks.length === 0 ? '.' : `, so they are unknown: ${checks.map((check) => check.name).join(', ')}.`}`,
-        );
-      } else if (difference.change === 'altered') {
-        lines.push(
-          `${label}: journey ${difference.journey}. Every check in it is unknown. ${fieldsText(difference.fields, limit)}`,
-        );
-      }
+      lines.push(journeyLine(difference, checks, limit));
+    } else {
+      const id = difference.check;
+      const verdict = checks.find((check) => check.id === id);
+      const name = `${where(difference.journey)}${verdict?.name ?? id}`;
 
-      continue;
-    }
-
-    const id = difference.check;
-    const verdict = checks.find((check) => check.id === id);
-    const name = `${where(difference.journey)}${verdict?.name ?? id}`;
-
-    if (verdict === undefined) {
-      lines.push(`${label}: ${name}.`);
-    } else if (difference.change === 'added') {
+      // A capture that did not complete gives verdicts without a label,
+      // so they hold no base expectation to show.
       lines.push(
-        `${label}: ${name}. ${verdictLabels[verdict.verdict]}, with no baseline: ${verdict.expectation}`,
-      );
-    } else if (difference.change === 'removed') {
-      lines.push(
-        `${label}: ${name}. Base expectation, ${verdictWord(verdict)}: ${verdict.expectation}`,
-      );
-    } else if (difference.change === 'altered') {
-      const proposed =
-        verdict.recipe?.change === 'altered' ||
-        verdict.recipe?.change === 'journey-altered'
-          ? verdict.recipe.proposed
-          : undefined;
-
-      lines.push(
-        [
-          `${label}: ${name}.`,
-          `Base expectation, ${verdictWord(verdict)}: ${verdict.expectation}`,
-          ...(proposed === undefined
-            ? []
-            : [
-                `${statusWords.proposed.word}, ${verdictLabels[proposed.outcome].toLowerCase()}: ${proposed.expectation}`,
-                'The proposal sets no verdict.',
-              ]),
-          fieldsText(difference.fields, limit),
-        ].join(' '),
+        verdict?.recipe === undefined
+          ? `${recipeLabels[difference.change]}: ${name}.${verdict === undefined ? '' : ` ${verdictLabels[verdict.verdict]}.`}`
+          : checkLine(difference, name, verdict, limit),
       );
     }
   }

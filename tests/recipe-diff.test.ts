@@ -5,7 +5,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { journeySchema, readBaseJourneys, type Journey } from '../src/project';
+import { readBaseJourneys } from '../src/capture/base-project';
+import { sha256 } from '../src/encoding';
+import { journeySchema, type Journey } from '../src/project';
 import { recipePlan } from '../src/recipe-diff';
 
 const directories: string[] = [];
@@ -44,8 +46,14 @@ const loadItems = {
 const journey = (value: unknown): Journey =>
   parseJourney(JSON.stringify(value));
 
+const provenance = {
+  kind: 'read',
+  commit: 'c'.repeat(40),
+  sha256: 'd'.repeat(64),
+} as const;
+
 const read = (...journeys: [Journey, ...Journey[]]) =>
-  ({ kind: 'read', journeys }) as const;
+  ({ ...provenance, journeys }) as const;
 
 test('key order, whitespace, check versus checks, and omitted defaults are not differences', () => {
   const base = parseJourney(JSON.stringify(loadItems));
@@ -75,7 +83,7 @@ test('key order, whitespace, check versus checks, and omitted defaults are not d
   for (const candidate of [reordered, explicit]) {
     expect(
       recipePlan({ base: read(base), candidate: [candidate] }, 'unused').scope,
-    ).toEqual({ kind: 'unchanged' });
+    ).toEqual({ kind: 'unchanged', base: provenance });
   }
 });
 
@@ -92,7 +100,7 @@ test('an altered expectation keeps both values and the base definition', () => {
 
   expect(plan.scope).toEqual({
     kind: 'changed',
-    base: { kind: 'read' },
+    base: provenance,
     differences: [
       {
         journey: 'Load items',
@@ -137,7 +145,7 @@ test('added, removed and altered journeys and checks are each listed', () => {
 
   expect(plan.scope).toEqual({
     kind: 'changed',
-    base: { kind: 'read' },
+    base: provenance,
     differences: [
       {
         journey: 'Load items',
@@ -159,16 +167,17 @@ test('added, removed and altered journeys and checks are each listed', () => {
   expect(plan.judge('Load items')).toMatchObject({ fields: ['steps'] });
   expect(plan.judge('New journey')).toEqual({ kind: 'added' });
   expect(plan.removed).toEqual([
-    { journey: 'Old journey', checks: [loadItems.check] },
+    { journey: 'Old journey', checks: [loadItems.check], imports: false },
   ]);
 });
 
-test('an unusable base file makes every candidate journey added, and an unread one compares nothing', () => {
+test('an unusable base file makes every candidate journey added, an unreadable one leaves checks unknown, and none compares nothing', () => {
   const candidate = journey(loadItems);
   const unusable = recipePlan(
     {
       base: {
         kind: 'unusable',
+        commit: 'c'.repeat(40),
         reason: 'The base revision has no observed.json.',
       },
       candidate: [candidate],
@@ -180,11 +189,29 @@ test('an unusable base file makes every candidate journey added, and an unread o
     kind: 'changed',
     base: {
       kind: 'unusable',
+      commit: 'c'.repeat(40),
       reason: 'The base revision has no observed.json.',
     },
     differences: [{ journey: 'Load items', change: 'added' }],
   });
   expect(unusable.judge('Load items')).toEqual({ kind: 'added' });
+
+  const unreadable = recipePlan(
+    {
+      base: { kind: 'unavailable', reason: 'Git failed.' },
+      candidate: [candidate],
+    },
+    'unused',
+  );
+
+  expect(unreadable.scope).toEqual({
+    kind: 'unavailable',
+    reason: 'Git failed.',
+  });
+  expect(unreadable.judge('Load items')).toEqual({
+    kind: 'unreadable',
+    reason: 'Git failed.',
+  });
 
   const missing = recipePlan(undefined, 'Made from capture directories');
 
@@ -245,16 +272,20 @@ test('the base observed.json is read from Git at the base revision, relative to 
 
   expect(await readAt(valid)).toEqual({
     kind: 'read',
+    commit: valid,
+    sha256: sha256(JSON.stringify(project, null, 2)),
     journeys: [journey(loadItems)],
   });
   expect(await readAt(missing)).toEqual({
     kind: 'unusable',
+    commit: missing,
     reason: 'The base revision has no observed.json.',
   });
   expect(await readAt(invalid)).toEqual({
     kind: 'unusable',
+    commit: invalid,
     reason:
-      "The base revision's observed.json does not match the project contract:",
+      "The base revision's observed.json does not match the project contract.",
   });
   expect(await readAt('no-such-revision')).toMatchObject({
     kind: 'unavailable',

@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import { isDeepStrictEqual } from 'node:util';
 import type { CheckDefinition } from './checks';
 import type { RecipeScope, RecipeSources } from './comparison-model';
@@ -18,6 +19,8 @@ type Field = Extract<Difference, { change: 'altered' }>['fields'][number];
 export type JourneyJudgement =
   // No base observed.json to compare with: the captured definitions judge.
   | { kind: 'not-compared' }
+  // Git could not read the base's file, so no check can be judged.
+  | { kind: 'unreadable'; reason: string }
   // The base defines no such journey, or has no usable observed.json.
   | { kind: 'added' }
   // `fields` names the journey fields that differ; any makes every check in
@@ -31,7 +34,12 @@ export type JourneyJudgement =
 export type RecipePlan = {
   scope: RecipeScope;
   judge: (journey: string) => JourneyJudgement;
-  removed: readonly { journey: string; checks: readonly CheckDefinition[] }[];
+  removed: readonly {
+    journey: string;
+    checks: readonly CheckDefinition[];
+    // The journey ran the app's Playwright command.
+    imports: boolean;
+  }[];
 };
 
 // The fields that decide what a capture does, with the defaults a capture
@@ -49,12 +57,8 @@ function journeyFields(journey: Journey): Record<string, unknown> {
   };
 }
 
-function jsonValue(value: unknown): Field['base'] {
-  // Decoded observed.json values are JSON already; this drops readonly
-  // markers and turns an absent field into null.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-  return JSON.parse(JSON.stringify(value ?? null)) as Field['base'];
-}
+const jsonValue = (value: unknown): Field['base'] =>
+  Schema.decodeUnknownSync(Schema.Json)(value ?? null);
 
 function fieldDifferences(
   base: Readonly<Record<string, unknown>>,
@@ -71,6 +75,15 @@ function fieldDifferences(
       base: jsonValue(base[key]),
       candidate: jsonValue(candidate[key]),
     }));
+}
+
+// Whether two check definitions differ in any field, by the rule that lists
+// the differences.
+export function sameDefinition(
+  base: CheckDefinition,
+  candidate: CheckDefinition,
+): boolean {
+  return fieldDifferences(base, candidate).length === 0;
 }
 
 function checkDifferences(base: Journey, candidate: Journey): Difference[] {
@@ -133,7 +146,11 @@ export function recipePlan(
   const { base, candidate } = sources;
 
   if (base.kind === 'unavailable') {
-    return notCompared(base.reason);
+    return {
+      scope: { kind: 'unavailable', reason: base.reason },
+      judge: () => ({ kind: 'unreadable', reason: base.reason }),
+      removed: [],
+    };
   }
 
   if (base.kind === 'unusable') {
@@ -142,7 +159,7 @@ export function recipePlan(
     return {
       scope: {
         kind: 'changed',
-        base: { kind: 'unusable', reason: base.reason },
+        base: { kind: 'unusable', commit: base.commit, reason: base.reason },
         differences: [
           { journey: first.name, change: 'added' },
           ...rest.map((journey) => ({
@@ -156,6 +173,11 @@ export function recipePlan(
     };
   }
 
+  const provenance = {
+    kind: 'read',
+    commit: base.commit,
+    sha256: base.sha256,
+  } as const;
   const differences: Difference[] = [];
 
   for (const journey of candidate) {
@@ -198,10 +220,10 @@ export function recipePlan(
   return {
     scope:
       first === undefined
-        ? { kind: 'unchanged' }
+        ? { kind: 'unchanged', base: provenance }
         : {
             kind: 'changed',
-            base: { kind: 'read' },
+            base: provenance,
             differences: [first, ...rest],
           },
     judge: (name) => {
@@ -226,6 +248,8 @@ export function recipePlan(
     removed: removed.map((journey) => ({
       journey: journey.name,
       checks: journeyChecks(journey),
+      imports:
+        journey.collectors?.some((item) => item.kind === 'playwright') === true,
     })),
   };
 }

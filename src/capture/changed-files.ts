@@ -20,7 +20,7 @@ function projectPath(prefix: string, repositoryPath: string): string {
     : path.posix.relative(prefix, repositoryPath);
 }
 
-function firstLine(value: string): string | null {
+export function firstLine(value: string): string | null {
   const [line = ''] = value.trim().split('\n');
 
   return line === '' ? null : line;

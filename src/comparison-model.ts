@@ -5,6 +5,7 @@ import { evidenceViewSchema } from './evidence-kinds';
 import {
   captureSchema,
   captureArtifactSchema,
+  commitSchema,
   digest,
   observationsSchema,
   text,
@@ -445,15 +446,27 @@ const recipeDifferenceSchema = Schema.Union([
   }),
 ]);
 
+// The base file that judged the checks, by commit and the SHA-256 of its
+// bytes.
+const recipeBase = Schema.Struct({
+  kind: Schema.Literal('read'),
+  commit: commitSchema,
+  sha256: digest,
+});
+
 const recipeScopeSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('unchanged') }),
+  Schema.Struct({ kind: Schema.Literal('unchanged'), base: recipeBase }),
   unavailableSchema,
   Schema.Struct({
     kind: Schema.Literal('changed'),
     // An unusable base file makes every candidate check count as added.
     base: Schema.Union([
-      Schema.Struct({ kind: Schema.Literal('read') }),
-      Schema.Struct({ kind: Schema.Literal('unusable'), reason: text }),
+      recipeBase,
+      Schema.Struct({
+        kind: Schema.Literal('unusable'),
+        commit: commitSchema,
+        reason: text,
+      }),
     ]),
     differences: Schema.NonEmptyArray(recipeDifferenceSchema),
   }),
@@ -578,6 +591,14 @@ export type VerdictRecipe = typeof verdictRecipeSchema.Type;
 
 export type Proposed = typeof proposedSchema.Type;
 
+export function proposedOf(
+  recipe: VerdictRecipe | undefined,
+): Proposed | undefined {
+  return recipe?.change === 'altered' || recipe?.change === 'journey-altered'
+    ? recipe.proposed
+    : undefined;
+}
+
 export type Measure = typeof measureSchema.Type;
 
 export type Conclusion = typeof conclusionSchema.Type;
@@ -631,10 +652,14 @@ const journeySelectionSchema = Schema.Struct({
 export const recipeSourcesSchema = Schema.Struct({
   base: Schema.Union([
     Schema.Struct({
-      kind: Schema.Literal('read'),
+      ...recipeBase.fields,
       journeys: Schema.NonEmptyArray(projectJourneySchema),
     }),
-    Schema.Struct({ kind: Schema.Literal('unusable'), reason: text }),
+    Schema.Struct({
+      kind: Schema.Literal('unusable'),
+      commit: commitSchema,
+      reason: text,
+    }),
     unavailableSchema,
   ]),
   candidate: Schema.NonEmptyArray(projectJourneySchema),

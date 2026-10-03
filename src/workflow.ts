@@ -6,7 +6,8 @@ import { processOutput } from './capture/process';
 import { json } from './encoding';
 import { exportComparison } from './export';
 import { packaged } from './installation';
-import { loadProject, readBaseJourneys } from './project';
+import { readBaseJourneys } from './capture/base-project';
+import { loadProject } from './project';
 
 export const buildViewer = Effect.fnUntraced(function* (
   toolRoot: string,

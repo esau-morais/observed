@@ -242,8 +242,11 @@ the protected one.
 | Imported test whose file changed | By the candidate's file, labeled as changed by this change. A failure is not called a regression, and a pass carries the label |
 
 Observed parses both files before it compares them, so key order,
-whitespace, `check` versus a one-item `checks`, and an omitted default are not
-differences. A relaxed expectation cannot turn a fault into a pass. An intended contract
+whitespace, `check` versus a one-item `checks`, and a journey field left at
+its default are not differences. A check field written out at its default is
+a difference, judged as an altered check. If Git cannot read the base's file, every check is unknown.
+
+A relaxed expectation cannot turn a fault into a pass. An intended contract
 change fails or stays unknown on the pull request that makes it, and resolves
 once it is on the base. Whether that pull request may merge is repository
 policy, not a verdict.

@@ -254,11 +254,11 @@ passes the job, `1` and `2` fail it.
 
 - Keep the `pull_request` trigger. Never use `pull_request_target`, which
   gives pull requests from forks the repository's secrets and a write token.
-- Observed captures both revisions with the candidate's `observed.json`, and
-  the base's file judges every check that the base defines. A pull request
-  that relaxes a check still fails or reads unknown on that check. The comment
-  names each added, removed and altered check, with the candidate's version
-  beside it as proposed.
+- Observed captures both revisions with the candidate's `observed.json`. The
+  base's file judges each check it defines, and a journey whose steps or other
+  fields changed leaves its checks unknown. Relaxing a check therefore cannot
+  turn a fault into a pass. The comment names each added, removed and altered
+  check, with the candidate's version beside it as proposed.
 - The action installs Bun and the browser. When `setup` or `start` needs
   another toolchain, such as Go, Python or Node.js, install it in a step before
   Observed's.

@@ -109,7 +109,7 @@ export function testCheck(test: PlaywrightTest): Check {
   }
 }
 
-function unknownRun(detail: string): UnknownCheck {
+export function unknownRun(detail: string): UnknownCheck {
   return { ...runIdentity, outcome: 'unknown', actual: null, detail };
 }
 
