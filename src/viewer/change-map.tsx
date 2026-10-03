@@ -184,7 +184,8 @@ const styles = stylex.create({
   },
   pressed: {
     backgroundColor: colors.action,
-    borderColor: colors.action,
+    borderColor: { default: colors.action, [media.forcedColors]: 'Highlight' },
+    borderWidth: { default: 1, [media.forcedColors]: 3 },
     color: colors.onAction,
   },
   scroller: {
@@ -288,8 +289,11 @@ const styles = stylex.create({
   cardOutside: { backgroundColor: colors.surface, borderStyle: 'dashed' },
   cardJourney: { borderColor: colors.linkCheckedBy },
   cardRemoved: { borderStyle: 'dashed', borderColor: colors.unknown },
+  // Forced colors drop fills and shadows, so selection there is a thicker
+  // border.
   cardSelected: {
     borderColor: { default: colors.focus, [media.forcedColors]: 'Highlight' },
+    borderWidth: { default: 1, [media.forcedColors]: 3 },
     boxShadow: `0 0 0 1px ${colors.focus}`,
   },
   dim: { opacity: 0.25 },
@@ -1584,9 +1588,7 @@ function ConnectionRows({
               >
                 <span {...stylex.props(styles.connectionHead)}>
                   <LineSample kind={connection.kind} removed={link.removed} />
-                  <span
-                    {...stylex.props(styles.kindWord, styles[connection.kind])}
-                  >
+                  <span {...stylex.props(styles.kindWord)}>
                     {connectionLabels[connection.kind].toLowerCase()}
                   </span>
                   <span {...stylex.props(styles.muted)}>{direction}</span>
@@ -2230,9 +2232,15 @@ function MapSection({
     setFocusId(focus);
   };
 
+  // Opening a level focuses its first block, so the keyboard stays on the
+  // map; going up focuses the directory just left.
   const go = (next: string, focus: string | null) => {
-    update({ directory: next, opened: [], selection: null }, focus);
     const opened = openLevel(index, next);
+
+    update(
+      { directory: next, opened: [], selection: null },
+      focus ?? opened.inside[0]?.id ?? null,
+    );
 
     setAnnouncement(
       `Opened ${opened.name}: ${opened.inside.length} blocks, ${opened.outside.length} outside.`,

@@ -717,7 +717,12 @@ export function cardSentence(index: MapIndex, card: Card): string {
       const checks = card.journey.checks.length;
       const redefined = card.recipe.length;
 
-      return `${card.journey.conclusion.text}${checks === 0 ? '' : ` ${plural(checks, 'check', 'checks')}.`}${redefined === 0 ? '' : ` observed.json changed ${plural(redefined, 'check', 'checks')} here.`}`;
+      const counted =
+        checks === 0
+          ? ''
+          : ` ${plural(checks, 'check', 'checks')}${redefined === 0 ? '' : `, ${redefined} changed by observed.json`}.`;
+
+      return `${card.journey.conclusion.text}${counted}`;
     }
     case 'removed-journey':
       return `Only the base's observed.json defines this journey, so nothing captured it and ${plural(card.checks.length, 'check is', 'checks are')} unknown.`;
