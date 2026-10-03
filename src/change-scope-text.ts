@@ -17,6 +17,10 @@ const basisWords = {
     'a name that matches a changed line, not a resolved location',
 } as const;
 
+function sentence(value: string): string {
+  return /[.!?]$/.test(value) ? value : `${value}.`;
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
@@ -48,7 +52,7 @@ function captured(scope: Recorded): ScopeFile[] {
 // The change scope in one line, after the check counts.
 export function scopeLine(scope: ChangeScope): string {
   if (scope.kind === 'unavailable') {
-    return `Change scope unavailable: ${scope.reason}`;
+    return `Change scope unavailable: ${sentence(scope.reason)}`;
   }
 
   const outside = scope.files.length - captured(scope).length;
@@ -123,12 +127,12 @@ export function scopeFileLines(result: Comparison): string[] {
     ...scope.coverage.flatMap((journey) =>
       journey.kind === 'unavailable' && captured(scope).length > 0
         ? [
-            `Coverage unavailable${result.journeys.length === 1 ? '' : ` in ${journey.journey}`}: ${journey.reason}.`,
+            `Coverage unavailable${result.journeys.length === 1 ? '' : ` in ${journey.journey}`}: ${sentence(journey.reason)}`,
           ]
         : [],
     ),
     ...(scope.outside.kind === 'unavailable'
-      ? [`Files outside the captured source: ${scope.outside.reason}.`]
+      ? [`Files outside the captured source: ${sentence(scope.outside.reason)}`]
       : []),
   ];
 }
