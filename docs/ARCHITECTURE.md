@@ -48,9 +48,11 @@ Read `observed.json` from the base revision as well as the candidate. Capture
 both sides with the candidate's journeys so the captures stay comparable, and
 record every difference between the two files in the result. Judge a check
 that exists on the base by the base's definition. The rules are in
-[PRODUCT.md](PRODUCT.md#change-scope). Today one `observed.json`, read from
-the candidate checkout, drives both sides, so an expectation altered by the
-change applies to the base without a trace.
+[PRODUCT.md](PRODUCT.md#altered-checks). `observe` reads the base's file
+through Git and records the journeys of both files in `selection.json`,
+because the comparator reads only capture directories. `compare` has no
+repository, so its recipe differences read as unavailable, and the captured
+definitions judge the checks.
 
 ## Evidence contract
 
@@ -71,8 +73,7 @@ Hashes detect changed artifacts; they do not establish collector honesty. A stac
 
 ### Change scope
 
-Built for result schema version 8, without coverage collectors or recipe
-differences. Recipe differences read as unavailable.
+Built for result schema version 8, without coverage collectors.
 
 The comparator writes the change scope to `result.json` with the result.
 Delivery adapters and the viewer render it and never compute or adjust it.

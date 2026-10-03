@@ -118,8 +118,8 @@ dictionary, which ASD holds the copyright to.
 ## Change scope
 
 Built as `result.json` data and as text in the report, the job summary, and
-the pull request comment. The change map, coverage, recipe differences, and
-generated journeys are not built. Until a coverage collector exists, no file
+the pull request comment. The change map, coverage, and generated journeys
+are not built. Until a coverage collector exists, no file
 is "exercised" through coverage.
 
 A saved journey checks the behavior it exercises. It does not check the
@@ -236,10 +236,14 @@ the protected one.
 | Expectation altered | By the base's expectation. The candidate's version is shown beside it as proposed, with its own outcome, and sets no verdict |
 | Check removed | By the base's definition, when the evidence it needs was still captured. Otherwise unknown |
 | Check added | On the candidate, labeled "added by this change", with no baseline |
-| Journey steps altered | Every check in that journey is unknown, with both versions of the steps shown |
+| Journey altered | Every check in that journey is unknown, with both versions of each changed field shown. The fields are path, ready, steps, collectors, viewport, browser arguments, allowed origins, and maximum age |
+| Journey removed | Every check in that journey is unknown, because neither capture ran it |
+| No usable `observed.json` on the base | Every check counts as added, and the result gives the reason |
 | Imported test whose file changed | By the candidate's file, labeled as changed by this change. A failure is not called a regression, and a pass carries the label |
 
-A relaxed expectation cannot turn a fault into a pass. An intended contract
+Observed parses both files before it compares them, so key order,
+whitespace, `check` versus a one-item `checks`, and an omitted default are not
+differences. A relaxed expectation cannot turn a fault into a pass. An intended contract
 change fails or stays unknown on the pull request that makes it, and resolves
 once it is on the base. Whether that pull request may merge is repository
 policy, not a verdict.

@@ -254,9 +254,11 @@ passes the job, `1` and `2` fail it.
 
 - Keep the `pull_request` trigger. Never use `pull_request_target`, which
   gives pull requests from forks the repository's secrets and a write token.
-- Observed reads `observed.json` from the candidate and uses it for both
-  revisions. A pull request that edits it changes the check for both sides, so
-  review those edits like code.
+- Observed captures both revisions with the candidate's `observed.json`, and
+  the base's file judges every check that the base defines. A pull request
+  that relaxes a check still fails or reads unknown on that check. The comment
+  names each added, removed and altered check, with the candidate's version
+  beside it as proposed.
 - The action installs Bun and the browser. When `setup` or `start` needs
   another toolchain, such as Go, Python or Node.js, install it in a step before
   Observed's.
