@@ -65,15 +65,12 @@ const elk = new ELK();
 
 // Positions only. The connections drawn come from the map, not from ELK's
 // routing, and layout never adds or drops a block.
-export async function layoutMap(
-  visible: VisibleMap,
-  direction: 'RIGHT' | 'DOWN',
-): Promise<Layout> {
+export async function layoutMap(visible: VisibleMap): Promise<Layout> {
   const graph: ElkNode = {
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
-      'elk.direction': direction,
+      'elk.direction': 'DOWN',
       'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       'elk.spacing.nodeNode': '20',
       'elk.layered.spacing.nodeNodeBetweenLayers': '56',

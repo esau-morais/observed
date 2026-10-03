@@ -392,7 +392,7 @@ async function viewer(
             'eval',
             '-b',
             Buffer.from(
-              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, leadTop: document.querySelector("#report details[open]").getBoundingClientRect().top})',
+              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, leadTop: (document.querySelector("#change-map-title") ?? document.querySelector("#report details[open]")).getBoundingClientRect().top})',
             ).toString('base64'),
           );
           const viewed = Schema.decodeUnknownSync(

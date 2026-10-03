@@ -687,36 +687,12 @@ function VerdictPanel({
   );
 }
 
-function edgePath(from: Box, to: Box, direction: 'RIGHT' | 'DOWN'): string {
-  if (direction === 'RIGHT') {
-    const start = { x: from.x + from.width, y: from.y + from.height / 2 };
-    const end = { x: to.x, y: to.y + to.height / 2 };
-    const bend = Math.max(24, Math.abs(end.x - start.x) / 2);
-
-    return `M ${start.x} ${start.y} C ${start.x + bend} ${start.y}, ${end.x - bend} ${end.y}, ${end.x} ${end.y}`;
-  }
-
+function edgePath(from: Box, to: Box): string {
   const start = { x: from.x + from.width / 2, y: from.y + from.height };
   const end = { x: to.x + to.width / 2, y: to.y };
   const bend = Math.max(24, Math.abs(end.y - start.y) / 2);
 
   return `M ${start.x} ${start.y} C ${start.x} ${start.y + bend}, ${end.x} ${end.y - bend}, ${end.x} ${end.y}`;
-}
-
-function useDirection(): 'RIGHT' | 'DOWN' {
-  const query = '(min-width: 960px)';
-  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
-
-  useEffect(() => {
-    const list = window.matchMedia(query);
-    const update = () => setWide(list.matches);
-
-    list.addEventListener('change', update);
-
-    return () => list.removeEventListener('change', update);
-  }, []);
-
-  return wide ? 'RIGHT' : 'DOWN';
 }
 
 function blockLabel(
@@ -810,7 +786,6 @@ function MapCanvas({
   selection: Selection;
   select: (selection: Selection) => void;
 }) {
-  const direction = useDirection();
   const visible = useMemo(() => visibleMap(map, directory), [map, directory]);
   const [layout, setLayout] = useState<{
     value:
@@ -821,7 +796,7 @@ function MapCanvas({
   useEffect(() => {
     let current = true;
 
-    layoutMap(visible, direction).then(
+    layoutMap(visible).then(
       (value) => {
         if (current) {
           setLayout({ value: { kind: 'placed', layout: value } });
@@ -842,7 +817,7 @@ function MapCanvas({
     return () => {
       current = false;
     };
-  }, [visible, direction]);
+  }, [visible]);
 
   const focus = active ?? (selection?.kind === 'block' ? selection.id : null);
   const near = focus === null ? null : related(map, focus);
@@ -953,7 +928,7 @@ function MapCanvas({
             return from === undefined || to === undefined ? null : (
               <path
                 key={map.connections.indexOf(connection)}
-                d={edgePath(from, to, direction)}
+                d={edgePath(from, to)}
                 markerEnd={`url(#arrow-${connection.kind})`}
                 {...stylex.props(
                   styles.line,
