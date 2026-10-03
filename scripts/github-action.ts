@@ -29,6 +29,7 @@ import {
   writeComment,
 } from './github-delivery';
 import { screenshotCrops } from './screenshot-crops';
+import { statusWords } from '../src/status-words';
 import { sha256 } from '../src/encoding';
 import {
   callSlack,
@@ -44,6 +45,8 @@ import { describeRevision, shortSource } from '../src/provenance-text';
 import { visualChange } from '../src/visual-text';
 import {
   capturedFiles,
+  relationLabels,
+  repositoryPath,
   recipeLabels,
   recipeLine,
   recipeLines,
@@ -388,31 +391,119 @@ function recipeList(result: Comparison): string | null {
     : lines.map((line) => `- ${inlineText(line)}`).join('\n');
 }
 
-// Only files inside the captured source, by their path from the repository
-// root. The scope line counts the rest.
-function scopeFiles(
+// Rows a reviewer reads first come first: files no evidence touched, then
+// files that ran without a check, then checked files.
+const relationRows = ['not-observed', 'exercised', 'checked'] as const;
+
+const readFirst = {
+  'not-observed': statusWords.notObserved,
+  exercised: statusWords.exercised,
+} as const;
+
+function cell(value: string): string {
+  return value.replaceAll('|', '\\|');
+}
+
+// Changed files grouped by the evidence that touched them, by path from the
+// repository root. Files outside the captured source are only counted.
+function scopeTable(
   result: Comparison,
   links: FileLinks | null,
 ): string | null {
-  const files = capturedFiles(result);
-  const notes = scopeNotes(result);
+  const scope = result.changeScope;
 
-  if (files.length + notes.length === 0) {
+  if (
+    scope.kind === 'unavailable' ||
+    !scope.files.some((file) => file.captured)
+  ) {
     return null;
   }
 
+  let listed = 0;
+  const rows = relationRows.flatMap((relation) => {
+    const files = scope.files.filter((file) => file.relation === relation);
+    const shown = files.slice(0, Math.max(0, listedFiles - listed));
+
+    listed += shown.length;
+
+    return files.length === 0
+      ? []
+      : [
+          `| ${relationLabels[relation]} | ${cell(
+            [
+              ...shown.map(
+                (file) =>
+                  `${fileText(repositoryPath(scope, file), fileHref(result, links, file.path, null))}${file.change === 'modified' ? '' : ` (${file.change})`}`,
+              ),
+              ...(files.length > shown.length
+                ? [`${files.length - shown.length} more in the report`]
+                : []),
+            ].join(', '),
+          )} |`,
+        ];
+  });
+  const outside = scope.files.filter((file) => !file.captured).length;
+  const first = relationRows.find(
+    (relation): relation is keyof typeof readFirst =>
+      relation in readFirst &&
+      scope.files.some((file) => file.relation === relation),
+  );
+
   return [
-    ...files
-      .slice(0, listedFiles)
-      .map(
-        (file) =>
-          `- ${fileText(file.path, fileHref(result, links, file.projectPath, null))}${file.change === 'modified' ? '' : ` (${file.change})`} · ${inlineText(`${file.relation}. ${file.detail}`)}`,
-      ),
-    ...(files.length > listedFiles
-      ? [`- ${files.length - listedFiles} more in the report.`]
-      : []),
-    ...notes.map((note) => `- ${inlineText(note)}`),
-  ].join('\n');
+    [
+      '| Evidence | Changed files |',
+      '| --- | --- |',
+      ...rows,
+      ...(scope.outside.kind === 'listed' && outside > 0
+        ? [
+            `| ${relationLabels['outside-captured-source']} | ${outside}, counted only |`,
+          ]
+        : []),
+    ].join('\n'),
+    ...(first === undefined
+      ? []
+      : [
+          `Read **${readFirst[first].word}** first. ${inlineText(readFirst[first].meaning)}`,
+        ]),
+  ].join('\n\n');
+}
+
+// What touched each listed file, and what the change scope could not record.
+function fileDetails(result: Comparison): string | null {
+  const files = capturedFiles(result);
+  const notes = scopeNotes(result);
+
+  return files.length + notes.length === 0
+    ? null
+    : collapsed(
+        'What touched each file',
+        [
+          ...files
+            .slice(0, listedFiles)
+            .map(
+              (file) =>
+                `- ${code(file.path)} · ${inlineText(`${file.relation}. ${file.detail}`)}`,
+            ),
+          ...notes.map((note) => `- ${inlineText(note)}`),
+        ].join('\n'),
+      );
+}
+
+// The browser and viewport each journey's candidate was captured with.
+function conditionsLines(result: Comparison): string[] {
+  return [
+    ...new Set(
+      result.journeys.flatMap((journey) => {
+        const conditions = journey.candidate.capture?.manifest.conditions;
+
+        return conditions?.kind === 'recorded'
+          ? [
+              `Captured in ${conditions.value.browser}, viewport ${conditions.value.viewport.width} × ${conditions.value.viewport.height} CSS px.`,
+            ]
+          : [];
+      }),
+    ),
+  ];
 }
 
 // Where the before, after and difference crops can be seen. An image is
@@ -800,6 +891,8 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
   const recipeSummary =
     result.mode === 'preview' ? null : recipeLine(result.changeScope);
   const cropsNote = screenshotsNote(result, options.screenshots ?? null);
+  const table =
+    result.mode === 'preview' ? null : scopeTable(result, frame.files);
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -809,10 +902,8 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [
             `**${label}** · ${lead === undefined ? inlineText(subject) : rowText(result, lead, frame.files)}`,
           ]),
-      kind === 'unavailable'
-        ? `${counts}. Missing evidence is not a pass.`
-        : counts,
-      ...(result.mode === 'preview'
+      `${kind === 'unavailable' ? `${counts}. Missing evidence is not a pass.` : counts} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}`,
+      ...(result.mode === 'preview' || table !== null
         ? []
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
@@ -820,11 +911,12 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),
-    ...extra(scopeFiles(result, frame.files)),
+    ...extra(table),
     ...extra(recipeList(result)),
     page === null
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
+    ...extra(fileDetails(result)),
     ...extra(passedChecks(result)),
     ...(open.length === 0 && kind !== 'unavailable'
       ? []
@@ -845,6 +937,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
         ...extra(unchanged(result)),
         ...extra(cropsNote === null ? null : inlineText(cropsNote)),
+        ...conditionsLines(result).map(inlineText),
         ...limitations.map(inlineText),
         ...(page === null
           ? []
@@ -857,7 +950,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         .map((item) => `- ${item}`)
         .join('\n'),
     ),
-    `<sub>${inlineText(checkName(options.artifact))} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}</sub>`,
+    ...(options.artifact === 'observed-bundle'
+      ? []
+      : [`<sub>${inlineText(checkName(options.artifact))}</sub>`]),
     ...extra(options.delivery),
   ].join('\n\n');
 

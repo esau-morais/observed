@@ -633,7 +633,21 @@ test(`a typical failing run's comment stays within ${String(visibleCommentLimit)
 
   expect(readable(visible).length).toBeLessThanOrEqual(visibleCommentLimit);
   expect(visible.length).toBeLessThanOrEqual(2 * visibleCommentLimit);
-  expect(visible).toContain('30 files changed outside the captured source.');
+  expect(visible).toContain(
+    '| Outside the captured source | 30, counted only |',
+  );
+  expect(
+    ['| Not observed |', '| Exercised |', '| Checked |'].map((row) =>
+      visible.indexOf(row),
+    ),
+  ).toEqual(
+    [...['| Not observed |', '| Exercised |', '| Checked |']]
+      .map((row) => visible.indexOf(row))
+      .sort((left, right) => left - right),
+  );
+  expect(visible).toContain(
+    'Read **Not observed** first. No recorded evidence touched the changed file.',
+  );
   expect(visible).not.toContain('docs/page-');
   expect(visible).not.toContain('../');
   expect(visible).toContain(
@@ -653,7 +667,7 @@ test('changed files and the verdict line link to their diff in the pull request,
     `thrown at [\`web/src/App.jsx:10\`](${diff('web/src/App.jsx')}R10)`,
   );
   expect(onPullRequest).toContain(
-    `- [\`web/src/books.js\`](${diff('web/src/books.js')}) (added)`,
+    `| Exercised | [\`web/src/books.js\`](${diff('web/src/books.js')}) (added) |`,
   );
 
   const blob = `thrown at [\`web/src/App.jsx:10\`](https://github.com/o/r/blob/${head}/web/src/App.jsx#L10)`;
