@@ -31,11 +31,20 @@ import {
 } from './evidence-kinds';
 import { json, sha256 } from './encoding';
 import path from 'node:path';
+import {
+  changeScope,
+  coverageSchemaVersion,
+  parseCoverage,
+  type CoverageRecord,
+  type ScopeJourney,
+} from './change-scope';
 import type {
+  ChangeScope,
   Check,
   CheckVerdict,
   Comparison,
   Conclusion,
+  GitChanges,
   Journey,
   JourneySelection,
   Measure,
@@ -1405,14 +1414,36 @@ export function compareJourney({
   return { ...journey, findings: journeyFindings(journey, sources) };
 }
 
+const notRecorded = {
+  coverage: {
+    kind: 'unavailable',
+    reason: 'Coverage was not read for this comparison',
+  },
+  changes: {
+    kind: 'unavailable',
+    reason:
+      'Git did not list changed files for this comparison, because it was made from capture directories',
+  },
+} as const;
+
 export function summarizeJourneys({
   journeys,
   evaluatedAt,
   mode,
+  scope = changeScope({
+    mode,
+    journeys: journeys.map((journey) => ({
+      journey,
+      sources: { base: null, candidate: null },
+      coverage: notRecorded.coverage,
+    })),
+    changes: notRecorded.changes,
+  }),
 }: {
   journeys: readonly [Journey, ...Journey[]];
   evaluatedAt: string;
   mode: 'preview' | 'comparison';
+  scope?: ChangeScope;
 }): Comparison {
   const [first] = journeys;
   const kind =
@@ -1442,6 +1473,7 @@ export function summarizeJourneys({
       kind,
       text: runConclusionText(journeys, deciding, mode),
     },
+    changeScope: scope,
   };
 }
 
@@ -1637,6 +1669,50 @@ const loadSideSource = Effect.fnUntraced(
   Effect.catchTag('EvidenceIoError', () => Effect.succeed(null)),
 );
 
+const unreadCoverage = (reason: string): CoverageRecord => ({
+  kind: 'unavailable',
+  reason,
+});
+
+const loadCoverage = Effect.fnUntraced(
+  function* (directory: string, side: Side) {
+    if (side.execution !== 'complete') {
+      return unreadCoverage('The candidate capture is not complete');
+    }
+
+    const { manifest } = side.capture;
+    const entry = manifest.evidence.find((item) => item.kind === 'coverage');
+
+    if (entry === undefined) {
+      return unreadCoverage('The capture recorded no coverage');
+    }
+
+    if (entry.status === 'unavailable') {
+      return unreadCoverage(entry.reason);
+    }
+
+    if (entry.schemaVersion !== coverageSchemaVersion) {
+      return unreadCoverage(
+        `Coverage schema version ${entry.schemaVersion} is unsupported`,
+      );
+    }
+
+    const artifact = manifest.artifacts.find(
+      (item) => item.path === entry.path && item.sha256 === entry.sha256,
+    );
+    const root = yield* nodeIo(() => realpath(directory));
+    const content =
+      artifact === undefined ? null : yield* readArtifactText(root, artifact);
+
+    return content === null
+      ? unreadCoverage('The coverage file is missing or changed')
+      : parseCoverage(content);
+  },
+  Effect.catchTag('EvidenceIoError', () =>
+    Effect.succeed(unreadCoverage('The coverage file could not be read')),
+  ),
+);
+
 export const inspectJourney = Effect.fn('inspectJourney')(function* ({
   baseDirectory,
   candidateDirectory,
@@ -1698,23 +1774,31 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
     pixels.visual.kind === 'changed'
       ? { ...pixels.visual, diff: { ...pixels.visual.diff, path: diffPath } }
       : pixels.visual;
+  const sources = {
+    base:
+      mode === 'comparison' ? yield* loadSideSource(baseDirectory, base) : null,
+    candidate: yield* loadSideSource(candidateDirectory, candidate),
+  };
   const journey = compareJourney({
     base,
     candidate,
     evaluatedAt,
     visual,
     mode,
-    sources: {
-      base:
-        mode === 'comparison'
-          ? yield* loadSideSource(baseDirectory, base)
-          : null,
-      candidate: yield* loadSideSource(candidateDirectory, candidate),
-    },
+    sources,
   });
+  const scope: ScopeJourney = {
+    journey,
+    sources,
+    coverage:
+      mode === 'comparison'
+        ? yield* loadCoverage(candidateDirectory, candidate)
+        : unreadCoverage('A preview has no change scope'),
+  };
 
   return {
     journey,
+    scope,
     visualDiff:
       journey.comparison.kind === 'available' && pixels.diff !== null
         ? { path: diffPath, bytes: pixels.diff.bytes }
@@ -1748,11 +1832,18 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
     return yield* Effect.die('A selection has at least one journey');
   }
 
+  const changes: GitChanges = selection.changes ?? notRecorded.changes;
+
   return {
     result: summarizeJourneys({
       journeys: [first, ...rest],
       evaluatedAt: selection.evaluatedAt,
       mode: selection.mode,
+      scope: changeScope({
+        mode: selection.mode,
+        journeys: inspected.map((item) => item.scope),
+        changes,
+      }),
     }),
     visualDiffs: inspected.flatMap((item) =>
       item.visualDiff === null ? [] : [item.visualDiff],

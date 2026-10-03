@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import { recipeSchema } from './capture/recipe';
 import { evidenceViewSchema } from './evidence-kinds';
 import {
@@ -314,6 +314,11 @@ const changedLinesSchema = Schema.Struct({
   notRan: Schema.Array(lineRangeSchema),
 });
 
+const unavailableSchema = Schema.Struct({
+  kind: Schema.Literal('unavailable'),
+  reason: text,
+});
+
 const scopeFileIdentity = {
   path: text,
   change: Schema.Literals(['added', 'removed', 'modified']),
@@ -411,35 +416,41 @@ const recipeDifferenceSchema = Schema.Union([
 
 const recipeScopeSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('unchanged') }),
-  Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+  unavailableSchema,
   Schema.Struct({
     kind: Schema.Literal('changed'),
     differences: Schema.NonEmptyArray(recipeDifferenceSchema),
   }),
 ]);
 
-const reasonOr = <S extends Schema.Top>(listed: S) =>
-  Schema.Union([
-    listed,
-    Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
-  ]);
+// Names Git reports as changed between the base and candidate revisions,
+// relative to the project directory. Recorded at capture time, since the
+// comparator reads only capture directories.
+export const gitChangesSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('listed'),
+    files: Schema.Array(Schema.Struct(scopeFileIdentity)),
+  }),
+  unavailableSchema,
+]);
+
+export type GitChanges = typeof gitChangesSchema.Type;
 
 export const changeScopeSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('unavailable'), reason: text }),
+  unavailableSchema,
   Schema.Struct({
     kind: Schema.Literal('recorded'),
     sources: Schema.Struct({ base: digest, candidate: digest }),
     files: Schema.Array(scopeFileSchema),
-    // Git names changed files that neither snapshot contains.
-    outside: reasonOr(Schema.Struct({ kind: Schema.Literal('listed') })),
+    // Whether Git listed changed files that neither snapshot contains.
+    outside: Schema.Union([
+      Schema.Struct({ kind: Schema.Literal('listed') }),
+      unavailableSchema,
+    ]),
     coverage: Schema.Array(
       Schema.Union([
         Schema.Struct({ journey: text, kind: Schema.Literal('recorded') }),
-        Schema.Struct({
-          journey: text,
-          kind: Schema.Literal('unavailable'),
-          reason: text,
-        }),
+        Schema.Struct({ journey: text, ...unavailableSchema.fields }),
       ]),
     ),
     recipe: recipeScopeSchema,
@@ -460,6 +471,8 @@ export type ScopeFile = typeof scopeFileSchema.Type;
 export type ChangedLines = typeof changedLinesSchema.Type;
 
 export type LineRange = typeof lineRangeSchema.Type;
+
+export type RecipeScope = typeof recipeScopeSchema.Type;
 
 export const resultSchemaVersion = 8;
 
@@ -483,6 +496,27 @@ export const comparisonSchema = Schema.Struct({
 );
 
 export type Comparison = typeof comparisonSchema.Type;
+
+const resultVersion = Schema.Struct({ schemaVersion: Schema.Int });
+
+// Results are not upgraded; an older one needs new captures, as an older
+// capture manifest does.
+export function resultVersionProblem(input: unknown): string | null {
+  const version = Schema.decodeUnknownOption(resultVersion)(input);
+
+  if (
+    Option.isNone(version) ||
+    version.value.schemaVersion === resultSchemaVersion
+  ) {
+    return null;
+  }
+
+  const found = version.value.schemaVersion;
+
+  return found < resultSchemaVersion
+    ? `Result schema version ${found} is unsupported. This Observed reads version ${resultSchemaVersion}. Capture both revisions again.`
+    : `Result schema version ${found} is unsupported. It was written by a newer Observed than this one, which reads version ${resultSchemaVersion}. Update Observed.`;
+}
 
 export type Journey = typeof journeySchema.Type;
 
@@ -541,6 +575,7 @@ export const selectionSchema = Schema.Struct({
   evaluatedAt: timestamp,
   mode: Schema.Literals(['preview', 'comparison']),
   journeys: Schema.NonEmptyArray(journeySelectionSchema),
+  changes: Schema.optionalKey(gitChangesSchema),
 }).check(
   Schema.makeFilter(
     (selection) =>
