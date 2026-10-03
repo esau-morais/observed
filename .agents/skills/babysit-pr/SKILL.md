@@ -39,12 +39,11 @@ branch and one reviewable slice.
 4. Fix actionable findings and run applicable checks from `package.json`. Review
    the changed hunks again after fixes. Reuse successful checks only while their
    inputs and relevant environment remain unchanged.
-5. Commit intended paths, push, and open or update the PR with scoped results,
-   each review finding as fixed, declined with a reason, or open, and remaining
-   unknowns. Run rebase, commit, push, and PR creation as separate commands and
-   stop at the first failure; after an interruption, check HEAD and the remote
-   before retrying. Local evidence paths are not GitHub attachments. Use
-   Conventional Commit subjects and PR titles.
+5. Commit intended paths, push, and open or update the PR with a description
+   written as [below](#write-the-pr-description). Run rebase, commit, push, and
+   PR creation as separate commands and stop at the first failure; after an
+   interruption, check HEAD and the remote before retrying. Use Conventional
+   Commit subjects and PR titles.
 
 For instruction changes, review local links and run:
 
@@ -59,6 +58,35 @@ git ls-files evidence
 
 The last command must list no routine captures. A resolving symlink establishes
 the filesystem layout, not skill discovery in every host.
+
+## Write the PR description
+
+Write for a reviewer deciding whether to merge, and apply
+[unslop](../unslop/SKILL.md) before posting. State facts and decisions, without
+self-assessment or persuasion. Write prose and headings in lowercase, keeping
+the case of proper nouns, acronyms, code, paths, commands, and quoted output,
+such as AI, GitHub, React, Slack, and Observed. The title and commits keep their
+Conventional Commit form.
+
+Include:
+
+- what changed for people using Observed or working on it, and why. Name the
+  behavior, not each file.
+- evidence: a link to each run, trial PR, screenshot, or artifact, with its
+  result in one line. Use a table only to compare several runs, one short line
+  per row.
+- checks CI does not run, such as instruction-change commands, seeded faults,
+  or browser checks, each with its result in one line.
+- what no check covered, open questions, and any review step that could not
+  run, such as unavailable review agents.
+- review findings that were declined, with the reason, or are still open.
+
+Leave out what the diff, the commit list, or CI already shows: file-by-file
+narration, lists of test cases, output of checks CI runs, fixed review findings,
+review rounds, process notes, and repeated caveats. Local evidence paths are
+not GitHub attachments; name them only as locations in the maintainer's
+checkout. Length follows the change. A version bump takes a few lines; a new
+evidence kind can take several paragraphs.
 
 ## Handle feedback as one cycle
 
@@ -76,9 +104,10 @@ inspect the code and failing job output before acting.
 For each supported finding: fix, verify, commit, push, reply with the result, and
 resolve the addressed thread in the same cycle. Re-fetch to confirm resolution.
 Explain disagreements and leave unresolved concerns open. Replies are short and
-lowercase, preserving code and identifier case. Never post placeholder replies.
-If a shared account's pending review blocks inline replies, do not submit or
-delete that review; post one linked PR comment instead of repeating failed calls.
+follow the [description's case rule](#write-the-pr-description). Never post
+placeholder replies. If a shared account's pending review blocks inline
+replies, do not submit or delete that review; post one linked PR comment
+instead of repeating failed calls.
 
 Watch pending checks with `gh pr checks --watch`, then fetch review state again.
 That command does not watch reviews. During an active review session, start an
