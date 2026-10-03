@@ -157,7 +157,7 @@ const styles = stylex.create({
   journeyGroup: { borderStyle: 'dashed' },
   groupLabel: {
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surface,
     borderRadius: 6,
     borderWidth: 0,
     color: colors.textSecondary,
@@ -185,6 +185,7 @@ const styles = stylex.create({
     },
   },
   layerLabel: {
+    backgroundColor: colors.surface,
     color: colors.textMuted,
     fontFamily: fonts.mono,
     fontSize: '0.75rem',
