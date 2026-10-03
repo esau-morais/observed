@@ -94,6 +94,15 @@ Checked 2026-10-03 from docs and source; screenshots of several are in `referenc
 | Structurizr | not found | Keyboard model: `n` select by name, `i` legend, `c` fit, `b` back, arrow keys |
 | Archify (external screenshot) | not found | Upstream and downstream reach counts on the selected node |
 
+The coordinator's reference set (`references/external/INDEX.md`) adds four that fill gaps the _overment map leaves. The _overment map stays the target; these only answer what it doesn't have to.
+
+| Reference | What it does | What the build takes |
+| --- | --- | --- |
+| Nx project graph (`architecture-nx-project-graph*.png`) | A folder folds into one node with a count (`./apps (5 / 5)`). Clicking a node opens a panel with kind, root path, direct dependencies, direct dependents, then Focus and Start trace. Unrelated nodes fade to gray. | Directories are already single cards with "N files · M changed". A crowded level also folds its unchanged files into one "N unchanged files" card that opens like a directory. The panel lists outgoing and incoming as Nx lists dependencies and dependents. |
+| Archify (`architecture-archify-focus-reach.png`) | The focused node and its reach sit in the URL hash (`#focus=planner&reach=downstream`), so a link opens that exact view. Reach is counted: Upstream 2, Downstream 8, "8 nodes, 8 links, max 5 hops". | The open level and selected block go in the hash (`#map=src/viewer&block=file:src/viewer/change-map.tsx`), so a PR comment or a teammate can link to one block. The panel counts reach over recorded imports, upstream and downstream, with the hop limit stated. |
+| GitHub Next repo visualizer (`architecture-githubnext-repo-visualization*.png`) | One circle-packing layout with switchable color layers: file type, last change date, number of changes. Import edges appear only when a file is hovered. | One layout. Color carries one channel, the evidence relation (checked, exercised, not observed, outside, unchanged). On a crowded level, edges rest faded and draw in full only for the block in focus. A second color layer was not added: the relation is the channel that answers the review question, and a switch would add a control without new evidence. |
+| HumanLayer show-me (`architecture-showme-file-tree-diff.png`, `-call-stack-diff.png`) | A nested tree with a `+` or `-` gutter and one note per file, `# unchanged` for files read but not edited. The call-stack diff nests the new subtree where it now runs. | The table view becomes a file tree with a change gutter (`+` added, `~` modified, `-` removed), the relation chip, and the one-sentence detail per file. It is also the lead view when no captured file changed: the tree shows the outside files with their count, in place of an empty map. |
+
 Taken into the build: name plus path subtitle, unchanged context files hidden on crowded levels (CodeSee's toggle), Escape to clear then go up (dependency-cruiser), edge tooltip listing the connections behind it (Nx), packages and routes folded into one card each (Nx's composite nodes).
 
 ## Map and page constraints

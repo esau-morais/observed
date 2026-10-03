@@ -9,12 +9,13 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { recipeLines, scopeLine } from '../change-scope-text';
+import { fileDetail, recipeLines, scopeLine } from '../change-scope-text';
 import type {
   Comparison,
   MapBlock,
   MapConnection,
   MapEvidence,
+  ScopeFile,
 } from '../comparison-model';
 import {
   anchorLocation,
@@ -46,8 +47,11 @@ import {
   levelTrail,
   openLevel,
   parentLevel,
+  directoryCard,
   partsLabel,
+  reach,
   repoPath,
+  statusOf,
   type Card,
   type Level,
   type Link,
@@ -132,6 +136,12 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
   },
   pillEmpty: { color: colors.textMuted, opacity: 0.6 },
+  countRow: {
+    alignItems: 'center',
+    display: 'flex',
+    justifyContent: 'space-between',
+    minHeight: 24,
+  },
   pillCount: {
     color: colors.textMuted,
     fontVariantNumeric: 'tabular-nums',
@@ -544,7 +554,37 @@ const styles = stylex.create({
   headCell: { color: colors.textMuted, fontWeight: 500 },
   quiet: {
     display: 'grid',
-    gap: 8,
+    gap: 12,
+  },
+  treeWrap: {
+    display: 'grid',
+    gap: 12,
+    maxWidth: '100%',
+    overflowX: 'auto',
+    padding: { default: 16, [media.desktop]: 24 },
+  },
+  tree: {
+    display: 'grid',
+    gap: 2,
+    listStyle: 'none',
+    margin: 0,
+    paddingInlineStart: 0,
+  },
+  treeNested: { paddingInlineStart: 20 },
+  treeFile: { display: 'grid', gap: 0, paddingBlock: 2 },
+  treeRow: { alignItems: 'center', display: 'flex', gap: 8, minHeight: 24 },
+  gutter: {
+    color: colors.textMuted,
+    flexShrink: 0,
+    fontFamily: fonts.mono,
+    fontSize: '0.8125rem',
+    textAlign: 'center',
+    width: 16,
+  },
+  treeNote: {
+    color: colors.textSecondary,
+    fontSize: '0.8125rem',
+    paddingInlineStart: 24,
   },
   heading: {
     fontSize: '1.5rem',
@@ -1664,6 +1704,58 @@ function VerdictEvidence({
   );
 }
 
+function Reach({ index, card }: { index: MapIndex; card: Card }) {
+  const found = reach(index, card);
+
+  if (found === null) {
+    return null;
+  }
+
+  const line = (count: number, hops: number, verb: string) =>
+    count === 0
+      ? `No file on the map ${verb}.`
+      : `${count} ${count === 1 ? 'file' : 'files'} ${verb}, up to ${hops} ${hops === 1 ? 'hop' : 'hops'} away.`;
+
+  return (
+    <section {...stylex.props(styles.group)}>
+      <h4 {...stylex.props(styles.panelHeading)}>Reach on this map</h4>
+      <p {...stylex.props(styles.text)}>
+        Upstream: {line(found.upstream.files, found.upstream.hops, 'imports it')}
+      </p>
+      <p {...stylex.props(styles.text)}>
+        Downstream:{' '}
+        {line(found.downstream.files, found.downstream.hops, 'is imported by it')}
+      </p>
+    </section>
+  );
+}
+
+function Counts({ index }: { index: MapIndex }) {
+  const files = index.scope.files;
+  const rows = (
+    ['checked', 'exercised', 'not-observed', 'outside-captured-source'] as const
+  ).map((relation) => ({
+    status: statusOf(relation),
+    count: files.filter((file) => file.relation === relation).length,
+  }));
+
+  return (
+    <section {...stylex.props(styles.group)}>
+      <h4 {...stylex.props(styles.panelHeading)}>
+        Changed files ({files.length})
+      </h4>
+      <ul {...stylex.props(styles.list)}>
+        {rows.map(({ status, count }) => (
+          <li key={status.label} {...stylex.props(styles.countRow)}>
+            <StatusChip status={status} />
+            <span {...stylex.props(styles.pillCount)}>{count}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function Panel({
   index,
   level,
@@ -1687,12 +1779,9 @@ function Panel({
   );
   const links = [...level.links, ...level.journeyLinks];
   const root = level.path === index.root;
-  const path =
-    card === null
-      ? root
-        ? null
-        : `${repoPath(index.scope, level.path)}/`
-      : cardPath(index, card);
+  // With nothing selected the panel describes the open level, as the
+  // reference does.
+  const shown = card ?? (root ? null : directoryCard(index, level.path));
 
   return (
     <aside
@@ -1704,32 +1793,34 @@ function Panel({
       <div {...stylex.props(styles.group)}>
         <span {...stylex.props(styles.titleRow)}>
           <span {...stylex.props(styles.chip, styles.kindChip)}>
-            {card === null
-              ? root
-                ? 'project'
-                : 'directory'
-              : cardKinds[card.kind]}
+            {shown === null ? 'project' : cardKinds[shown.kind]}
           </span>
-          {card === null ? null : <StatusChip status={card.status} />}
+          {shown === null ? null : <StatusChip status={shown.status} />}
         </span>
         <h3 {...stylex.props(styles.panelName)}>
-          {card === null ? level.name : card.name}
+          {shown === null ? index.result.title : shown.name}
         </h3>
-        {path === null ? null : (
-          <p {...stylex.props(styles.mono, styles.muted)}>{path}</p>
+        {shown === null || cardPath(index, shown) === null ? null : (
+          <p {...stylex.props(styles.mono, styles.muted)}>
+            {cardPath(index, shown)}
+          </p>
         )}
-        <p {...stylex.props(styles.text)}>
-          {card === null ? scopeLine(index.scope) : cardSentence(index, card)}
-        </p>
+        {shown === null ? null : (
+          <p {...stylex.props(styles.text)}>{cardSentence(index, shown)}</p>
+        )}
       </div>
-      {card === null ? (
-        <VerdictEvidence result={index.result} map={index.map} />
+      {shown === null ? (
+        <>
+          <Counts index={index} />
+          <VerdictEvidence result={index.result} map={index.map} />
+        </>
       ) : (
         <>
-          <Sources index={index} card={card} />
-          <Parts index={index} card={card} onOpen={onOpen} />
-          <JourneyFacts index={index} card={card} />
-          {card.kind === 'outside-files' ? null : (
+          <Sources index={index} card={shown} />
+          <Parts index={index} card={shown} onOpen={onOpen} />
+          <Reach index={index} card={shown} />
+          <JourneyFacts index={index} card={shown} />
+          {card === null || card.kind === 'outside-files' ? null : (
             <>
               <ConnectionRows
                 title="Outgoing"
@@ -1757,59 +1848,81 @@ function Panel({
   );
 }
 
-function ScopeTable({ result }: { result: Comparison }) {
-  const { rows, notes } = scopeTable(result);
+type MapState = {
+  directory: string;
+  showUnchanged: boolean;
+  selection: Selection;
+};
 
-  return (
-    <div
-      role="region"
-      aria-label="Changed files table"
-      tabIndex={0}
-      {...stylex.props(styles.tableWrap)}
-    >
-      <table {...stylex.props(styles.table)}>
-        <caption {...stylex.props(styles.caption)}>
-          Each changed file and the evidence that touched it
-        </caption>
-        <thead>
-          <tr>
-            {['File', 'Change', 'Relation', 'Evidence'].map((label) => (
-              <th
-                key={label}
-                scope="col"
-                {...stylex.props(styles.cell, styles.headCell)}
-              >
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.path}>
-              <th scope="row" {...stylex.props(styles.cell, styles.mono)}>
-                {row.path}
-              </th>
-              <td {...stylex.props(styles.cell)}>{row.change}</td>
-              <td {...stylex.props(styles.cell)}>
-                <ToneChip tone={row.chip.tone} label={row.chip.label} />
-              </td>
-              <td {...stylex.props(styles.cell, styles.text)}>{row.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {notes.length === 0 ? null : (
-        <ul {...stylex.props(styles.list)}>
-          {notes.map((note) => (
-            <li key={note} {...stylex.props(styles.text, styles.muted)}>
-              {note}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+// The open level and selected block live in the URL hash, as Archify keeps
+// its focus, so a link opens the same view: `#map=src&block=file:src/a.ts`.
+function readHash(index: MapIndex): MapState {
+  const fallback = { directory: index.root, showUnchanged: false, selection: null };
+
+  if (typeof location === 'undefined' || !location.hash.startsWith('#map=')) {
+    return fallback;
+  }
+
+  const params = new URLSearchParams(location.hash.slice(1));
+  const directory = params.get('map') ?? index.root;
+  const known =
+    directory === index.root ||
+    index.captured.some((block) => block.path.startsWith(`${directory}/`));
+
+  if (!known || !(directory === index.root || directory.startsWith(index.root))) {
+    return fallback;
+  }
+
+  const block = params.get('block');
+
+  return {
+    directory,
+    showUnchanged: params.get('unchanged') === 'shown',
+    selection: block === null ? null : { kind: 'card', id: block },
+  };
+}
+
+function writeHash(index: MapIndex, state: MapState) {
+  const params = new URLSearchParams();
+
+  params.set('map', state.directory);
+
+  if (state.showUnchanged) {
+    params.set('unchanged', 'shown');
+  }
+
+  if (state.selection !== null) {
+    params.set('block', state.selection.id);
+  }
+
+  const hash =
+    state.directory === index.root &&
+    !state.showUnchanged &&
+    state.selection === null
+      ? ''
+      : `#${params.toString()}`;
+
+  if (hash !== location.hash && (hash !== '' || location.hash.startsWith('#map='))) {
+    history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+  }
+}
+
+function useWide() {
+  const query = '(min-width: 960px)';
+  const [wide, setWide] = useState(
+    () => typeof matchMedia === 'undefined' || matchMedia(query).matches,
   );
+
+  useEffect(() => {
+    const list = matchMedia(query);
+    const update = () => setWide(list.matches);
+
+    list.addEventListener('change', update);
+
+    return () => list.removeEventListener('change', update);
+  }, []);
+
+  return wide;
 }
 
 function MapSection({
@@ -1829,12 +1942,17 @@ function MapSection({
     () => indexMap(result, map, scope),
     [result, map, scope],
   );
-  const [directory, setDirectory] = useState(index.root);
-  const [selection, setSelection] = useState<Selection>(null);
+  const [state, setState] = useState<MapState>(() => readHash(index));
   const [focusId, setFocusId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const changedByUser = useRef(false);
   const panel = useRef<HTMLElement>(null);
-  const level = useMemo(() => openLevel(index, directory), [index, directory]);
+  const wide = useWide();
+  const { directory, showUnchanged, selection } = state;
+  const level = useMemo(
+    () => openLevel(index, directory, showUnchanged),
+    [index, directory, showUnchanged],
+  );
   const root = directory === index.root;
   const cards = useMemo(
     () =>
@@ -1857,36 +1975,53 @@ function MapSection({
     0,
   );
 
-  const go = (next: string, focus: string | null) => {
-    setDirectory(next);
-    setSelection(null);
-    setFocusId(focus);
-    const opened = openLevel(index, next);
+  useEffect(() => {
+    if (changedByUser.current) {
+      writeHash(index, state);
+    }
+  }, [index, state]);
 
-    setAnnouncement(`Opened ${opened.name}: ${opened.inside.length} blocks.`);
+  const update = (next: MapState, focus: string | null) => {
+    changedByUser.current = true;
+    setState(next);
+    setFocusId(focus);
   };
 
-  const open = (card: Card) => {
-    if (card.kind === 'directory' && level.inside.includes(card)) {
-      go(card.path, null);
+  const go = (next: string, focus: string | null) => {
+    update({ directory: next, showUnchanged: false, selection: null }, focus);
+    const opened = openLevel(index, next);
 
-      return;
-    }
-
-    if (
-      card.kind === 'directory' &&
-      !level.inside.some((item) => item.id === card.id)
-    ) {
-      go(card.path, null);
-
-      return;
-    }
-
-    setSelection(
-      selection?.id === card.id ? null : { kind: 'card', id: card.id },
+    setAnnouncement(
+      `Opened ${opened.name}: ${opened.inside.length} blocks, ${opened.outside.length} outside.`,
     );
   };
 
+  const open = (card: Card) => {
+    if (card.kind === 'directory') {
+      go(card.path, null);
+
+      return;
+    }
+
+    if (card.kind === 'unchanged-files') {
+      update({ ...state, showUnchanged: true, selection: null }, null);
+      setAnnouncement(`Showing ${card.paths.length} unchanged files.`);
+
+      return;
+    }
+
+    update(
+      {
+        ...state,
+        selection:
+          selection?.id === card.id ? null : { kind: 'card', id: card.id },
+      },
+      null,
+    );
+  };
+
+  // Escape clears the selection, then folds unchanged files back, then goes
+  // up a level.
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape') {
       return;
@@ -1894,8 +2029,14 @@ function MapSection({
 
     if (selection !== null) {
       event.preventDefault();
-      setFocusId(selection.id);
-      setSelection(null);
+      update({ ...state, selection: null }, selection.id);
+
+      return;
+    }
+
+    if (showUnchanged && openLevel(index, directory).inside.some((card) => card.kind === 'unchanged-files')) {
+      event.preventDefault();
+      update({ ...state, showUnchanged: false }, `unchanged:${directory}`);
 
       return;
     }
@@ -1909,6 +2050,15 @@ function MapSection({
   };
 
   const trail = levelTrail(index, directory);
+  const legend = (
+    <>
+      <Legend level={level} />
+      <p {...stylex.props(styles.hint)}>
+        Arrows point from the importer to the imported file. Select a block with
+        parts to open it. Escape goes up.
+      </p>
+    </>
+  );
 
   return (
     <div onKeyDown={onKeyDown} {...stylex.props(styles.section)}>
@@ -1952,15 +2102,16 @@ function MapSection({
               ? ''
               : ` · ${journeyTotal} journey links show on hover`}
           </p>
-          {view === 'map' ? (
-            <>
-              <Legend level={level} />
-              <p {...stylex.props(styles.hint)}>
-                Arrows point from the importer to the imported file. Select a
-                block with parts to open it. Escape goes up.
-              </p>
-            </>
-          ) : null}
+          {view !== 'map' ? null : wide ? (
+            legend
+          ) : (
+            <details>
+              <summary {...stylex.props(styles.summary, styles.hint)}>
+                Legend and keys
+              </summary>
+              {legend}
+            </details>
+          )}
           <p aria-live="polite" {...stylex.props(styles.srOnly)}>
             {announcement}
           </p>
@@ -1975,7 +2126,7 @@ function MapSection({
             onOpen={open}
           />
         ) : (
-          <ScopeTable result={result} />
+          <FileTree index={index} />
         )}
       </div>
       <Panel
@@ -1992,6 +2143,119 @@ function MapSection({
         }}
         panelRef={panel}
       />
+    </div>
+  );
+}
+
+type TreeNode = {
+  name: string;
+  path: string;
+  files: ScopeFile[];
+  directories: TreeNode[];
+};
+
+const gutters = { added: '+', modified: '~', removed: '-' } as const;
+
+function fileTree(index: MapIndex): TreeNode {
+  const top: TreeNode = { name: '', path: '', files: [], directories: [] };
+
+  for (const file of index.scope.files) {
+    const parts = repoPath(index.scope, file.path).split('/');
+    let node = top;
+
+    for (const part of parts.slice(0, -1)) {
+      const path = node.path === '' ? part : `${node.path}/${part}`;
+      let child = node.directories.find((item) => item.path === path);
+
+      if (child === undefined) {
+        child = { name: part, path, files: [], directories: [] };
+        node.directories.push(child);
+      }
+
+      node = child;
+    }
+
+    node.files.push(file);
+  }
+
+  // A directory with one directory and no files reads as one path segment.
+  const squash = (node: TreeNode): TreeNode => {
+    const directories = node.directories.map(squash);
+    const [only] = directories;
+
+    if (node.path !== '' && node.files.length === 0 && directories.length === 1 && only !== undefined) {
+      return { ...only, name: `${node.name}/${only.name}` };
+    }
+
+    return { ...node, directories };
+  };
+
+  return squash(top);
+}
+
+function TreeLevel({
+  index,
+  node,
+  nested = false,
+}: {
+  index: MapIndex;
+  node: TreeNode;
+  nested?: boolean;
+}) {
+  return (
+    <ul {...stylex.props(styles.tree, nested && styles.treeNested)}>
+      {node.directories.map((directory) => (
+        <li key={directory.path}>
+          <span {...stylex.props(styles.treeRow)}>
+            <span aria-hidden="true" {...stylex.props(styles.gutter)} />
+            <span {...stylex.props(styles.mono)}>{directory.name}/</span>
+          </span>
+          <TreeLevel index={index} node={directory} nested />
+        </li>
+      ))}
+      {node.files.map((file) => (
+        <li key={file.path} {...stylex.props(styles.treeFile)}>
+          <span {...stylex.props(styles.treeRow)}>
+            <span {...stylex.props(styles.gutter)}>
+              <span aria-hidden="true">{gutters[file.change]}</span>
+              <span {...stylex.props(styles.srOnly)}>{file.change}</span>
+            </span>
+            <span {...stylex.props(styles.mono)}>
+              {repoPath(index.scope, file.path).split('/').at(-1)}
+            </span>
+            <StatusChip status={statusOf(file.relation)} />
+          </span>
+          <span {...stylex.props(styles.treeNote)}>
+            {fileDetail(index.result, file)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// The change as a file tree with a change gutter and one note per file, like
+// HumanLayer's show-me file tree diff.
+function FileTree({ index }: { index: MapIndex }) {
+  const { notes } = scopeTable(index.result);
+
+  return (
+    <div
+      role="region"
+      aria-label="Changed files"
+      tabIndex={0}
+      {...stylex.props(styles.treeWrap)}
+    >
+      <TreeLevel index={index} node={fileTree(index)} />
+      {notes.length === 0 ? null : (
+        <ul {...stylex.props(styles.list)}>
+          {notes.map((note) => (
+            <li key={note} {...stylex.props(styles.text, styles.muted)}>
+              {note}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -2019,14 +2283,12 @@ export function ChangeScopeView({
           Changed files
         </h2>
         <p {...stylex.props(styles.text)}>{scopeLine(scope)}</p>
-        {map === null &&
-        result.changeMap.kind === 'unavailable' &&
-        captured > 0 ? (
+        {map === null && result.changeMap.kind === 'unavailable' ? (
           <p {...stylex.props(styles.text, styles.muted)}>
             Map unavailable: {result.changeMap.reason}
           </p>
         ) : null}
-        {captured > 0 ? <ScopeTable result={result} /> : null}
+        <FileTree index={quietIndex(result, scope)} />
       </section>
     );
   }
@@ -2045,7 +2307,7 @@ export function ChangeScopeView({
           onClick={() => setView(item)}
           {...stylex.props(styles.toggle, view === item && styles.pressed)}
         >
-          {item === 'map' ? 'Map' : 'Table'}
+          {item === 'map' ? 'Map' : 'Files'}
         </button>
       ))}
     </span>
@@ -2061,5 +2323,17 @@ export function ChangeScopeView({
         toolbar={toolbar}
       />
     </section>
+  );
+}
+
+// The file tree needs only the scope, so it works when the map is
+// unavailable.
+function quietIndex(result: Comparison, scope: RecordedScope): MapIndex {
+  return indexMap(
+    result,
+    result.changeMap.kind === 'recorded'
+      ? result.changeMap
+      : { kind: 'recorded', blocks: [], connections: [] },
+    scope,
   );
 }

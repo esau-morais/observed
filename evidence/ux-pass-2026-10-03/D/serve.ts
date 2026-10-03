@@ -13,7 +13,7 @@ Bun.serve({
     const name = decodeURIComponent(rest.join('/')) || 'index.html';
     const fromViewer = name === 'index.html' || name.startsWith('assets/');
     const file = Bun.file(path.join(fromViewer ? viewer! : report, name));
-    return (await file.exists()) ? new Response(file) : new Response('missing ' + name, { status: 404 });
+    return (await file.exists()) ? new Response(file, { headers: { 'Cache-Control': 'no-store' } }) : new Response('missing ' + name, { status: 404 });
   },
 });
 console.log(`serving ${reports.length} reports on ${port}`);

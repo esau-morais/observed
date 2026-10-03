@@ -25,10 +25,10 @@ export const darkColors = stylex.createTheme(colors, {
   unknown: '#BAD0DF',
   unknownFill: '#263540',
   linkImports: '#C0CDCC',
-  linkRanIn: '#86C9C0',
-  linkRequested: '#E1C17A',
-  linkThrewAt: '#EBA3C4',
-  linkCheckedBy: '#AFC0F5',
+  linkRanIn: '#4EA988',
+  linkRequested: '#D36D00',
+  linkThrewAt: '#AA56AE',
+  linkCheckedBy: '#6573F4',
 });
 
 export const darkEffects = stylex.createTheme(effects, {

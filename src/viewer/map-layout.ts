@@ -335,6 +335,7 @@ export function layoutGraph(
 
   const chains = new Map<string, { path: string[]; reversed: boolean }>();
   const segments: Segment[] = [];
+  const segmentKeys = new Set<string>();
 
   for (const edge of [...usable].sort((left, right) =>
     byId(left.id, right.id),
@@ -353,18 +354,23 @@ export function layoutGraph(
     const [start, end] = reversed ? [to, from] : [from, to];
     const path = [top];
 
+    // Long edges from the same node share one lane per row, so they run
+    // as one bundle and split only where their targets are.
     for (let rank = start + 1; rank < end; rank += 1) {
-      const id = `lane:${edge.id}:${rank}`;
+      const id = `lane:${top}:${rank}`;
 
-      slots.set(id, {
-        id,
-        width: laneWidth,
-        height: 0,
-        real: false,
-        rank,
-        x: 0,
-      });
-      rows[rank]?.push(id);
+      if (!slots.has(id)) {
+        slots.set(id, {
+          id,
+          width: laneWidth,
+          height: 0,
+          real: false,
+          rank,
+          x: 0,
+        });
+        rows[rank]?.push(id);
+      }
+
       path.push(id);
     }
 
@@ -372,7 +378,13 @@ export function layoutGraph(
     chains.set(edge.id, { path, reversed });
 
     for (let index = 1; index < path.length; index += 1) {
-      segments.push({ from: path[index - 1] ?? '', to: path[index] ?? '' });
+      const segment = { from: path[index - 1] ?? '', to: path[index] ?? '' };
+      const key = `${segment.from}\u0000${segment.to}`;
+
+      if (!segmentKeys.has(key)) {
+        segmentKeys.add(key);
+        segments.push(segment);
+      }
     }
   }
 

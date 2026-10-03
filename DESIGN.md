@@ -123,15 +123,15 @@ Relation chips use the evidence colors. Only "Checked" uses the checked color, b
 | Not observed | unknown | ? |
 | Outside the captured source | unknown | ∅ |
 
-Each connection type has its own color and line pattern, so the type survives without color. The legend shows both. Every color has at least 5.3:1 against canvas, surface, and muted surface in its theme.
+Each connection type has its own color and line pattern, so the type survives without color. The legend shows both. The five colors pass the dataviz palette validator (2026-10-03) in both themes with every pair compared: OKLab ΔE at least 11 under protanopia and deuteranopia and at least 15 with normal vision. Each has at least 3:1 against canvas, surface, and muted surface, the non-text minimum. The imports neutral is a deliberate gray, so it falls outside the validator's categorical lightness and chroma bands. Connection words in text use text tokens beside a colored line sample, never the line color.
 
 | Connection | Light | Dark | Pattern |
 | --- | --- | --- | --- |
-| Imports | #45595E | #C0CDCC | Solid |
-| Ran in | #276A6A | #86C9C0 | Dash 7 4 |
-| Requested | #80570F | #E1C17A | Dot 2 4 |
-| Threw at | #8E3B63 | #EBA3C4 | Dash-dot 9 3 2 3 |
-| Checked by | #3D4F99 | #AFC0F5 | Long dash 14 4 |
+| Imports | #233236 | #C0CDCC | Solid |
+| Ran in | #0F927E | #4EA988 | Dash 7 4 |
+| Requested | #9E6E1A | #D36D00 | Dot 2 4 |
+| Threw at | #75386D | #AA56AE | Dash-dot 9 3 2 3 |
+| Checked by | #1D56B9 | #6573F4 | Long dash 14 4 |
 | Import the change removed | Imports color | Imports color | Round dots 1 5 |
 
 ### Contrast baseline

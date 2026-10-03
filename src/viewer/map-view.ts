@@ -47,6 +47,13 @@ export type Card =
       status: Status;
     }
   | {
+      kind: 'unchanged-files';
+      id: string;
+      name: string;
+      paths: string[];
+      status: Status;
+    }
+  | {
       kind: 'outside-files';
       id: string;
       name: string;
@@ -288,7 +295,7 @@ export const packagesId = 'packages';
 // Routes share one journey-row card; its panel lists them.
 export const routesId = 'routes';
 
-function directoryCard(index: MapIndex, path: string): Card {
+export function directoryCard(index: MapIndex, path: string): Card {
   const inside = index.captured.filter((block) => under(block.path, path));
   const changed = inside.flatMap((block) => {
     const file = index.files.get(block.path);
@@ -493,8 +500,36 @@ function cardFor(
   }
 }
 
-export function openLevel(index: MapIndex, directory: string): Level {
-  const inside = children(index, directory);
+// A level with more blocks than this folds its unchanged files into one card
+// until the reader opens it, as Nx folds a directory and CodeSee hides
+// unchanged files.
+export const crowded = 20;
+
+export const unchangedId = (directory: string) => `unchanged:${directory}`;
+
+export function openLevel(
+  index: MapIndex,
+  directory: string,
+  showUnchanged = false,
+): Level {
+  const all = children(index, directory);
+  const quiet = all.filter(
+    (card) => card.kind === 'file' && card.file === undefined,
+  );
+  const fold = !showUnchanged && all.length > crowded && quiet.length > 1;
+  const folded = new Set(fold ? quiet.map((card) => card.id) : []);
+  const inside: Card[] = fold
+    ? [
+        ...all.filter((card) => !folded.has(card.id)),
+        {
+          kind: 'unchanged-files',
+          id: unchangedId(directory),
+          name: `${quiet.length} unchanged files`,
+          paths: quiet.flatMap((card) => (card.kind === 'file' ? [card.path] : [])),
+          status: unchanged,
+        },
+      ]
+    : all;
   const insideIds = new Set(inside.map((card) => card.id));
   const outside = new Map<string, Card>();
   const journeys = journeyCards(index);
@@ -517,6 +552,10 @@ export function openLevel(index: MapIndex, directory: string): Level {
 
     if (found === null) {
       return null;
+    }
+
+    if (folded.has(found.card.id)) {
+      return { id: unchangedId(directory), place: 'inside' as const };
     }
 
     return { id: found.card.id, place: found.place, card: found.card };
@@ -645,6 +684,8 @@ export function cardSentence(index: MapIndex, card: Card): string {
       return `${plural(card.packages.length, 'package', 'packages')} outside the captured source, imported from this level.`;
     case 'outside-files':
       return `${plural(card.files.length, 'file', 'files')} changed outside the captured source. No capture holds them, so no evidence can touch them.`;
+    case 'unchanged-files':
+      return `${plural(card.paths.length, 'file', 'files')} the change did not touch, on the map because they import or are imported by changed files. Open the card to place them.`;
     case 'journey': {
       const checks = card.journey.checks.length;
       const redefined = card.recipe.length;
@@ -674,13 +715,14 @@ export const cardKinds = {
   file: 'file',
   package: 'package',
   'outside-files': 'outside',
+  'unchanged-files': 'files',
   journey: 'journey',
   'removed-journey': 'journey',
   route: 'route',
 } satisfies Record<Card['kind'], string>;
 
 export function hasParts(card: Card): boolean {
-  return card.kind === 'directory';
+  return card.kind === 'directory' || card.kind === 'unchanged-files';
 }
 
 export function partsLabel(card: Card): string | null {
@@ -691,6 +733,8 @@ export function partsLabel(card: Card): string | null {
       return card.path.split('/').at(-1) ?? card.path;
     case 'outside-files':
       return 'outside the captured source';
+    case 'unchanged-files':
+      return 'folded · opens in place';
     case 'package':
       return plural(card.packages.length, 'package', 'packages');
     case 'removed-journey':
@@ -716,4 +760,73 @@ export function levelTrail(index: MapIndex, directory: string): string[] {
 
 export function parentLevel(index: MapIndex, directory: string): string | null {
   return directory === index.root ? null : parent(directory);
+}
+
+export type Reach = { files: number; hops: number };
+
+// Files that reach the card's files through recorded imports (upstream) and
+// files they reach (downstream), with the longest chain in hops.
+export function reach(
+  index: MapIndex,
+  card: Card,
+): { upstream: Reach; downstream: Reach } | null {
+  const seeds =
+    card.kind === 'file'
+      ? [card.block.id]
+      : card.kind === 'directory'
+        ? index.captured
+            .filter((block) => under(block.path, card.path))
+            .map((block) => block.id)
+        : [];
+
+  if (seeds.length === 0) {
+    return null;
+  }
+
+  const walk = (direction: 'up' | 'down'): Reach => {
+    const next = new Map<string, string[]>();
+
+    for (const connection of index.map.connections) {
+      if (connection.kind !== 'imports' || connection.change === 'removed') {
+        continue;
+      }
+
+      const [from, to] =
+        direction === 'down'
+          ? [connection.from, connection.to]
+          : [connection.to, connection.from];
+
+      next.set(from, [...(next.get(from) ?? []), to]);
+    }
+
+    const start = new Set(seeds);
+    const seen = new Set(seeds);
+    let frontier = seeds;
+    let hops = 0;
+
+    while (frontier.length > 0) {
+      const following = frontier.flatMap((id) =>
+        (next.get(id) ?? []).filter((other) => !seen.has(other)),
+      );
+
+      for (const id of following) {
+        seen.add(id);
+      }
+
+      if (following.length > 0) {
+        hops += 1;
+      }
+
+      frontier = [...new Set(following)];
+    }
+
+    return {
+      files: [...seen].filter(
+        (id) => !start.has(id) && index.blocks.get(id)?.kind === 'file',
+      ).length,
+      hops,
+    };
+  };
+
+  return { upstream: walk('up'), downstream: walk('down') };
 }
