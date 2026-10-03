@@ -112,6 +112,27 @@ The light theme is the website default. Offer light, dark, and system preference
 
 Pair color with a label and a distinct symbol: check, delta, warning, question mark, or annotation. Decorative square pixels may accompany them but cannot carry meaning alone. Keep before and after labels explicit; their neutral lane colors must not imply good and bad.
 
+### Change map colors
+
+Relation chips use the evidence colors. Only "Checked" uses the checked color, because a chip describes a relation, not a check outcome.
+
+| Relation | Role | Symbol |
+| --- | --- | --- |
+| Checked | checked | ✓ |
+| Exercised | neutral surface | ▸ |
+| Not observed | unknown | ? |
+| Outside the captured source | unknown | ∅ |
+
+Each connection type has its own color and line pattern, so the type survives without color. The legend shows both. Every color has at least 5.3:1 against canvas, surface, and muted surface in its theme.
+
+| Connection | Light | Dark | Pattern |
+| --- | --- | --- | --- |
+| Imports | #45595E | #C0CDCC | Solid |
+| Ran in | #276A6A | #86C9C0 | Dash 7 4 |
+| Requested | #80570F | #E1C17A | Dot 2 4 |
+| Threw at | #8E3B63 | #EBA3C4 | Dash-dot 9 3 2 3 |
+| Checked by | #3D4F99 | #AFC0F5 | Long dash 14 4 |
+
 ### Contrast baseline
 
 These ratios were calculated from the solid sRGB token values, not sampled from generated images. They verify these pairs only, not an entire interface.

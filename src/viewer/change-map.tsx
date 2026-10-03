@@ -242,6 +242,7 @@ const styles = stylex.create({
     fontSize: '0.75rem',
     fontWeight: 500,
     gap: 4,
+    justifySelf: 'start',
     paddingBlock: 1,
     paddingInline: 6,
     whiteSpace: 'nowrap',
@@ -392,11 +393,7 @@ function Legend() {
   return (
     <ul aria-label="Connection types" {...stylex.props(styles.legend)}>
       {connectionKinds.map((kind) => (
-        <li
-          key={kind}
-          title={connectionSources[kind]}
-          {...stylex.props(styles.legendItem)}
-        >
+        <li key={kind} {...stylex.props(styles.legendItem)}>
           <LineSample kind={kind} />
           {connectionLabels[kind]}
         </li>
@@ -816,12 +813,10 @@ function MapCanvas({
   const direction = useDirection();
   const visible = useMemo(() => visibleMap(map, directory), [map, directory]);
   const [layout, setLayout] = useState<{
-    key: unknown;
     value:
       { kind: 'placed'; layout: Layout } | { kind: 'failed'; reason: string };
   } | null>(null);
   const [active, setActive] = useState<string | null>(null);
-  const key = useMemo(() => [visible, direction], [visible, direction]);
 
   useEffect(() => {
     let current = true;
@@ -829,13 +824,12 @@ function MapCanvas({
     layoutMap(visible, direction).then(
       (value) => {
         if (current) {
-          setLayout({ key, value: { kind: 'placed', layout: value } });
+          setLayout({ value: { kind: 'placed', layout: value } });
         }
       },
       (error: unknown) => {
         if (current) {
           setLayout({
-            key,
             value: {
               kind: 'failed',
               reason: error instanceof Error ? error.message : String(error),
@@ -848,7 +842,7 @@ function MapCanvas({
     return () => {
       current = false;
     };
-  }, [visible, direction, key]);
+  }, [visible, direction]);
 
   const focus = active ?? (selection?.kind === 'block' ? selection.id : null);
   const near = focus === null ? null : related(map, focus);
@@ -1023,7 +1017,10 @@ function MapCanvas({
       </div>
       {visible.hidden > 0 && directory !== root ? (
         <p {...stylex.props(styles.small)}>
-          {visible.hidden} connections lead outside this directory.
+          {visible.hidden === 1
+            ? '1 connection leads'
+            : `${visible.hidden} connections lead`}{' '}
+          outside this directory.
         </p>
       ) : null}
     </div>

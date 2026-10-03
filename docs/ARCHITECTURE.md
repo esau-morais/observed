@@ -129,10 +129,13 @@ Probes on 2026-09-29 showed that each source below returns execution counts.
 
 ### Change map data
 
-Planned for Phase 3a. Not built.
+Built for result schema version 8 as `changeMap`, next to `changeScope`.
+The repository map is not built.
 
 The comparator writes the map's blocks and connections to `result.json` with
-the change scope. Every connection lists the evidence IDs it came from. The
+the change scope. Every connection lists the evidence it came from: the
+report path of a verified artifact, or a journey's finding by its ID. A
+snapshot file that fails its integrity check gives no import connection. The
 viewer lays out and draws the map and never adds a block or a connection.
 
 - Imports come from `Bun.Transpiler.scan` on each JavaScript or TypeScript
@@ -140,7 +143,14 @@ viewer lays out and draws the map and never adds a block or a connection.
   A probe on 2026-10-03 with Bun 1.4.2 returned the four imports of the
   Request lab's `App.tsx` and resolved all four. The map draws the
   candidate's imports and marks the imports the change removed. Files in
-  other languages have no import connections, and the map says so.
+  other languages have no import connections, and the map says so. The scan
+  drops type-only imports.
+- `Bun.resolveSync` installs a package it cannot find: on 2026-10-03 with
+  Bun 1.4.2, resolving `left-pad` from a directory without it downloaded the
+  package into Bun's cache. The comparator therefore resolves only relative
+  specifiers and those matching a `paths` alias in a `tsconfig.json` or
+  `jsconfig.json` of the snapshot. It does not follow `extends`. Any other
+  specifier is a package block named after the package.
 - Layout is presentation, not evidence. The viewer uses
   [elkjs](https://github.com/kieler/elkjs) for layered layout with nested
   directories. It is bundled into the built viewer, not installed as a

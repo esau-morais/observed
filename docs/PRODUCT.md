@@ -117,10 +117,9 @@ dictionary, which ASD holds the copyright to.
 
 ## Change scope
 
-Built as `result.json` data and as text in the report, the job summary, and
-the pull request comment. The change map, coverage, and generated journeys
-are not built. Until a coverage collector exists, no file
-is "exercised" through coverage.
+Built as `result.json` data, as text in the report, the job summary, and the
+pull request comment, and as the change map in the viewer. Generated journeys
+are not built. Browser coverage is the only coverage collector.
 
 A saved journey checks the behavior it exercises. It does not check the
 change. Every comparison lists each file that differs between base and
