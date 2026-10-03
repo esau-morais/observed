@@ -105,11 +105,21 @@ function scenario(
   };
 }
 
+const recipeUnavailable = {
+  kind: 'unavailable',
+  reason: 'Not read in this test',
+} as const;
+
 function scope(
   journeys: ScopeJourney[],
   changes: GitChanges = gitUnavailable,
 ): Extract<ChangeScope, { kind: 'recorded' }> {
-  const computed = changeScope({ mode: 'comparison', journeys, changes });
+  const computed = changeScope({
+    mode: 'comparison',
+    journeys,
+    changes,
+    recipe: recipeUnavailable,
+  });
 
   if (computed.kind !== 'recorded') {
     throw new Error(`Expected a recorded scope: ${computed.reason}`);
@@ -246,6 +256,7 @@ test('a preview or a missing base snapshot has no change scope', () => {
       mode: 'comparison',
       journeys: [withoutBase],
       changes: gitUnavailable,
+      recipe: recipeUnavailable,
     }).kind,
   ).toBe('unavailable');
   expect(
@@ -253,6 +264,7 @@ test('a preview or a missing base snapshot has no change scope', () => {
       mode: 'preview',
       journeys: [journey],
       changes: gitUnavailable,
+      recipe: recipeUnavailable,
     }).kind,
   ).toBe('unavailable');
 });
@@ -586,14 +598,14 @@ test('passing checks with a file not observed read as no regression in the named
   expect(headline(regression)).toMatch(/^Regression: /);
 });
 
-test('a changed observed.json says that journey and check changes were not compared', () => {
+test('a changed observed.json says why journey and check changes were not compared', () => {
   const computed = scope([scenario({ 'app.ts': app }, { 'app.ts': app })], {
     kind: 'listed',
     files: [{ path: 'observed.json', change: 'modified' }],
   });
 
   expect(scopeFileLines({ ...result, changeScope: computed })).toContain(
-    'Changes to journeys and checks: Recipe comparison is not implemented in this version.',
+    'Changes to journeys and checks: Not read in this test.',
   );
 });
 

@@ -1611,7 +1611,8 @@
     ],
     "recipe": {
       "kind": "unavailable",
-      "reason": "Recipe comparison is not implemented in this version"
+      "reason": "observed.json was not read from the base revision, because this comparison was made from capture directories"
     }
-  }
+  },
+  "removedJourneys": []
 }

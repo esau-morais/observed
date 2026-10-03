@@ -292,8 +292,26 @@ export function playwrightPairs({
         )
       : [];
 
+  // The candidate's test file judges the test; when that file is new or
+  // differs from the base's, the result carries the label.
+  const labeled = pairs.map((pair): CheckPair => {
+    const test = after.value.tests.find(
+      (item) => `playwright: ${item.id}` === pair.candidate.id,
+    );
+    const afterHash =
+      test === undefined ? undefined : sourceHash(candidate, test.source);
+
+    return mode === 'comparison' &&
+      base !== null &&
+      test !== undefined &&
+      afterHash !== undefined &&
+      afterHash !== sourceHash(base, test.source)
+      ? { ...pair, recipe: { change: 'test-file-changed' } }
+      : pair;
+  });
+
   return [
-    ...pairs,
+    ...labeled,
     ...removed.map((previous): CheckPair => ({
       base: previous,
       candidate: {

@@ -1,5 +1,6 @@
 import { Option, Schema } from 'effect';
 import { recipeSchema } from './capture/recipe';
+import { journeySchema as projectJourneySchema } from './project';
 import { evidenceViewSchema } from './evidence-kinds';
 import {
   captureSchema,
@@ -210,6 +211,40 @@ const measureSchema = Schema.Struct({
   limit: Schema.NullOr(text),
 });
 
+const verdictKinds = [
+  'regression',
+  'failed',
+  'unknown',
+  'passed',
+  'not-run',
+] as const;
+
+// The candidate's version of a check that observed.json alters. Its outcome
+// sets no verdict.
+const proposedSchema = Schema.Struct({
+  expectation: text,
+  outcome: Schema.Literals(['passed', 'failed', 'unknown', 'not-run']),
+  detail: text,
+  measure: Schema.optionalKey(measureSchema),
+});
+
+// How a difference between the base and candidate observed.json, or a changed
+// imported test file, decided which definition judged the check.
+const verdictRecipeSchema = Schema.Union([
+  Schema.Struct({ change: Schema.Literal('added') }),
+  Schema.Struct({ change: Schema.Literal('removed') }),
+  Schema.Struct({
+    change: Schema.Literal('altered'),
+    proposed: proposedSchema,
+  }),
+  Schema.Struct({
+    change: Schema.Literal('journey-altered'),
+    fields: Schema.NonEmptyArray(text),
+    proposed: Schema.optionalKey(proposedSchema),
+  }),
+  Schema.Struct({ change: Schema.Literal('test-file-changed') }),
+]);
+
 // One verdict per configured check, derived once from both sides so delivery
 // renders it without recomputing.
 const checkVerdictSchema = Schema.Struct({
@@ -217,15 +252,10 @@ const checkVerdictSchema = Schema.Struct({
   name: text,
   scope: text,
   expectation: text,
-  verdict: Schema.Literals([
-    'regression',
-    'failed',
-    'unknown',
-    'passed',
-    'not-run',
-  ]),
+  verdict: Schema.Literals(verdictKinds),
   detail: text,
   measure: Schema.optionalKey(measureSchema),
+  recipe: Schema.optionalKey(verdictRecipeSchema),
 });
 
 const lineNumber = Schema.Int.check(Schema.isGreaterThan(0));
@@ -389,7 +419,8 @@ const scopeFileSchema = Schema.Union([
 ]);
 
 // One field that differs between the base and candidate definitions, with
-// both values as they appear in observed.json.
+// both values. A journey's defaults apply as they do in a capture, and an
+// absent field is null.
 const recipeFieldSchema = Schema.Struct({
   field: text,
   base: Schema.Json,
@@ -419,6 +450,11 @@ const recipeScopeSchema = Schema.Union([
   unavailableSchema,
   Schema.Struct({
     kind: Schema.Literal('changed'),
+    // An unusable base file makes every candidate check count as added.
+    base: Schema.Union([
+      Schema.Struct({ kind: Schema.Literal('read') }),
+      Schema.Struct({ kind: Schema.Literal('unusable'), reason: text }),
+    ]),
     differences: Schema.NonEmptyArray(recipeDifferenceSchema),
   }),
 ]);
@@ -486,17 +522,32 @@ export const comparisonSchema = Schema.Struct({
   summary: Schema.Struct({ passed: count, total: count }),
   conclusion: conclusionSchema,
   changeScope: changeScopeSchema,
+  // Journeys only the base's observed.json defines. Nothing captured them, so
+  // each of their checks is unknown.
+  removedJourneys: Schema.Array(
+    Schema.Struct({ journey: text, checks: Schema.Array(checkVerdictSchema) }),
+  ),
 }).check(
   Schema.makeFilter(
     (result) =>
       result.summary.passed <= result.summary.total &&
-      result.summary.total ===
-        result.journeys.reduce((sum, item) => sum + item.checks.length, 0),
+      result.summary.total === runVerdicts(result).length,
     { message: 'The check summary must match the journeys' },
   ),
 );
 
 export type Comparison = typeof comparisonSchema.Type;
+
+// Every check verdict of a run, including the checks of removed journeys.
+export function runVerdicts(result: {
+  journeys: readonly { checks: readonly CheckVerdict[] }[];
+  removedJourneys: readonly { checks: readonly CheckVerdict[] }[];
+}): CheckVerdict[] {
+  return [
+    ...result.journeys.flatMap((journey) => journey.checks),
+    ...result.removedJourneys.flatMap((journey) => journey.checks),
+  ];
+}
 
 const resultVersion = Schema.Struct({ schemaVersion: Schema.Int });
 
@@ -522,6 +573,10 @@ export function resultVersionProblem(input: unknown): string | null {
 export type Journey = typeof journeySchema.Type;
 
 export type CheckVerdict = typeof checkVerdictSchema.Type;
+
+export type VerdictRecipe = typeof verdictRecipeSchema.Type;
+
+export type Proposed = typeof proposedSchema.Type;
 
 export type Measure = typeof measureSchema.Type;
 
@@ -571,12 +626,29 @@ const journeySelectionSchema = Schema.Struct({
   ),
 });
 
+// The journeys of both observed.json files, as `observe` read them. The
+// captures hold only the candidate's journeys, normalized.
+export const recipeSourcesSchema = Schema.Struct({
+  base: Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal('read'),
+      journeys: Schema.NonEmptyArray(projectJourneySchema),
+    }),
+    Schema.Struct({ kind: Schema.Literal('unusable'), reason: text }),
+    unavailableSchema,
+  ]),
+  candidate: Schema.NonEmptyArray(projectJourneySchema),
+});
+
+export type RecipeSources = typeof recipeSourcesSchema.Type;
+
 export const selectionSchema = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   evaluatedAt: timestamp,
   mode: Schema.Literals(['preview', 'comparison']),
   journeys: Schema.NonEmptyArray(journeySelectionSchema),
   changes: Schema.optionalKey(gitChangesSchema),
+  recipes: Schema.optionalKey(recipeSourcesSchema),
 }).check(
   Schema.makeFilter(
     (selection) =>

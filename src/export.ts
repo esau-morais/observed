@@ -14,6 +14,7 @@ import {
   selectionSchema,
   type GitChanges,
   type JourneySelection,
+  type RecipeSources,
 } from './comparison-model';
 import { renderComparison } from './comparison-report';
 import { readVerifiedArtifact } from './evidence';
@@ -261,12 +262,14 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   viewerDirectory,
   mode = 'comparison',
   changes,
+  recipes,
 }: {
   journeys: readonly [JourneyDirectories, ...JourneyDirectories[]];
   directory: string;
   viewerDirectory: string;
   mode?: 'preview' | 'comparison';
   changes?: GitChanges;
+  recipes?: RecipeSources;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const sides = yield* Effect.forEach(journeys, (journey) =>
@@ -390,6 +393,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     evaluatedAt,
     journeys: selected,
     ...(changes === undefined ? {} : { changes }),
+    ...(recipes === undefined ? {} : { recipes }),
   });
 
   yield* fs.writeFileString(

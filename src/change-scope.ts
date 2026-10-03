@@ -6,6 +6,7 @@ import type {
   GitChanges,
   Journey,
   LineRange,
+  RecipeScope,
   ScopeFile,
 } from './comparison-model';
 import { evidenceKinds } from './evidence-kinds';
@@ -79,7 +80,6 @@ export const reasons = {
     'No journey has source snapshots of both the base and the candidate.',
   differentSnapshots:
     'The journeys captured different source snapshots, so no single set of changed files applies.',
-  recipe: 'Recipe comparison is not implemented in this version',
   fileType: 'No collector runs this file type.',
   noCoverage:
     'No journey recorded coverage, so no evidence shows that this file ran.',
@@ -394,10 +394,12 @@ export function changeScope({
   mode,
   journeys,
   changes,
+  recipe,
 }: {
   mode: 'preview' | 'comparison';
   journeys: readonly ScopeJourney[];
   changes: GitChanges;
+  recipe: RecipeScope;
 }): ChangeScope {
   if (mode === 'preview') {
     return { kind: 'unavailable', reason: reasons.preview };
@@ -501,6 +503,6 @@ export function changeScope({
             reason: coverage.reason,
           },
     ),
-    recipe: { kind: 'unavailable', reason: reasons.recipe },
+    recipe,
   };
 }

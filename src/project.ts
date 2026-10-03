@@ -2,6 +2,7 @@ import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { redact } from './redact';
 import { routeSchema, text } from './capture/model';
+import { gitEnvironment, processOutput } from './capture/process';
 import {
   journeyCollectors,
   recipeSchema,
@@ -22,7 +23,7 @@ export const relativePathSchema = text.check(
 
 export const commandSchema = Schema.NonEmptyArray(text);
 
-const journeySchema = Schema.Struct({
+export const journeySchema = Schema.Struct({
   name: text,
   path: routeSchema,
   ready: Schema.Array(stepSchema),
@@ -95,9 +96,21 @@ export const loadProject = Effect.fn('loadProject')(function* (
     });
   }
 
+  const { project, journeys, recipes } = yield* parseProject(
+    yield* fs.readFileString(filename),
+    filename,
+  );
+
+  return { root, project, journeys, recipes };
+});
+
+const parseProject = Effect.fnUntraced(function* (
+  content: string,
+  filename: string,
+) {
   const input = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Unknown),
-  )(yield* fs.readFileString(filename)).pipe(
+  )(content).pipe(
     Effect.mapError(
       () =>
         new ProjectFailure({
@@ -125,9 +138,15 @@ export const loadProject = Effect.fn('loadProject')(function* (
     ),
   );
 
-  const journeys = project.journeys ?? [
+  const [firstJourney, ...otherJourneys] = project.journeys ?? [
     project.capture ?? (yield* Effect.die('Project has no journey')),
   ];
+
+  if (firstJourney === undefined) {
+    return yield* Effect.die('Project has no journey');
+  }
+
+  const journeys = [firstJourney, ...otherJourneys] as const;
   const recipes = yield* Effect.forEach(journeys, (journey) =>
     Schema.decodeUnknownEffect(recipeSchema)(journeyRecipe(journey)).pipe(
       Effect.mapError(
@@ -144,20 +163,111 @@ export const loadProject = Effect.fn('loadProject')(function* (
     return yield* Effect.die('Project has no journey');
   }
 
-  return { root, project, recipes: [first, ...rest] as const };
+  return { project, journeys, recipes: [first, ...rest] as const };
 });
 
-function journeyRecipe({ check, checks, collectors, ...journey }: Journey) {
-  const configured = checks ?? (check === undefined ? [] : [check]);
+// The base revision's journeys, read through Git. A base without a usable
+// observed.json is `unusable`, and every candidate check then counts as added.
+// `unavailable` means Git could not answer, so nothing is compared.
+export const readBaseJourneys = Effect.fn('readBaseJourneys')(
+  function* (options: {
+    projectRoot: string;
+    baseRevision: string;
+    transcript: string;
+  }) {
+    const git = (args: readonly string[]) =>
+      processOutput({
+        command: 'git',
+        args,
+        cwd: options.projectRoot,
+        env: gitEnvironment(),
+        transcript: options.transcript,
+      });
+    const commit = (yield* git([
+      'rev-parse',
+      '--verify',
+      '--end-of-options',
+      `${options.baseRevision}^{commit}`,
+    ])).trim();
+    const prefix = (yield* git(['rev-parse', '--show-prefix'])).trim();
+    const file = `${prefix}observed.json`;
+    const listed = yield* git([
+      'ls-tree',
+      '--full-tree',
+      '--name-only',
+      commit,
+      '--',
+      file,
+    ]);
+
+    if (listed.trim() === '') {
+      return {
+        kind: 'unusable',
+        reason: 'The base revision has no observed.json.',
+      } satisfies BaseJourneys;
+    }
+
+    const content = yield* git(['cat-file', 'blob', `${commit}:${file}`]);
+
+    return yield* parseProject(content, 'observed.json').pipe(
+      Effect.map(({ journeys }): BaseJourneys => ({ kind: 'read', journeys })),
+      Effect.catchTag('ProjectFailure', (error) =>
+        Effect.succeed<BaseJourneys>({
+          kind: 'unusable',
+          reason: `The base revision's ${error.message.split('\n')[0] ?? ''}`,
+        }),
+      ),
+    );
+  },
+  Effect.catchTags({
+    ProcessFailure: (error) =>
+      Effect.succeed<BaseJourneys>({
+        kind: 'unavailable',
+        reason: `Git could not read observed.json from the base revision: ${firstLine(error.stderr) ?? error.message}`,
+      }),
+    PlatformError: (error) =>
+      Effect.succeed<BaseJourneys>({
+        kind: 'unavailable',
+        reason: `Git could not read observed.json from the base revision: ${error.message}`,
+      }),
+  }),
+);
+
+function firstLine(value: string): string | null {
+  const [line = ''] = value.trim().split('\n');
+
+  return line === '' ? null : line;
+}
+
+export type BaseJourneys =
+  | { kind: 'read'; journeys: readonly [Journey, ...Journey[]] }
+  | { kind: 'unusable'; reason: string }
+  | { kind: 'unavailable'; reason: string };
+
+export const defaultViewport = { width: 1280, height: 800, scale: 1 };
+export const defaultMaxAgeMs = 86_400_000;
+
+export function journeyChecks({
+  check,
+  checks,
+}: {
+  check?: Journey['check'] | undefined;
+  checks?: Journey['checks'] | undefined;
+}) {
+  return checks ?? (check === undefined ? [] : [check]);
+}
+
+function journeyRecipe({ check, checks, collectors, ...fields }: Journey) {
+  const configured = journeyChecks({ check, checks });
 
   return {
     schemaVersion: recipeSchemaVersion,
-    id: journey.name,
-    ...journey,
+    id: fields.name,
+    ...fields,
     checks: configured,
     collectors: journeyCollectors(configured, collectors ?? []),
-    viewport: journey.viewport ?? { width: 1280, height: 800, scale: 1 },
-    browserArguments: journey.browserArguments ?? [],
-    maxAgeMs: journey.maxAgeMs ?? 86_400_000,
+    viewport: fields.viewport ?? defaultViewport,
+    browserArguments: fields.browserArguments ?? [],
+    maxAgeMs: fields.maxAgeMs ?? defaultMaxAgeMs,
   };
 }
