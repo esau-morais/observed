@@ -2,16 +2,18 @@ import { Effect } from 'effect';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import {
   commentMarker,
   DeliveryError,
   findComment,
   failing,
+  uploadImage,
   writeComment,
   type Target,
 } from '../scripts/github-delivery';
 import {
+  deliveredScreenshots,
   deliveryLine,
   deliveryUnfinished,
   inlineText,
@@ -26,6 +28,7 @@ let server: ReturnType<typeof Bun.serve> | null = null;
 afterEach(async () => {
   await server?.stop(true);
   server = null;
+  vi.unstubAllGlobals();
 });
 
 test('Slack treats a missing or unreadable result as failing', () => {
@@ -350,4 +353,58 @@ test('a Dependabot run without write permissions gets a read-only notice', async
 
   expect(run.stdout).toMatch(/^::notice title=Observed::.*read-only token/m);
   expect(run.stdout).not.toContain('::warning');
+});
+
+// The upload endpoint answers 404 to GITHUB_TOKEN and App installation
+// tokens (cli/cli#14309, and run 37130909012 on
+// esau-morais/observed-trial-express). A refusal must keep the link and say
+// why, and no run may publish images that no comment shows.
+test('a refused image upload keeps the crops link and says why, and nothing is uploaded unless a trusted result is commented on', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'observed-image-'));
+  const crops = path.join(directory, 'observed-bundle-screenshots.png');
+  const fetch = vi.fn(() =>
+    Promise.resolve(Response.json({ message: 'Not Found' }, { status: 404 })),
+  );
+
+  await writeFile(crops, 'png');
+  vi.stubGlobal('fetch', fetch);
+
+  const deliver = (trusted: boolean, commenting: boolean) =>
+    deliveredScreenshots({
+      trusted,
+      commenting,
+      path: crops,
+      link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
+      token: 'ghs_workflow',
+      server: 'https://github.com',
+      repositoryId: '42',
+    });
+
+  expect(await deliver(false, true)).toBeNull();
+  expect(await deliver(true, false)).toEqual({
+    image: null,
+    link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
+    note: null,
+  });
+  expect(fetch).not.toHaveBeenCalled();
+
+  expect(await deliver(true, true)).toEqual({
+    image: null,
+    link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
+    note: 'The comment does not show the screenshot crops. GitHub refused the image upload with HTTP 404. It accepts only a user token with write access to this repository.',
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  await expect(
+    uploadImage({
+      server: 'https://github.example.com',
+      token: 't',
+      repositoryId: '42',
+      name: 'a.png',
+      bytes: new Uint8Array([1]),
+    }),
+  ).rejects.toBeInstanceOf(DeliveryError);
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  await rm(directory, { recursive: true, force: true });
 });

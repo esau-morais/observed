@@ -369,7 +369,6 @@ export function callSlack(
   return slackApi(method, token, { kind: 'json', value: body }, messageSchema);
 }
 
-// One region only: a box around distant regions could show most of the page.
 // Needs the optional files:write scope. Without it Slack answers
 // missing_scope, and the message goes out without the image.
 export async function uploadSlackImage(

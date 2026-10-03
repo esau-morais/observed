@@ -218,7 +218,7 @@ function reading(result: Comparison, check: CheckVerdict): string {
 
 // Where a changed file opens on GitHub: its diff in the pull request, or its
 // blob at the head commit.
-export type FileLinks = {
+type FileLinks = {
   repository: string;
   pullRequest: number | null;
   head: string | null;
@@ -226,8 +226,11 @@ export type FileLinks = {
 
 // GitHub anchors a file in a pull request's diff at the SHA-256 of its path
 // from the repository root, and a line on the new side by appending R and the
-// line. /changes is the route of the current Files changed page; GitHub
-// redirects it to /files where that page is off (checked 2026-10-03).
+// line. /changes is the route of the current Files changed page, and GitHub
+// redirects it to /files where that page is off
+// (https://github.blog/changelog/2025-12-11-review-commit-by-commit-improved-filtering-and-more-in-the-pull-request-files-changed-public-preview/).
+// Both anchors were followed on esau-morais/observed-trial-express#14,
+// 2026-10-03.
 function fileHref(
   result: Comparison,
   links: FileLinks | null,
@@ -552,6 +555,11 @@ const httpsUrlSchema = Schema.String.check(
   Schema.isPattern(/^https:\/\/[^\s()<>[\]]+$/),
 );
 
+// A Git object ID: SHA-1, or SHA-256 in repositories that use it.
+const objectIdSchema = Schema.String.check(
+  Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
+);
+
 function httpsUrl(value: string | null | undefined): string | null {
   return Option.getOrNull(Schema.decodeUnknownOption(httpsUrlSchema)(value));
 }
@@ -870,12 +878,9 @@ export function summarize(options: SummaryOptions): Summary {
         : {
             repository,
             pullRequest: options.pullRequest ?? null,
-            head:
-              options.headSha !== undefined &&
-              options.headSha !== null &&
-              /^[0-9a-f]{40}$/.test(options.headSha)
-                ? options.headSha
-                : null,
+            head: Option.getOrNull(
+              Schema.decodeUnknownOption(objectIdSchema)(options.headSha),
+            ),
           },
     bundle: `Raw evidence: workflow artifact ${code(artifact)}. Download it and ${viewer}.`,
   };
@@ -1178,30 +1183,37 @@ const imageNotes = {
   none: null,
 } satisfies Record<string, string | null>;
 
-// The `comment` input. The modes docs/PRODUCT.md plans next, quiet and
-// mention, are not accepted yet.
-export function commentMode(value: string): {
-  mode: 'always' | 'off';
+const commentModeSchema = Schema.Literals(['always', 'off']);
+
+function commentMode(value: string): {
+  mode: typeof commentModeSchema.Type;
   problem: string | null;
 } {
-  if (value === '' || value === 'always' || value === 'off') {
-    return { mode: value === 'off' ? 'off' : 'always', problem: null };
-  }
+  const mode = Schema.decodeUnknownOption(commentModeSchema)(
+    value === '' ? 'always' : value,
+  );
 
-  return {
-    mode: 'always',
-    problem: `The comment input accepts always or off, not ${JSON.stringify(value.slice(0, 40))}. The comment is posted.`,
-  };
+  return Option.isSome(mode)
+    ? { mode: mode.value, problem: null }
+    : {
+        mode: 'always',
+        problem: `The comment input accepts always or off, not ${JSON.stringify(value.slice(0, 40))}. The comment is posted.`,
+      };
 }
 
 // An earlier step uploaded the crops as a workflow artifact. A user token
 // also uploads them for the comment to show; any failure keeps the link and
 // says why.
-async function deliveredScreenshots(options: {
+// Uploads only for a trusted result that will be commented on, so the
+// token's user never publishes images nobody shows.
+export async function deliveredScreenshots(options: {
   trusted: boolean;
+  commenting: boolean;
   path: string;
   link: string;
   token: string;
+  server: string;
+  repositoryId: string;
 }): Promise<Screenshots | null> {
   if (!options.trusted || options.path === '') {
     return null;
@@ -1209,16 +1221,16 @@ async function deliveredScreenshots(options: {
 
   const link = options.link === '' ? null : options.link;
 
-  if (options.token === '') {
+  if (options.token === '' || !options.commenting) {
     return { image: null, link, note: null };
   }
 
   try {
     return {
       image: await uploadImage({
-        server: environment('GITHUB_SERVER_URL'),
+        server: options.server,
         token: options.token,
-        repositoryId: environment('GITHUB_REPOSITORY_ID'),
+        repositoryId: options.repositoryId,
         name: path.basename(options.path),
         bytes: await readFile(options.path),
       }),
@@ -1226,10 +1238,16 @@ async function deliveredScreenshots(options: {
       note: null,
     };
   } catch (error) {
+    if (!(error instanceof DeliveryError)) {
+      process.stderr.write(
+        `Observed: the image upload failed: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}\n`,
+      );
+    }
+
     return {
       image: null,
       link,
-      note: `The comment does not show the screenshot crops. ${error instanceof DeliveryError ? `${error.message}.` : 'An unexpected error.'}`,
+      note: `The comment does not show the screenshot crops. ${error instanceof DeliveryError ? `${error.message}.` : 'An unexpected error; the job log has details.'}`,
     };
   }
 }
@@ -1525,9 +1543,12 @@ if (import.meta.main) {
         Option.isSome(decoded) &&
         context.exitCode ===
           conclusionExitCodes[decoded.value.result.conclusion.kind],
+      commenting,
       path: environment('OBSERVED_CROPS_PATH'),
       link: environment('OBSERVED_CROPS_URL'),
       token: source === 'fork' ? '' : environment('OBSERVED_IMAGE_TOKEN'),
+      server: environment('GITHUB_SERVER_URL'),
+      repositoryId: environment('GITHUB_REPOSITORY_ID'),
     });
 
     if (screenshots?.note !== null && screenshots?.note !== undefined) {

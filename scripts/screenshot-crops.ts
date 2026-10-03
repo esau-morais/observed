@@ -142,7 +142,8 @@ export type Crops =
   | { kind: 'none' };
 
 // Before, after and the difference image, cut around the largest changed
-// region of each journey whose screenshots changed. Every image must still
+// region of each journey whose screenshots changed. One region only: a box
+// around distant regions could show most of the page. Every image must still
 // match the hash the run recorded.
 export async function screenshotCrops(run: {
   directory: string;

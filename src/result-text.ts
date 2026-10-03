@@ -176,7 +176,6 @@ const anchorWords = {
   'diff-name-match': 'name matches changed line',
 } satisfies Record<Anchor['basis'], string>;
 
-// A location is a fact about where the evidence points, never a cause.
 // The viewer bundles this module, so it joins paths without node:path.
 function joined(directory: string, file: string): string {
   const parts: string[] = [];
@@ -212,6 +211,7 @@ export function fromRepositoryRoot(
   return rootedPath(scope, projectPath) ?? projectPath;
 }
 
+// A location is a fact about where the evidence points, never a cause.
 // Without a change scope the place stays relative to the project.
 export function anchorLocation(
   journey: Journey,

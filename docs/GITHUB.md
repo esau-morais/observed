@@ -103,7 +103,7 @@ passes. Add a check to `observed.json` before you require the job.
 | Place | Content |
 | --- | --- |
 | Check title | The verdict line, such as `Regression: Median LCP 52 ms → 452 ms, at most 250 ms` |
-| Job summary and comment | The verdict and the values that decided it, one line per failing or unknown check, a count of the rest, why a capture failed, the screenshot difference with its crops, up to 10 changed files inside the captured source with their relations and paths from the repository root, a count of the files outside it, each check that `observed.json` adds, removes or alters, and the base and head commits. What the passing checks covered, the agent prompt and run details are collapsed |
+| Job summary and comment | The verdict and the values that decided it. One line per failing or unknown check, and a count of the rest. Why a capture failed. The screenshot difference with its crops. Up to 10 changed files inside the captured source, by path from the repository root, and a count of the files outside it. Each check that `observed.json` adds, removes or alters, and the base and head commits. What the passing checks covered, the agent prompt and run details are collapsed |
 | Prompt for your agent | A copyable prompt built from the result: values, commits, evidence and artifact paths, and the reminder that a changed value is not a regression by itself |
 | File links | Each listed file and the verdict line's source location link to that file's diff in the pull request, at the line when there is one. A file outside the diff, or a run outside a pull request, links to the file at the head commit |
 | Hidden `<!-- observed:agent -->` block | The result schema version, commits, artifact name and `result.json` paths |
@@ -137,16 +137,18 @@ annotation with the reason.
 
 When screenshots changed, the action uploads the crops as their own artifact
 and the comment links them. GitHub opens the PNG in the browser for signed-in
-users who can read the repository.
+users who can read the repository. Signed-out visitors get a 404, even on a
+public repository.
 
 GitHub has no documented API that adds an image to a comment. `gh` 2.99.0 and
 later upload one for `--attach` through an endpoint that accepts only a user's
 OAuth or personal access token with write access to the repository. It answers
 404 to `github-token` and to GitHub App installation tokens
-([cli/cli#14309](https://github.com/cli/cli/issues/14309), checked
-2026-10-03). Set `image-upload-token` to such a token from a repository secret
-to show the crops in the comment. The image is uploaded as that user and shows
-page content. If the upload fails, the comment keeps the link, and the run
+([cli/cli#14309](https://github.com/cli/cli/issues/14309); the 404 for
+`github-token` was reproduced 2026-10-03). Set `image-upload-token` to such a
+token from a repository secret to show the crops in the comment. The image is
+uploaded as that user, only when the comment is posted, and shows page
+content. If the upload fails, the comment keeps the link, and the run
 details and the job summary say why. The upload never changes the verdict.
 
 ## Require the check
@@ -206,8 +208,8 @@ failing: a regression, a failed check, or unavailable evidence.
 - The report link needs a GitHub account that can read the repository.
 
 `slack-images: true` with the `files:write` scope posts the screenshot crops
-in the thread. The image includes any text around the change. Without the scope, the message goes out without the image and the job
-summary says why.
+in the thread. The image includes any text around the change. Without the
+scope, the message goes out without the image and the job summary says why.
 
 1. Create a Slack app at https://api.slack.com/apps with **From a manifest**
    and give its bot only the `chat:write` scope:
