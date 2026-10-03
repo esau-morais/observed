@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { changeMap, type MapSnapshot } from '../src/change-map';
+import { scopeTable } from '../src/viewer/map-model';
 import type { CoverageRecord } from '../src/change-scope';
 import {
   comparisonSchema,
@@ -184,4 +185,36 @@ test('a connection without evidence is rejected', () => {
       changeMap: { ...map, connections: [{ ...first, evidence: [] }, ...rest] },
     }),
   ).toThrow();
+});
+
+test('a not-observed file never renders as passed or checked', () => {
+  const scope = result.changeScope;
+
+  if (scope.kind !== 'recorded') {
+    throw new Error('The fixture scope is recorded');
+  }
+
+  const { rows } = scopeTable({
+    ...result,
+    changeScope: {
+      ...scope,
+      files: scope.files.map((file) => ({
+        path: file.path,
+        change: file.change,
+        captured: true,
+        relation: 'not-observed',
+        basis: 'none',
+        reason: 'Coverage recorded no execution of this file.',
+        journeys: [],
+        checks: [],
+      })),
+    },
+  });
+
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.chip).toMatchObject({
+    label: 'Not observed',
+    tone: 'unknown',
+  });
+  expect(JSON.stringify(rows)).not.toMatch(/passed|checked/i);
 });
