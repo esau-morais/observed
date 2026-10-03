@@ -226,6 +226,7 @@ Keep report panels and status chips flat. Menus and dialogs may use a modest sha
 | Toast | Brief confirmation with an optional undo; critical failures remain visible in the report |
 | Empty state | Explain what is missing and the next useful action; no invented zero-success state |
 | Agent suggestion | Separate annotation with evidence links and a clear proposed action |
+| Change map | Blocks for files, typed connections with counts, a legend of connection types, hover dimming, nested directories, and a side panel for the selection. The file table is one control away |
 
 ### Evidence semantics
 
@@ -255,13 +256,18 @@ Use the Pixel focus composition as the default: centered headline, one pixel wor
 
 ### Evidence viewer
 
-Start with the captured application. Show both versions when a comparison was
+A comparison with a change scope opens on the
+[change map](docs/PRODUCT.md#change-map), with a side panel on the evidence
+that explains the verdict. A preview, or a comparison without a change scope,
+starts with the captured application. Show both versions when a comparison was
 requested; otherwise show the standalone capture. Keep the page name, selected
 revisions, and unavailable captures visible. Keep checks, requests, and source
 details easy to reach without crowding the main view. A capture with no configured
 check must not imply a pass.
 
-A code diff, screenshot, request list, timing comparison, or state transition can each be the primary view. Pick the view that explains this change; do not force every case into a component tree or network graph.
+Inside the side panel, a code diff, screenshot, replay, request list, timing comparison, or state transition can each be the primary view. Pick the view that explains this change; do not force every case into a component tree or network graph.
+
+On the map, use the evidence colors for relation chips and one color per connection type, each with a distinct line pattern so the type survives without color. Dim unrelated blocks on hover rather than hiding them. Every block and connection is reachable by keyboard in reading order, Enter opens a directory, and Escape goes up. Agent descriptions use the inference color and an "Agent description" label.
 
 ### Mobile and shared reports
 

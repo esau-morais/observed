@@ -52,13 +52,15 @@ Connecting another application requires no edits to Observed.
 | React, optional | Relevant subtree, render changes, source references | Instrumentation does not reveal all data flow |
 | API operations | Status, schema match, readback | Only the specified operation and controlled data |
 | Imported tests | Each Playwright test as a check | Observed did not run the assertions |
+| Replay | Base and candidate recordings side by side, with step captions from the action timeline | One recorded run. Not timing evidence |
 | Later: database, jobs, traces | Fixture readback, event sequence, linked spans | Schedules and traces do not prove causation |
 | Later: formal checks | Property, checker result, assumptions, implementation connection | A proved model is not proof of the application |
 
 ## Report behavior
 
 Lead with the evidence that explains the verdict: a failed or unknown check's
-evidence when present, otherwise the captured application. A requested
+evidence when present, otherwise the captured application. With a change
+scope, that evidence opens beside the [change map](#change-map). A requested
 comparison shows both versions and names any missing capture. A standalone
 preview needs no baseline. Checks and technical details sit one disclosure
 away.
@@ -69,7 +71,7 @@ Keep these dimensions separate:
 | --- | --- |
 | Execution | Complete, blocked, failed |
 | Difference | Unchanged, changed, unavailable |
-| Named check | Passed, failed, unknown, not configured |
+| Named check | Passed, failed, unknown, not run |
 | Interpretation | Expected change, suspected regression, confirmed regression |
 
 - A behavior can change while its checks pass.
@@ -83,6 +85,27 @@ Keep these dimensions separate:
   labeled as a match. Otherwise show no line.
 - Counts refer to named checks. Never imply complete coverage of the change or
   readiness to merge.
+
+### Writing
+
+Generated text follows a reduced form of ASD-STE100, the controlled English
+written for aircraft maintenance manuals. Observed copies its rules, not its
+dictionary, which ASD holds the copyright to.
+
+- Each status word has one meaning, defined once in the code. A test rejects
+  synonyms such as "verified", "safe", and "no issues".
+- An instruction has at most 20 words and tells the reader to do one thing. A
+  statement of fact has at most 25 words.
+- Facts and instructions stay in separate sections. The agent handoff lists
+  the facts, then the next steps.
+- A check is named after the behavior it protects, such as "Each Load items
+  click sends one item request". The setup guide asks the agent for names in
+  this form. A journey is named after the user's action, such as "Load items".
+  The PR comment leads with the name of each failed or unknown check.
+- No analogies and no "explain like I'm five" version. An analogy adds claims
+  that the evidence does not make: two captured requests are not proof of a
+  double charge. Check names supply the plain words, and the rules for altered
+  checks protect them like any expectation.
 
 ## Change scope
 
@@ -107,6 +130,57 @@ lines that ran and changed lines that did not, so a journey can exercise part
 of a file. A file that no collector can execute, such as a stylesheet, a type
 declaration, or code for a server runtime without a collector, is "not
 observed" with that reason, and the agent spends no budget on it.
+
+### Change map
+
+The report draws the change scope as a map. The table of changed files stays
+as the map's text version, with the same facts, so the map makes no claim that
+the table lacks.
+
+- A block is a changed file, or a file that imports one or is imported by one.
+  Blocks group by directory. Selecting a directory opens it, and Esc goes back
+  up. A package outside the captured source is one block, outside the
+  directory groups.
+- A changed file's chip is its relation: checked, exercised, not observed, or
+  outside the captured source. Unchanged files give context and have no chip.
+- Each connection is one evidence record, and each type has one source:
+
+| Connection | Source |
+| --- | --- |
+| Imports | The static import graph of each snapshot |
+| Ran in | Execution coverage, with the count of changed lines that ran and that did not |
+| Requested | The request ledger: method, route, status, and count on each side |
+| Threw at | An error record and its stack frame |
+| Checked by | A named check and its scope |
+
+- Pointing at a block dims every block without a connection to it. Journeys
+  are a separate layer, and their connections show only on hover or
+  selection.
+- Selecting a block opens a side panel with its changed lines, the journeys
+  that ran them, the checks that covered them, and the artifact paths. A
+  connection's label is its evidence, such as "GET /api/items: 2 requests,
+  base 1".
+- When a comparison has a change scope, the map is the report's main view.
+  The side panel opens on the evidence that explains the verdict: a failed or
+  unknown check's evidence when present, otherwise the captured application.
+  A preview has no change scope and opens on the captured application.
+
+### Repository map
+
+Without a change, the same map covers every file in `source.paths`. The chips
+come from the latest capture: which files a saved journey checked or
+exercised, and which files no journey observed. The map shows what Observed
+watches in the project and what it does not. It does not show services, data
+stores, or production traces.
+
+### Agent descriptions
+
+The person's agent can supply a short description of each block and
+connection, in a file of its own for one run. Each description names the
+source files it was written from and follows the writing rules above. The map
+shows descriptions in the interpretation color, labeled as written by the
+agent. They never set a chip, a count, or a verdict, and the map works without
+them. Observed does not call a model to write them.
 
 ### Generated journeys
 
@@ -242,9 +316,10 @@ routing, coverage for server runtimes other than Node and Bun, remote rerun
 actions, and database, job, and trace evidence. Bun coverage depends on
 mapping its offsets to source lines, which is untested.
 
-Also deferred: a new agent runtime, a mandatory daemon, a universal graph, a
-plugin marketplace, generic production observability, automatic merging,
-billing, Kubernetes, and broad framework support.
+Also deferred: a new agent runtime, a mandatory daemon, a graph of services
+and data stores beyond the captured source, a plugin marketplace, generic
+production observability, automatic merging, billing, Kubernetes, and broad
+framework support.
 
 ## Background
 

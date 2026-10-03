@@ -121,6 +121,46 @@ Coverage collectors supply the "exercised" relation. None is built. Probes on
 - Server coverage changes how the app starts. It applies only when the
   project's `start` runs Node or Bun, and the run records that it did.
 
+### Change map data
+
+Planned for Phase 3a. Not built.
+
+The comparator writes the map's blocks and connections to `result.json` with
+the change scope. Every connection lists the evidence IDs it came from. The
+viewer lays out and draws the map and never adds a block or a connection.
+
+- Imports come from `Bun.Transpiler.scan` on each JavaScript or TypeScript
+  file in a snapshot, resolved with `Bun.resolveSync` against that snapshot.
+  A probe on 2026-10-03 with Bun 1.4.2 returned the four imports of the
+  Request lab's `App.tsx` and resolved all four. The map draws the
+  candidate's imports and marks the imports the change removed. Files in
+  other languages have no import connections, and the map says so.
+- Layout is presentation, not evidence. The viewer uses
+  [elkjs](https://github.com/kieler/elkjs) for layered layout with nested
+  directories. Observed uses its EPL-2.0 license option, and its notice goes
+  into the third-party notices.
+- A repository map is a single capture's scope over every file in
+  `source.paths`.
+
+Agent descriptions are explanation records from the
+[evidence contract](#evidence-contract). Observed validates the file with a
+schema, rejects a description that names a file outside the snapshot, redacts
+it like any artifact, and renders it as text.
+
+### Replay
+
+Planned for Phase 3a. Not built.
+
+The capture records each side with `agent-browser record start`, which needs
+ffmpeg on `PATH`. Without ffmpeg the replay is unavailable, with that reason,
+and nothing else changes. Captions come from the action timeline's steps and
+their times.
+
+Record the session that produced the checked evidence, so the replay shows the
+run that the verdict describes. Recording can change timing, so a journey with
+a timing check records its separate coverage session instead, and the replay
+is labeled as a separate run.
+
 ### Generated journeys
 
 Planned for Phase 3a. Not built.

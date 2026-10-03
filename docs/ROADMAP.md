@@ -11,7 +11,7 @@ contracts, and this file owns sequence, status and decisions.
 | 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, one non-React, use the same runner without core edits. Checks distinguish failed expectations from visual changes, and missing requested captures stay visible | Complete |
 | 2. Repeatable use | Executed recipes, isolated runs, one CI trigger, export. Fresh-checkout runs need no recurring setup help, and stale or failed captures never pass | Complete. An agent set up an unfamiliar app from the README. No person has |
 | 3. Extensions | Several checks and journeys, React renders, browser timing, accessibility, browser errors, API operations, Playwright import. The plan was one extension chosen from pilot demand | Shipped in #26 to #33, before any pilot |
-| 3a. MVP | Change scope, protected expectations, generated journeys, and the independent gate corpus. Every [MVP release gate](#mvp-release-gates) holds | Next |
+| 3a. MVP | Change scope drawn as a change map and a repository map, protected expectations, generated journeys, agent descriptions, replay, the writing rules, and the independent gate corpus. Every [MVP release gate](#mvp-release-gates) holds | Next |
 | 4. Bounded repair | Patch agent driven by the evidence handoff, isolated patches, protected checks, budgets, independent reruns, and an agent command in CI for generated journeys. Repair stops correctly and improves on handing the evidence to the user's agent | Starts once gates 1 to 8 hold |
 | Later | Database, jobs, traces, more frameworks, proof adapters, each tied to a recurring workflow | Not started |
 
@@ -44,7 +44,7 @@ producer output, without importing the comparator.
 | 7. No captured change | A change to docs or to files outside `source.paths` | Says no captured file changed, lists the outside files, and claims nothing about the change | Fails. Nothing states it |
 | 8. Observed's own faults | Known faults seeded into copies of the comparator and collector | Unit tests or the gate corpus fail on each fault | Fails for the one fault tried. With "no regression" ranked above "unavailable", all 360 unit tests passed |
 | 9. Unfamiliar project | Three projects the maintainers did not write, one non-React, set up by a person with their own agent from the README | A first report without help. Record time and every stall | Not run with people |
-| 10. Reading the result | At least three developers outside the project read reports for gates 3 and 5 | Each names what was checked and what was not, without explanation | Not run |
+| 10. Reading the result | At least three developers outside the project read reports for gates 3 and 5 | From the change map, each names what was checked and what was not, without explanation | Not run |
 
 The counts in gates 9 and 10 are proposals. Those two gates need people, so an
 agent can prepare them and cannot pass them. Self-observation runs on every
@@ -73,8 +73,16 @@ corpus replaces them with pairs anyone can run.
 | 2026-09-29 | No proof tool is an MVP requirement or a CI dependency. Lean stays the default for a production proof adapter unless evidence favors another tool for a specific case | See [optional experiments](#optional-experiments) |
 | 2026-09-29 | Three developers for gate 10, then the pilot's six to eight | Enough to find wording that misleads before recruiting more |
 | 2026-09-29 | Repair starts when gates 1 to 8 hold, without waiting for the pilot | Repair depends on protected expectations and change scope, not on adoption |
+| 2026-10-03 | The first release is not limited to the minimum. Phase 3a also ships the change map, the repository map, agent descriptions, and replay. The gates stay as written | Maintainer. A map with typed connections and detail on demand reads faster than a list of files |
+| 2026-10-03 | The change map is the main view of a comparison with a change scope. Its side panel opens on the evidence that explains the verdict, and the file table stays as its text version | Gate 10 asks readers to name what was checked and what was not |
+| 2026-10-03 | Generated text follows a reduced ASD-STE100: one meaning per status word, 20 words per instruction, 25 per statement, facts apart from instructions. No analogies and no "explain like I'm five" mode | An analogy adds claims the evidence does not make. ASD holds the copyright to the dictionary, so Observed copies only the rules |
+| 2026-10-03 | Check names describe the protected behavior, and the PR comment leads with them | Plain words for reviewers without a model at run time |
+| 2026-10-03 | Agent descriptions are explanation records in the interpretation color. They never set a chip, a count, or a verdict | Observed separates measurements from interpretation |
+| 2026-10-03 | Imports come from `Bun.Transpiler.scan`, and the viewer lays out the map with elkjs | A probe resolved every import of the Request lab's `App.tsx` with no new parser. elkjs handles nested directories |
+| 2026-10-03 | Replay records the session that produced the checked evidence, when ffmpeg is installed. Without ffmpeg the replay is unavailable and nothing else changes | Recording can change timing, so a journey with a timing check records its coverage session instead |
 
-The maintainer delegated the 2026-09-29 rows. Reverse any of them here. Two
+The maintainer delegated the 2026-09-29 rows and every 2026-10-03 row after
+the first. Reverse any of them here. Two
 things stay with the maintainer. One is recruiting the people for gates 9 and
 10. The other is whether a required Observed job gets a bypass rule.
 
