@@ -11,7 +11,7 @@ import {
 } from '../src/comparison-model';
 import { layoutGraph } from '../src/viewer/map-layout';
 import type { RecordedScope } from '../src/viewer/map-model';
-import { indexMap, openLevel, repoPath } from '../src/viewer/map-view';
+import { indexMap, openLevel } from '../src/viewer/map-view';
 
 const fixture = Schema.decodeUnknownSync(
   Schema.fromJsonString(comparisonSchema),
@@ -165,17 +165,29 @@ test('folding the unchanged files of a crowded level keeps every connection', ()
   expect(opened.inside).toHaveLength(25);
 });
 
-test('paths read from the repository root when the project directory is recorded', () => {
-  const outside = {
-    kind: 'listed' as const,
-    projectDirectory: 'examples/request-lab',
+test('a directory holding a not observed file never reads checked', () => {
+  const checked: ScopeFile = {
+    path: 'src/checked.ts',
+    change: 'modified',
+    captured: true,
+    relation: 'checked',
+    basis: 'stack-frame',
+    journeys: ['Load items'],
+    checks: ['one-items-request'],
   };
-  const scope = { ...recordedScope, outside };
-
-  expect(repoPath(scope, '../../DESIGN.md')).toBe('DESIGN.md');
-  expect(repoPath(scope, 'lib/count.ts')).toBe(
-    'examples/request-lab/lib/count.ts',
+  const index = view(
+    [
+      file('src/checked.ts', true),
+      file('src/gap.ts', true),
+      file('main.ts', true),
+    ],
+    [],
+    [checked, notObserved('src/gap.ts'), notObserved('main.ts')],
   );
+  const [directory] = openLevel(index, index.root).inside;
+
+  expect(directory?.kind).toBe('directory');
+  expect(directory?.status.label).toBe('not observed');
 });
 
 test('layout wraps a wide row inside the width and gives the same layout twice', () => {

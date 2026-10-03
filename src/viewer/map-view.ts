@@ -7,7 +7,12 @@ import type {
   MapConnection,
   ScopeFile,
 } from '../comparison-model';
-import { conclusionLabels, conclusionTones, type Tone } from '../result-text';
+import {
+  conclusionLabels,
+  conclusionTones,
+  toneSymbols,
+  type Tone,
+} from '../result-text';
 import type { RecordedMap, RecordedScope } from './map-model';
 
 export type Status = {
@@ -144,7 +149,9 @@ function normalize(file: string): string {
   const out: string[] = [];
 
   for (const part of file.split('/')) {
-    if (part === '..') {
+    // A path above the start keeps its `..`, so it never reads as a
+    // different file under the root.
+    if (part === '..' && out.length > 0 && out.at(-1) !== '..') {
       out.pop();
     } else if (part !== '.' && part !== '') {
       out.push(part);
@@ -154,22 +161,11 @@ function normalize(file: string): string {
   return out.join('/');
 }
 
-// The project's directory under the repository root, when the scope recorded
-// it (result schema 9), so paths read from the root instead of `../../`.
-export function projectDirectory(scope: RecordedScope): string {
-  const outside: object = scope.outside;
-
-  return 'projectDirectory' in outside &&
-    typeof outside.projectDirectory === 'string' &&
-    outside.projectDirectory !== '.'
-    ? outside.projectDirectory
-    : '';
-}
-
-export function repoPath(scope: RecordedScope, file: string): string {
-  const base = projectDirectory(scope);
-
-  return normalize(base === '' ? file : `${base}/${file}`);
+// A path as people read it, without `.` segments or a `..` that a later
+// segment undoes. Paths stay relative to the captured project until the
+// scope records where the project sits in the repository.
+export function repoPath(file: string): string {
+  return normalize(file);
 }
 
 function parent(directory: string): string {
@@ -340,6 +336,31 @@ function byKindThenId(first: Card['kind']) {
   };
 }
 
+// The candidate's request count for the routes, with the base's when it
+// differs: what the request ledgers recorded, not a check outcome.
+function requestStatus(index: MapIndex, routes: readonly string[]): Status {
+  const ids = new Set(routes);
+  let candidate = 0;
+  let base: number | null = 0;
+
+  for (const connection of index.map.connections) {
+    if (connection.kind === 'requested' && ids.has(connection.to)) {
+      candidate += connection.candidate.count;
+      base =
+        base === null || connection.base === null
+          ? null
+          : base + connection.base.count;
+    }
+  }
+
+  const label =
+    base === null || base === candidate
+      ? plural(candidate, 'request', 'requests')
+      : `${base} → ${plural(candidate, 'request', 'requests')}`;
+
+  return { label, tone: 'neutral', symbol: '' };
+}
+
 function journeyCards(index: MapIndex): Card[] {
   const assets = index.map.blocks.flatMap((block) =>
     block.kind === 'route' && isStaticRoute(block.path)
@@ -365,13 +386,15 @@ function journeyCards(index: MapIndex): Card[] {
                 name: block.title,
                 journey,
                 recipe: journey.checks.filter(
-                  (check) => check.recipe !== undefined,
+                  (check) =>
+                    check.recipe?.change === 'altered' ||
+                    check.recipe?.change === 'journey-altered',
                 ),
                 status: {
                   label:
                     conclusionLabels[journey.conclusion.kind].toLowerCase(),
                   tone: conclusionTones[journey.conclusion.kind],
-                  symbol: '',
+                  symbol: toneSymbols[conclusionTones[journey.conclusion.kind]],
                 },
               },
             ];
@@ -387,7 +410,7 @@ function journeyCards(index: MapIndex): Card[] {
               id: block.id,
               name: `${block.method} ${block.path}`,
               routes: [`${block.method} ${block.path}`],
-              status: { label: 'route', tone: 'neutral', symbol: '' },
+              status: requestStatus(index, [block.id]),
             },
           ]
         : [],
@@ -400,11 +423,14 @@ function journeyCards(index: MapIndex): Card[] {
             id: assetsId,
             name: `Static assets (${assets.length})`,
             routes: assets,
-            status: {
-              label: 'assets',
-              tone: 'neutral' as const,
-              symbol: '',
-            },
+            status: requestStatus(
+              index,
+              index.map.blocks.flatMap((block) =>
+                block.kind === 'route' && isStaticRoute(block.path)
+                  ? [block.id]
+                  : [],
+              ),
+            ),
           },
         ]),
     ...[...removed].map((title, position): Card => ({
@@ -414,7 +440,7 @@ function journeyCards(index: MapIndex): Card[] {
       checks:
         index.result.removedJourneys.find((item) => item.journey === title)
           ?.checks ?? [],
-      status: { label: 'removed', tone: 'unknown', symbol: '?' },
+      status: { label: 'not captured', tone: 'unknown', symbol: '?' },
     })),
   ];
 }
@@ -488,8 +514,7 @@ function cardFor(
 }
 
 // A level with more blocks than this folds its unchanged files into one card
-// until the reader opens it, as Nx folds a directory and CodeSee hides
-// unchanged files. Two or more config files always share one.
+// until the reader opens it. Two or more config files always share one.
 export const crowded = 20;
 
 export const foldId = (fold: Fold, directory: string) => `${fold}:${directory}`;
@@ -728,7 +753,7 @@ export function cardSentence(index: MapIndex, card: Card): string {
       return `Only the base's observed.json defines this journey, so nothing captured it and ${plural(card.checks.length, 'check is', 'checks are')} unknown.`;
     case 'route':
       return card.id === assetsId
-        ? `${plural(card.routes.length, 'request', 'requests')} for scripts, styles, fonts, images and the page itself. The request view lists each one.`
+        ? `${plural(card.routes.length, 'request', 'requests')} for scripts, styles, fonts, images and the page itself. The panel and each journey's request view list them.`
         : 'A route in the request ledger. Each journey link says how many requests it made, on each side.';
   }
 }
@@ -736,9 +761,9 @@ export function cardSentence(index: MapIndex, card: Card): string {
 export function cardPath(index: MapIndex, card: Card): string | null {
   switch (card.kind) {
     case 'directory':
-      return `${repoPath(index.scope, card.path)}/`;
+      return `${repoPath(card.path)}/`;
     case 'file':
-      return repoPath(index.scope, card.path);
+      return repoPath(card.path);
     case 'package':
     case 'folded':
     case 'outside-files':
@@ -829,7 +854,7 @@ export function parentLevel(index: MapIndex, directory: string): string | null {
 export type Reach = { files: number; hops: number };
 
 // Files that reach the card's files through recorded imports (upstream) and
-// files they reach (downstream), with the longest chain in hops.
+// files they reach (downstream), with how many hops away the farthest is.
 export function reach(
   index: MapIndex,
   card: Card,

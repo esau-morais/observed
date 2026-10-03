@@ -1,4 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
+import { Option, Schema } from 'effect';
 import {
   useEffect,
   useLayoutEffect,
@@ -9,7 +10,12 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { fileDetail, recipeLines, scopeLine } from '../change-scope-text';
+import {
+  fileDetail,
+  recipeLabels,
+  recipeLines,
+  scopeLine,
+} from '../change-scope-text';
 import type {
   Comparison,
   MapBlock,
@@ -17,6 +23,7 @@ import type {
   MapEvidence,
   ScopeFile,
 } from '../comparison-model';
+import { runVerdicts } from '../comparison-model';
 import {
   anchorLocation,
   toneSymbols,
@@ -76,7 +83,7 @@ const styles = stylex.create({
   // The panel opens over the map's right edge on wide screens and as a sheet
   // from the bottom on narrow ones, so the map keeps the full width.
   panelColumn: {
-    insetBlockEnd: { default: 0, [media.desktop]: 0 },
+    insetBlockEnd: 0,
     insetBlockStart: { default: 'auto', [media.desktop]: 0 },
     insetInlineEnd: 0,
     insetInlineStart: { default: 0, [media.desktop]: 'auto' },
@@ -145,7 +152,7 @@ const styles = stylex.create({
     paddingInline: 8,
     whiteSpace: 'nowrap',
   },
-  pillEmpty: { color: colors.textMuted, opacity: 0.6 },
+  pillEmpty: { color: colors.textMuted },
   countRow: {
     alignItems: 'center',
     display: 'flex',
@@ -171,7 +178,7 @@ const styles = stylex.create({
     fontFamily: fonts.sans,
     fontSize: '0.8125rem',
     fontWeight: 500,
-    minHeight: 32,
+    minHeight: geometry.target,
     outlineColor: {
       default: 'transparent',
       ':focus-visible': colors.focus,
@@ -287,7 +294,7 @@ const styles = stylex.create({
   cardChanged: { borderColor: colors.text },
   cardQuiet: { backgroundColor: colors.surface, color: colors.textSecondary },
   cardOutside: { backgroundColor: colors.surface, borderStyle: 'dashed' },
-  cardJourney: { borderColor: colors.linkCheckedBy },
+  cardJourney: { backgroundColor: colors.surfaceMuted },
   cardRemoved: { borderStyle: 'dashed', borderColor: colors.unknown },
   // Forced colors drop fills and shadows, so selection there is a thicker
   // border.
@@ -296,7 +303,7 @@ const styles = stylex.create({
     borderWidth: { default: 1, [media.forcedColors]: 3 },
     boxShadow: `0 0 0 1px ${colors.focus}`,
   },
-  dim: { opacity: 0.25 },
+  dim: { opacity: 0.35 },
   cardTop: {
     alignItems: 'center',
     display: 'flex',
@@ -422,7 +429,6 @@ const styles = stylex.create({
     borderRadius: 8,
     borderStyle: 'solid',
     borderWidth: 1,
-    boxShadow: '0 4px 12px rgba(8,17,18,0.18)',
     display: 'grid',
     fontSize: '0.75rem',
     gap: 4,
@@ -440,16 +446,18 @@ const styles = stylex.create({
   tooltipTitle: { fontWeight: 600 },
   panel: {
     alignContent: 'start',
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.surfaceRaised,
     borderColor: colors.borderControl,
     borderRadius: { default: '12px 12px 0 0', [media.desktop]: 12 },
     borderStyle: 'solid',
     borderWidth: 1,
-    boxShadow: '0 8px 24px rgba(8,17,18,0.22)',
     boxSizing: 'border-box',
     display: 'grid',
     gap: 16,
-    maxHeight: { default: '70vh', [media.desktop]: 'calc(100vh - 16px)' },
+    maxHeight: {
+      default: '70vh',
+      [media.desktop]: 'min(100%, calc(100vh - 16px))',
+    },
     pointerEvents: 'auto',
     minWidth: 0,
     outlineColor: {
@@ -504,7 +512,7 @@ const styles = stylex.create({
     fontSize: '0.875rem',
     gap: 8,
     justifyContent: 'space-between',
-    minHeight: 32,
+    minHeight: geometry.target,
     outlineColor: {
       default: 'transparent',
       ':focus-visible': colors.focus,
@@ -720,7 +728,7 @@ function Evidence({ evidence }: { evidence: readonly MapEvidence[] }) {
 }
 
 const minZoom = 0.4;
-const minFit = 0.6;
+const minFit = 0.85;
 const maxZoom = 2;
 
 const sizes = {
@@ -744,7 +752,7 @@ function linkKey(link: Pick<Link, 'from' | 'to'>) {
 
 // Inside cards in layered rows, the outside row under them, and the journey
 // row last. Only the first two take part in the layered layout; journey
-// links show on demand, as feature links do in the reference.
+// links show on demand.
 function placeLevel(level: Level, width: number, root: boolean): Placed {
   const size = width < 560 ? sizes.narrow : sizes.wide;
   const pad = root ? 0 : 16;
@@ -909,7 +917,7 @@ function CardButton({
       type="button"
       data-card={card.id}
       aria-label={cardLabel(index, card, links)}
-      aria-pressed={selected}
+      aria-pressed={hasParts(card) ? undefined : selected}
       onClick={(event) => onOpen(card, event.detail === 0)}
       onPointerEnter={() => onActive(card.id)}
       onPointerLeave={() => onActive(null)}
@@ -1397,11 +1405,10 @@ function MapCanvas({
                   >
                     {links.map((link, position) => {
                       const offset = (position - (links.length - 1) / 2) * 4;
-                      const shifted = points.map((point, at) =>
-                        at === 0 || at === points.length - 1
-                          ? { x: point.x + offset, y: point.y }
-                          : { x: point.x + offset, y: point.y },
-                      );
+                      const shifted = points.map((point) => ({
+                        x: point.x + offset,
+                        y: point.y,
+                      }));
 
                       return (
                         <path
@@ -1633,7 +1640,61 @@ function sourceArtifact(result: Comparison, file: string): string | null {
   return null;
 }
 
+function rangeText(list: readonly (readonly [number, number])[]): string {
+  return list
+    .map(([start, end]) => (start === end ? `${start}` : `${start}-${end}`))
+    .join(', ');
+}
+
+function ChangedLines({ card }: { card: Card }) {
+  if (card.kind !== 'file' || card.file === undefined) {
+    return null;
+  }
+
+  const changed = card.block.changedLines;
+  const coverage = 'lines' in card.file ? card.file.lines : null;
+  let lines = 'Unknown: the snapshots could not be compared.';
+
+  if (changed !== null) {
+    lines =
+      changed.length === 0
+        ? 'The change adds no line to this file.'
+        : rangeText(changed);
+  }
+
+  return (
+    <section {...stylex.props(styles.group)}>
+      <h4 {...stylex.props(styles.panelHeading)}>Changed lines</h4>
+      <p {...stylex.props(styles.text)}>{lines}</p>
+      {coverage === null ? null : (
+        <p {...stylex.props(styles.text)}>
+          Ran: {coverage.ran.length === 0 ? 'none' : rangeText(coverage.ran)}.
+          Did not run:{' '}
+          {coverage.notRan.length === 0 ? 'none' : rangeText(coverage.notRan)}.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function Sources({ index, card }: { index: MapIndex; card: Card }) {
+  if (card.kind === 'route' && card.routes.length > 1) {
+    return (
+      <section {...stylex.props(styles.group)}>
+        <h4 {...stylex.props(styles.panelHeading)}>
+          Requests ({card.routes.length})
+        </h4>
+        <ul {...stylex.props(styles.list)}>
+          {card.routes.map((route) => (
+            <li key={route} {...stylex.props(styles.mono)}>
+              {route}
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
   if (card.kind === 'package') {
     return (
       <section {...stylex.props(styles.group)}>
@@ -1668,7 +1729,7 @@ function Sources({ index, card }: { index: MapIndex; card: Card }) {
             card.kind === 'outside-files'
               ? null
               : sourceArtifact(index.result, file);
-          const shown = repoPath(index.scope, file);
+          const shown = repoPath(file);
 
           return (
             <li key={file} {...stylex.props(styles.mono)}>
@@ -1778,8 +1839,18 @@ function JourneyFacts({ index, card }: { index: MapIndex; card: Card }) {
     return null;
   }
 
+  // recipeLines prefixes a check's name with its journey when there are
+  // several.
+  const prefix =
+    index.result.journeys.length + index.result.removedJourneys.length > 1
+      ? `${card.journey.title}: `
+      : '';
   const lines = recipeLines(index.result).filter((line) =>
-    card.recipe.some((check) => line.includes(check.name)),
+    card.recipe.some((check) =>
+      line.startsWith(
+        `${recipeLabels[check.recipe?.change ?? 'altered']}: ${prefix}${check.name}.`,
+      ),
+    ),
   );
 
   return (
@@ -1826,11 +1897,16 @@ function VerdictEvidence({
   map: RecordedMap;
 }) {
   const failing = verdictChecks(result);
+  const ran = runVerdicts(result).filter(
+    (check) => check.verdict !== 'not-run',
+  ).length;
 
   if (failing.length === 0) {
     return (
       <p {...stylex.props(styles.text)}>
-        No check failed or is unknown. Select a block to see its evidence.
+        {ran === 0
+          ? 'No named check ran, so no behavior was checked.'
+          : `${ran === 1 ? 'The named check' : `All ${ran} named checks`} passed. Select a block to see its evidence.`}
       </p>
     );
   }
@@ -1971,8 +2047,7 @@ function Panel({
   );
   const links = [...level.links, ...level.journeyLinks];
   const root = level.path === index.root;
-  // With nothing selected the panel describes the open level, as the
-  // reference does.
+  // With nothing selected the panel describes the open level.
   const shown = card ?? (root ? null : directoryCard(index, level.path));
 
   return (
@@ -2018,6 +2093,7 @@ function Panel({
         </>
       ) : (
         <>
+          <ChangedLines card={shown} />
           <Sources index={index} card={shown} />
           <Parts index={index} card={shown} onOpen={onOpen} />
           <Reach index={index} card={shown} />
@@ -2056,8 +2132,20 @@ type MapState = {
   selection: Selection;
 };
 
-// The open level and selected block live in the URL hash, as Archify keeps
-// its focus, so a link opens the same view: `#map=src&block=file:src/a.ts`.
+// The open level and selected block live in the URL hash, so a link opens
+// the same view: `#map=src&block=file:src/a.ts`.
+const hashSchema = Schema.Struct({
+  map: Schema.String,
+  open: Schema.optionalKey(Schema.String),
+  block: Schema.optionalKey(Schema.String),
+});
+
+const folds = new Set<string>(['config', 'unchanged'] satisfies Fold[]);
+
+function isFold(value: string): value is Fold {
+  return folds.has(value);
+}
+
 function readHash(index: MapIndex): MapState {
   const fallback = {
     directory: index.root,
@@ -2069,30 +2157,31 @@ function readHash(index: MapIndex): MapState {
     return fallback;
   }
 
-  const params = new URLSearchParams(location.hash.slice(1));
-  const directory = params.get('map') ?? index.root;
-  const known =
-    directory === index.root ||
-    index.captured.some((block) => block.path.startsWith(`${directory}/`));
+  const parsed = Schema.decodeUnknownOption(hashSchema)(
+    Object.fromEntries(new URLSearchParams(location.hash.slice(1))),
+  );
 
-  if (
-    !known ||
-    !(directory === index.root || directory.startsWith(index.root))
-  ) {
+  if (Option.isNone(parsed)) {
     return fallback;
   }
 
-  const block = params.get('block');
+  const { map: directory, open, block } = parsed.value;
+  const known =
+    directory === index.root ||
+    (under(directory, index.root) &&
+      index.captured.some((item) => item.path.startsWith(`${directory}/`)));
 
-  return {
-    directory,
-    opened: (params.get('open') ?? '')
-      .split(',')
-      .filter(
-        (item): item is Fold => item === 'config' || item === 'unchanged',
-      ),
-    selection: block === null ? null : { kind: 'card', id: block },
-  };
+  return known
+    ? {
+        directory,
+        opened: (open ?? '').split(',').filter(isFold),
+        selection: block === undefined ? null : { kind: 'card', id: block },
+      }
+    : fallback;
+}
+
+function under(directory: string, root: string) {
+  return root === '' || directory.startsWith(`${root}/`);
 }
 
 function writeHash(index: MapIndex, state: MapState) {
@@ -2459,7 +2548,7 @@ function fileTree(index: MapIndex): TreeNode {
   const top: TreeNode = { name: '', path: '', files: [], directories: [] };
 
   for (const file of index.scope.files) {
-    const parts = repoPath(index.scope, file.path).split('/');
+    const parts = repoPath(file.path).split('/');
     let node = top;
 
     for (const part of parts.slice(0, -1)) {
@@ -2525,7 +2614,7 @@ function TreeLevel({
               <span {...stylex.props(styles.srOnly)}>{file.change}</span>
             </span>
             <span {...stylex.props(styles.mono)}>
-              {repoPath(index.scope, file.path).split('/').at(-1)}
+              {repoPath(file.path).split('/').at(-1)}
             </span>
             <StatusChip status={statusOf(file.relation)} />
           </span>
@@ -2538,8 +2627,8 @@ function TreeLevel({
   );
 }
 
-// The change as a file tree with a change gutter and one note per file, like
-// HumanLayer's show-me file tree diff.
+// The change as a file tree with a change gutter and one note per file, then
+// every connection with its records: the map's text version.
 function FileTree({ index }: { index: MapIndex }) {
   const { notes } = scopeTable(index.result);
 
@@ -2560,7 +2649,50 @@ function FileTree({ index }: { index: MapIndex }) {
           ))}
         </ul>
       )}
+      <ConnectionTable index={index} />
     </div>
+  );
+}
+
+function ConnectionTable({ index }: { index: MapIndex }) {
+  const { connections } = index.map;
+
+  return connections.length === 0 ? null : (
+    <table {...stylex.props(styles.table)}>
+      <caption {...stylex.props(styles.caption)}>
+        Each connection on the map and the records it came from
+      </caption>
+      <thead>
+        <tr>
+          {['Type', 'Connection', 'Evidence'].map((label) => (
+            <th
+              key={label}
+              scope="col"
+              {...stylex.props(styles.cell, styles.headCell)}
+            >
+              {label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {connections.map((connection) => (
+          <tr
+            key={`${connection.kind} ${connection.from} ${connection.to} ${connectionText(connection, index.blocks)}`}
+          >
+            <td {...stylex.props(styles.cell)}>
+              {connectionLabels[connection.kind]}
+            </td>
+            <td {...stylex.props(styles.cell, styles.text)}>
+              {connectionText(connection, index.blocks)}
+            </td>
+            <td {...stylex.props(styles.cell)}>
+              <Evidence evidence={connection.evidence} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

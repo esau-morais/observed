@@ -60,7 +60,7 @@ Connecting another application requires no edits to Observed.
 
 Lead with the evidence that explains the verdict: a failed or unknown check's
 evidence when present, otherwise the captured application. With a change
-scope, that evidence opens beside the [change map](#change-map). A requested
+scope, that evidence opens from the [change map](#change-map). A requested
 comparison shows both versions and names any missing capture. A standalone
 preview needs no baseline. Checks and technical details sit one disclosure
 away.
@@ -146,17 +146,27 @@ observed" with that reason, and the agent spends no budget on it.
 
 ### Change map
 
-The report draws the change scope as a map. The table of changed files stays
-as the map's text version, with the same facts, so the map makes no claim that
-the table lacks.
+The report draws the change scope as a map. Its Files view is the text
+version: the changed files as a tree with each file's relation and evidence,
+then every connection with the records it came from, so the map makes no
+claim that the text lacks.
 
 - A block is a changed file, or a file that imports one or is imported by one.
-  Blocks group by directory. Selecting a directory opens it, and Escape goes
-  back up. A package outside the captured source is one block, outside the
-  directory groups. Journeys and the routes they requested are blocks of
-  their own layer.
+  The map shows one directory at a time. Selecting a directory opens it, and
+  Escape goes back up. Blocks elsewhere that connect to the open directory
+  appear in an outside row. Packages share one outside block, and files
+  outside the captured source are one block with their count. Journeys and
+  the routes they requested are a row of their own. Requests for scripts,
+  styles, fonts, images, and the page itself share one "Static assets" block.
+- A block's name is its file or directory name, and paths read from the
+  repository root. Manifests, lockfiles, and tool configuration on one level
+  fold into one block. A level with more than 20 blocks folds its unchanged
+  files into one block. A fold opens in place, and its connections stay
+  drawn to it.
 - A changed file's chip is its relation: checked, exercised, not observed, or
-  outside the captured source. Unchanged files give context and have no chip.
+  outside the captured source. A directory or fold takes the weakest relation
+  among its changed files, so a gap is never hidden behind a checked file.
+  Unchanged files show "unchanged", which is not a check result.
 - Each connection comes from evidence records of one type, and each type has
   one source:
 
@@ -168,17 +178,20 @@ the table lacks.
 | Threw at | An error record and its stack frame |
 | Checked by | A named check and its scope |
 
-- Pointing at a block dims every block without a connection to it. Journeys
-  are a separate layer, and their connections show only on hover or
-  selection.
+- Pointing at a block dims every block without a connection to it. Journey
+  connections show only on hover or selection.
 - Selecting a block opens a side panel with its changed lines, the journeys
-  that ran them, the checks that covered them, and the artifact paths. A
-  connection's label is its evidence, such as "GET /api/items: 2 requests,
-  base 1".
-- When a comparison has a change scope, the map is the report's main view.
-  The side panel opens on the evidence that explains the verdict: a failed or
-  unknown check's evidence when present, otherwise the captured application.
-  A preview has no change scope and opens on the captured application.
+  that ran them, the checks that covered them, its connections with the
+  evidence of each, and the artifact paths. A connection's label is its
+  evidence, such as "GET /api/items: 2 requests, base 1".
+- When a comparison has a change scope with a captured changed file, the map
+  is the report's main view and opens at full width with its panel closed;
+  Details opens the panel on the evidence that explains the verdict. When no
+  captured file changed, the journeys' evidence leads and the Files view
+  follows it. A preview has no change scope and opens on the captured
+  application.
+- The open level and the selected block are kept in the page address, so a
+  link opens that view.
 
 ### Repository map
 

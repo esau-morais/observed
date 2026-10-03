@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
     outDir: fileURLToPath(new URL('./dist/viewer', import.meta.url)),
     emptyOutDir: true,
     // The single-file report allows one script, so the viewer stays one
-    // chunk of about 530 KB.
+    // chunk of about 540 KB minified.
     chunkSizeWarningLimit: 600,
   },
 }));
