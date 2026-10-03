@@ -19,6 +19,7 @@ import {
   cliCommand,
   detectAgents,
   githubRepository,
+  guideSection,
   openCodeMajor,
   skillText,
   tagCommit,
@@ -43,6 +44,12 @@ afterEach(async () => {
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true })),
   );
+});
+
+test('observed skill finds its guide in the shipped README', async () => {
+  const readme = await readFile(path.join(root, 'README.md'), 'utf8');
+
+  expect(guideSection(readme)).toMatch(/^### Write observed\.json\n/);
 });
 
 async function scratch() {
