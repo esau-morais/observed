@@ -61,4 +61,22 @@ export const statusWords = {
     word: 'Capture failed',
     meaning: 'The capture stopped before it recorded its evidence.',
   },
+  checked: {
+    word: 'Checked',
+    meaning:
+      'A named check evaluated evidence that points into the changed file.',
+  },
+  exercised: {
+    word: 'Exercised',
+    meaning:
+      'Recorded evidence shows that the changed file ran. It says nothing about whether it ran correctly.',
+  },
+  notObserved: {
+    word: 'Not observed',
+    meaning: 'No recorded evidence touched the changed file.',
+  },
+  outsideCapturedSource: {
+    word: 'Outside the captured source',
+    meaning: 'The file changed, and neither source snapshot contains it.',
+  },
 } as const;

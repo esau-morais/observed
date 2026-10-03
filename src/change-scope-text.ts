@@ -1,12 +1,13 @@
 import type { ChangeScope, Comparison, ScopeFile } from './comparison-model';
+import { statusWords } from './status-words';
 
 type Recorded = Extract<ChangeScope, { kind: 'recorded' }>;
 
 export const relationLabels = {
-  checked: 'Checked',
-  exercised: 'Exercised',
-  'not-observed': 'Not observed',
-  'outside-captured-source': 'Outside the captured source',
+  checked: statusWords.checked.word,
+  exercised: statusWords.exercised.word,
+  'not-observed': statusWords.notObserved.word,
+  'outside-captured-source': statusWords.outsideCapturedSource.word,
 } satisfies Record<ScopeFile['relation'], string>;
 
 const basisWords = {
