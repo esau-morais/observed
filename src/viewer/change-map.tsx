@@ -238,8 +238,11 @@ const styles = stylex.create({
     pointerEvents: 'none',
     position: 'absolute',
   },
+  // Drawn above the connections so labels stay readable; they take no
+  // pointer events, so the connections under them still answer hover.
   container: {
     borderColor: colors.borderControl,
+    pointerEvents: 'none',
     borderRadius: 12,
     borderStyle: 'dashed',
     borderWidth: 1,
@@ -248,6 +251,7 @@ const styles = stylex.create({
   },
   rowLabel: {
     backgroundColor: colors.surface,
+    pointerEvents: 'none',
     borderRadius: 4,
     color: colors.textSecondary,
     paddingInline: 4,
@@ -259,6 +263,7 @@ const styles = stylex.create({
   rowNote: { color: colors.textMuted, fontWeight: 400 },
   rule: {
     borderTopColor: colors.border,
+    pointerEvents: 'none',
     borderTopStyle: 'dashed',
     borderTopWidth: 1,
     position: 'absolute',
@@ -303,7 +308,13 @@ const styles = stylex.create({
     borderWidth: { default: 1, [media.forcedColors]: 3 },
     boxShadow: `0 0 0 1px ${colors.focus}`,
   },
-  dim: { opacity: 0.35 },
+  // Unrelated blocks recede without dropping below text contrast: they stay
+  // clickable, so their text must stay readable.
+  dim: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    color: colors.textMuted,
+  },
   cardTop: {
     alignItems: 'center',
     display: 'flex',
@@ -390,16 +401,27 @@ const styles = stylex.create({
     transitionProperty: 'opacity',
   },
   badge: {
-    fill: colors.surfaceRaised,
-    stroke: colors.borderControl,
-    strokeWidth: 1,
-  },
-  badgeText: {
-    fill: colors.text,
+    alignItems: 'center',
+    backgroundColor: colors.surfaceRaised,
+    borderColor: colors.borderControl,
+    borderRadius: 9999,
+    borderStyle: 'solid',
+    borderWidth: 1,
+    boxSizing: 'border-box',
+    color: colors.text,
+    display: 'flex',
     fontFamily: fonts.mono,
     fontSize: 10,
     fontWeight: 600,
+    height: 18,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingInline: 3,
+    pointerEvents: 'none',
+    position: 'absolute',
+    transform: 'translate(-50%, -50%)',
   },
+  badgeAt: (x: number, y: number) => ({ left: `${x}px`, top: `${y}px` }),
   removed: { strokeDasharray: '1 5', strokeLinecap: 'round' },
   imports: { color: colors.linkImports, stroke: colors.linkImports },
   'ran-in': {
@@ -423,6 +445,7 @@ const styles = stylex.create({
     strokeDasharray: '14 4',
   },
   sample: { flexShrink: 0, height: 10, width: 24 },
+  glyph: { flexShrink: 0, height: '0.9em', width: '0.9em' },
   tooltip: {
     backgroundColor: colors.surfaceRaised,
     borderColor: colors.borderControl,
@@ -656,6 +679,40 @@ type Selection = { kind: 'card'; id: string } | null;
 // The selection that shows the open level itself in the panel.
 const levelSelection = 'level';
 
+const glyphPaths: Record<string, string> = {
+  '✓': 'M3 8.5 6.5 12 13 4.5',
+  '▸': 'M5 3.5v9l7-4.5z',
+  '?': 'M5.5 6a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M8 13v.5',
+  '∅': 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM3.5 12.5l9-9',
+  '–': 'M4 8h8',
+  '!': 'M8 2.5v7M8 12.5v1',
+  '−': 'M3.5 8h9',
+  '+': 'M3.5 8h9M8 3.5v9',
+  '×': 'M4 4l8 8M12 4l-8 8',
+  '~': 'M3 9c1.5-2 3-2 5 0s3.5 2 5 0',
+  '/': 'M10.5 3 5.5 13',
+  '›': 'M6 3.5 10.5 8 6 12.5',
+};
+
+// Symbols drawn as icons rather than characters, so contrast tools and
+// fonts treat them as graphics; the text beside them carries the meaning.
+function Glyph({ symbol }: { symbol: string }) {
+  const path = glyphPaths[symbol];
+
+  return path === undefined ? null : (
+    <svg aria-hidden="true" viewBox="0 0 16 16" {...stylex.props(styles.glyph)}>
+      <path
+        d={path}
+        fill={symbol === '▸' ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={symbol === '▸' ? 0 : 1.75}
+      />
+    </svg>
+  );
+}
+
 function StatusChip({
   status,
   compact = false,
@@ -665,9 +722,7 @@ function StatusChip({
 }) {
   return (
     <span {...stylex.props(styles.chip, styles[status.tone])}>
-      {status.symbol === '' ? null : (
-        <span aria-hidden="true">{status.symbol}</span>
-      )}
+      {status.symbol === '' ? null : <Glyph symbol={status.symbol} />}
       {compact ? (status.short ?? status.label) : status.label}
     </span>
   );
@@ -943,8 +998,8 @@ function CardButton({
       <span {...stylex.props(styles.cardFoot)}>
         <span {...stylex.props(styles.cardFootText)}>{foot}</span>
         {hasParts(card) ? (
-          <span aria-hidden="true" {...stylex.props(styles.chevron)}>
-            ›
+          <span {...stylex.props(styles.chevron)}>
+            <Glyph symbol="›" />
           </span>
         ) : null}
       </span>
@@ -1155,6 +1210,55 @@ function MapCanvas({
     return pairs;
   }, [level]);
   const hoveredLinks = hovered === null ? [] : (byPair.get(hovered.key) ?? []);
+  // Count badges sit at the middle of a strand, nudged down when two would
+  // overlap. They are HTML above the drawing so their text has its own
+  // background, which contrast checks can read.
+  const badges = useMemo(() => {
+    const placedBadges: {
+      key: string;
+      total: number;
+      x: number;
+      y: number;
+      from: string;
+      to: string;
+    }[] = [];
+
+    for (const [key, links] of byPair) {
+      const points = placed.edges.get(key) ?? [];
+      const total = links.reduce(
+        (sum, link) => sum + link.connections.length,
+        0,
+      );
+      const middle = Math.max(0, Math.floor((points.length - 2) / 2));
+      const start = points[middle];
+      const next = points[middle + 1];
+      const [first] = links;
+
+      if (
+        total < 2 ||
+        start === undefined ||
+        next === undefined ||
+        first === undefined
+      ) {
+        continue;
+      }
+
+      const x = (start.x + next.x) / 2;
+      let y = (start.y + next.y) / 2;
+
+      while (
+        placedBadges.some(
+          (other) => Math.abs(other.x - x) < 22 && Math.abs(other.y - y) < 20,
+        )
+      ) {
+        y += 20;
+      }
+
+      placedBadges.push({ key, total, x, y, from: first.from, to: first.to });
+    }
+
+    return placedBadges;
+  }, [byPair, placed]);
   // A dense level draws its connections faintly until a block is in focus.
   const dense = byPair.size > 40;
   const shownJourneyLinks = level.journeyLinks.filter(
@@ -1196,7 +1300,7 @@ function MapCanvas({
           onClick={() => step(-1)}
           {...stylex.props(styles.toggle)}
         >
-          −
+          <Glyph symbol="−" />
         </button>
         <button
           type="button"
@@ -1212,7 +1316,7 @@ function MapCanvas({
           onClick={() => step(1)}
           {...stylex.props(styles.toggle)}
         >
-          +
+          <Glyph symbol="+" />
         </button>
       </div>
       <div
@@ -1272,6 +1376,107 @@ function MapCanvas({
               styles.zoomed(scale),
             )}
           >
+            <svg
+              aria-hidden="true"
+              width={placed.width}
+              height={placed.height}
+              {...stylex.props(styles.edges)}
+            >
+              <defs>
+                {connectionKinds.map((kind) => (
+                  <marker
+                    key={kind}
+                    id={`arrow-${kind}`}
+                    viewBox="0 0 8 8"
+                    refX="7"
+                    refY="4"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                    {...stylex.props(styles[kind])}
+                  >
+                    <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
+                  </marker>
+                ))}
+              </defs>
+              {[...byPair].map(([key, links]) => {
+                const points = placed.edges.get(key);
+
+                if (points === undefined) {
+                  return null;
+                }
+
+                const [first] = links;
+                const touches =
+                  focus === null ||
+                  (first !== undefined &&
+                    (first.from === focus || first.to === focus));
+
+                return (
+                  <g
+                    key={key}
+                    onPointerEnter={(event) => {
+                      const box =
+                        event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+
+                      setHovered({
+                        key,
+                        at: {
+                          x: (event.clientX - (box?.left ?? 0)) / scale + 12,
+                          y: (event.clientY - (box?.top ?? 0)) / scale + 12,
+                        },
+                      });
+                    }}
+                    onPointerLeave={() => setHovered(null)}
+                    {...stylex.props(
+                      styles.edgeGroup,
+                      !touches && styles.faint,
+                      focus === null && dense && styles.rest,
+                    )}
+                  >
+                    {links.map((link, position) => {
+                      const offset = (position - (links.length - 1) / 2) * 4;
+                      const shifted = points.map((point) => ({
+                        x: point.x + offset,
+                        y: point.y,
+                      }));
+
+                      return (
+                        <path
+                          key={link.id}
+                          d={curve(shifted)}
+                          markerEnd={`url(#arrow-${link.kind})`}
+                          {...stylex.props(
+                            styles.line,
+                            styles[link.kind],
+                            link.removed && styles.removed,
+                            focus !== null && touches && styles.strong,
+                          )}
+                        />
+                      );
+                    })}
+                    <path d={curve(points)} {...stylex.props(styles.hit)} />
+                  </g>
+                );
+              })}
+              {shownJourneyLinks.map((link) => {
+                const from = placed.cards.get(link.from);
+                const to = placed.cards.get(link.to);
+
+                return from === undefined || to === undefined ? null : (
+                  <path
+                    key={link.id}
+                    d={journeyPath(from, to)}
+                    markerEnd={`url(#arrow-${link.kind})`}
+                    {...stylex.props(
+                      styles.line,
+                      styles[link.kind],
+                      styles.strong,
+                    )}
+                  />
+                );
+              })}
+            </svg>
             {placed.container === null ? null : (
               <div
                 aria-hidden="true"
@@ -1335,136 +1540,22 @@ function MapCanvas({
                 </span>
               </>
             )}
-            <svg
-              aria-hidden="true"
-              width={placed.width}
-              height={placed.height}
-              {...stylex.props(styles.edges)}
-            >
-              <defs>
-                {connectionKinds.map((kind) => (
-                  <marker
-                    key={kind}
-                    id={`arrow-${kind}`}
-                    viewBox="0 0 8 8"
-                    refX="7"
-                    refY="4"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
-                    {...stylex.props(styles[kind])}
-                  >
-                    <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
-                  </marker>
-                ))}
-              </defs>
-              {[...byPair].map(([key, links]) => {
-                const points = placed.edges.get(key);
-
-                if (points === undefined) {
-                  return null;
-                }
-
-                const [first] = links;
-                const touches =
-                  focus === null ||
-                  (first !== undefined &&
-                    (first.from === focus || first.to === focus));
-                const total = links.reduce(
-                  (sum, link) => sum + link.connections.length,
-                  0,
-                );
-                const start = points[0];
-                const next = points[1];
-                const mid =
-                  start === undefined || next === undefined
-                    ? null
-                    : { x: (start.x + next.x) / 2, y: (start.y + next.y) / 2 };
-
-                return (
-                  <g
-                    key={key}
-                    onPointerEnter={(event) => {
-                      const box =
-                        event.currentTarget.ownerSVGElement?.getBoundingClientRect();
-
-                      setHovered({
-                        key,
-                        at: {
-                          x: (event.clientX - (box?.left ?? 0)) / scale + 12,
-                          y: (event.clientY - (box?.top ?? 0)) / scale + 12,
-                        },
-                      });
-                    }}
-                    onPointerLeave={() => setHovered(null)}
-                    {...stylex.props(
-                      styles.edgeGroup,
-                      !touches && styles.faint,
-                      focus === null && dense && styles.rest,
-                    )}
-                  >
-                    {links.map((link, position) => {
-                      const offset = (position - (links.length - 1) / 2) * 4;
-                      const shifted = points.map((point) => ({
-                        x: point.x + offset,
-                        y: point.y,
-                      }));
-
-                      return (
-                        <path
-                          key={link.id}
-                          d={curve(shifted)}
-                          markerEnd={`url(#arrow-${link.kind})`}
-                          {...stylex.props(
-                            styles.line,
-                            styles[link.kind],
-                            link.removed && styles.removed,
-                            focus !== null && touches && styles.strong,
-                          )}
-                        />
-                      );
-                    })}
-                    <path d={curve(points)} {...stylex.props(styles.hit)} />
-                    {total > 1 && mid !== null ? (
-                      <g>
-                        <circle
-                          cx={mid.x}
-                          cy={mid.y}
-                          r={8}
-                          {...stylex.props(styles.badge)}
-                        />
-                        <text
-                          x={mid.x}
-                          y={mid.y}
-                          textAnchor="middle"
-                          dominantBaseline="central"
-                          {...stylex.props(styles.badgeText)}
-                        >
-                          {total}
-                        </text>
-                      </g>
-                    ) : null}
-                  </g>
-                );
-              })}
-              {shownJourneyLinks.map((link) => {
-                const from = placed.cards.get(link.from);
-                const to = placed.cards.get(link.to);
-
-                return from === undefined || to === undefined ? null : (
-                  <path
-                    key={link.id}
-                    d={journeyPath(from, to)}
-                    markerEnd={`url(#arrow-${link.kind})`}
-                    {...stylex.props(
-                      styles.line,
-                      styles[link.kind],
-                      styles.strong,
-                    )}
-                  />
-                );
-              })}
-            </svg>
+            {badges.map((badge) => (
+              <span
+                key={badge.key}
+                aria-hidden="true"
+                {...stylex.props(
+                  styles.badge,
+                  styles.badgeAt(badge.x, badge.y),
+                  focus !== null &&
+                    badge.from !== focus &&
+                    badge.to !== focus &&
+                    styles.dim,
+                )}
+              >
+                {badge.total}
+              </span>
+            ))}
             {ordered.map(({ card, box, place }) => (
               <CardButton
                 key={card.id}
@@ -2071,7 +2162,7 @@ function Panel({
             onClick={onClose}
             {...stylex.props(styles.toggle)}
           >
-            ×
+            <Glyph symbol="×" />
           </button>
         </span>
         <h3 {...stylex.props(styles.panelName)}>
@@ -2422,7 +2513,7 @@ function MapSection({
               <ol {...stylex.props(styles.trail)}>
                 {trail.map((path, position) => (
                   <li key={path} {...stylex.props(styles.titleRow)}>
-                    {position === 0 ? null : <span aria-hidden="true">/</span>}
+                    {position === 0 ? null : <Glyph symbol="/" />}
                     <button
                       type="button"
                       aria-current={path === directory ? 'location' : undefined}
@@ -2542,7 +2633,7 @@ type TreeNode = {
   directories: TreeNode[];
 };
 
-const gutters = { added: '+', modified: '~', removed: '-' } as const;
+const gutters = { added: '+', modified: '~', removed: '−' } as const;
 
 function fileTree(index: MapIndex): TreeNode {
   const top: TreeNode = { name: '', path: '', files: [], directories: [] };
@@ -2610,7 +2701,7 @@ function TreeLevel({
         <li key={file.path} {...stylex.props(styles.treeFile)}>
           <span {...stylex.props(styles.treeRow)}>
             <span {...stylex.props(styles.gutter)}>
-              <span aria-hidden="true">{gutters[file.change]}</span>
+              <Glyph symbol={gutters[file.change]} />
               <span {...stylex.props(styles.srOnly)}>{file.change}</span>
             </span>
             <span {...stylex.props(styles.mono)}>
@@ -2635,7 +2726,7 @@ function FileTree({ index }: { index: MapIndex }) {
   return (
     <div
       role="region"
-      aria-label="Changed files"
+      aria-label="File tree"
       tabIndex={0}
       {...stylex.props(styles.treeWrap)}
     >
