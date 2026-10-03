@@ -191,12 +191,13 @@ regression.
   `build: { rolldownOptions: { output: { keepNames: true } } }`, and Vite 7
   with `esbuild: { keepNames: true }`.
 - Observed points errors and React findings at source lines, and counts
-  the lines that ran, through source maps. Build with `build: { sourcemap: 'hidden' }` in Vite, or your bundler's
-  equivalent. Without a map, Observed matches a name only where the diff
-  defines it, and otherwise records why it has no line.
+  the lines that ran, through source maps. Build with
+  `build: { sourcemap: 'hidden' }` in Vite, or your bundler's equivalent.
+  Without a map, Observed matches a name only where the diff defines it, and
+  otherwise records why it has no line.
 - The conditions that make each check unknown, and the Playwright,
-  performance, coverage and API collectors, are described in `docs/CONFIGURATION.md` in
-  the Observed repository.
+  performance, coverage and API collectors, are described in
+  `docs/CONFIGURATION.md` in the Observed repository.
 
 ### Checks and collectors in detail
 

@@ -11,7 +11,9 @@ import {
   type SourceMapIndex,
 } from '../source-map';
 
-const maxScripts = 20;
+// As many as the coverage collector maps, so each map behind its lines is
+// kept.
+const maxScripts = 100;
 const maxBytes = 32 * 1024 * 1024;
 const timeoutMs = 5_000;
 // Map fetching runs inside the capture's own timeout, so it stops starting
@@ -126,8 +128,7 @@ const mapIn = (
     : found(text, via);
 
 // A hidden map sits next to its script without a sourceMappingURL comment,
-// so the adjacent `.map` is tried first. A caller that already holds the
-// script's text passes it instead of having it downloaded.
+// so the adjacent `.map` is tried first.
 export const findSourceMap = Effect.fnUntraced(function* (
   script: URL,
   origin: string,
@@ -250,8 +251,8 @@ function skipReason(index: number, elapsedMs: number): string | null {
 }
 
 // Fetches the source map of every application script that evidence points
-// into or that coverage mapped, while the application still runs. Anchors are resolved later, when
-// the captures are compared.
+// into or that coverage mapped, while the application still runs. Anchors
+// are resolved later, when the captures are compared.
 export const recordSourceMaps = Effect.fn('recordSourceMaps')(
   function* (options: {
     directory: string;

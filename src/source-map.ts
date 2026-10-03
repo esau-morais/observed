@@ -83,8 +83,12 @@ export type Segment = {
   } | null;
 };
 
-// Every segment in order, or null when the mappings are malformed.
-export function segments(map: SourceMap): Segment[] | null {
+// Segments in order through the 0-based generated line `last`, or null when
+// a segment up to there is malformed.
+export function segments(
+  map: SourceMap,
+  last = Number.POSITIVE_INFINITY,
+): Segment[] | null {
   let source = 0;
   let sourceLine = 0;
   let sourceColumn = 0;
@@ -92,6 +96,10 @@ export function segments(map: SourceMap): Segment[] | null {
   const result: Segment[] = [];
 
   for (const [generatedLine, row] of map.mappings.split(';').entries()) {
+    if (generatedLine > last) {
+      break;
+    }
+
     let generatedColumn = 0;
 
     for (const segment of row.split(',')) {
@@ -158,7 +166,7 @@ export function originalPosition(
   line: number,
   column: number,
 ): OriginalPosition | null {
-  const all = segments(map);
+  const all = segments(map, line - 1);
   let best: OriginalPosition | null = null;
 
   for (const segment of all ?? []) {

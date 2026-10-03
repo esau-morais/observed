@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
-import { fonts, media } from '../constants.stylex';
+import { fonts, geometry, media } from '../constants.stylex';
 import { colors } from '../tokens.stylex';
 import { SubHeading } from '../heading';
 import { lineCount } from '../../report-sections/coverage';
@@ -18,8 +18,19 @@ const styles = stylex.create({
   stack: { display: 'grid', gap: 12, minWidth: 0 },
   heading: { fontSize: '1rem', fontWeight: 500 },
   list: { display: 'grid', gap: 8, marginBlock: 0, paddingInlineStart: 20 },
-  mono: { fontFamily: fonts.mono, fontSize: '0.8125rem' },
+  mono: {
+    fontFamily: fonts.mono,
+    fontSize: '0.8125rem',
+    overflowWrap: 'anywhere',
+  },
+  count: { fontVariantNumeric: 'tabular-nums' },
   muted: { color: colors.textSecondary },
+  missing: {
+    backgroundColor: colors.unknownFill,
+    borderRadius: geometry.radius,
+    color: colors.unknown,
+    padding: 16,
+  },
 });
 
 function Files({
@@ -33,7 +44,7 @@ function Files({
     return (
       <section {...stylex.props(styles.stack)} aria-label={`${label} coverage`}>
         <SubHeading xstyle={styles.heading}>{label}</SubHeading>
-        <p {...stylex.props(styles.muted)}>
+        <p {...stylex.props(styles.missing)}>
           Unavailable: {side.evidence.reason}
         </p>
       </section>
@@ -62,7 +73,13 @@ function Files({
           {files.map((file) => (
             <li key={file.path}>
               <span {...stylex.props(styles.mono)}>{file.path}</span>:{' '}
-              {lineCount(file.executed)} lines ran, {lineCount(file.unexecuted)}{' '}
+              <span {...stylex.props(styles.count)}>
+                {lineCount(file.executed)}
+              </span>{' '}
+              lines ran,{' '}
+              <span {...stylex.props(styles.count)}>
+                {lineCount(file.unexecuted)}
+              </span>{' '}
               did not run
             </li>
           ))}

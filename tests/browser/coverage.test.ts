@@ -76,19 +76,65 @@ async function coverageOf(output: string) {
   ).value;
 }
 
-// The line numbers of a snapshot file whose text contains `needle`.
-async function linesWith(output: string, file: string, needle: string) {
+// The one line of a snapshot file whose text contains `needle` lies in
+// `ranges`.
+async function expectLineIn(
+  output: string,
+  file: string,
+  needle: string,
+  ranges: readonly (readonly [number, number])[] | undefined,
+) {
   const text = await readFile(path.join(output, 'source', file), 'utf8');
-
-  return text
+  const lines = text
     .split('\n')
     .flatMap((line, index) => (line.includes(needle) ? [index + 1] : []));
+  const [line] = lines;
+
+  expect(lines, needle).toHaveLength(1);
+  expect(
+    line !== undefined &&
+      ranges?.some(([start, end]) => start <= line && line <= end),
+    `${file}:${String(line)} in ${JSON.stringify(ranges)}`,
+  ).toBe(true);
 }
 
-const within = (
-  line: number,
-  ranges: readonly (readonly [number, number])[],
-): boolean => ranges.some(([start, end]) => start <= line && line <= end);
+// The environment capture gives setup commands. Vitest's NODE_ENV=test
+// would build a different bundle.
+const setupEnvironment = {
+  PATH: process.env.PATH,
+  HOME: process.env.HOME,
+  LANG: 'en_US.UTF-8',
+  TZ: 'UTC',
+};
+
+function patch(text: string, from: string, to: string): string {
+  expect(text).toContain(from);
+
+  return text.replace(from, to);
+}
+
+// The call count of the innermost function holding `offset` in the script
+// whose address ends with `script`, read from the raw DevTools output.
+async function rawCount(output: string, script: string, offset: number) {
+  const raw = decodeJson(
+    rawSchema,
+    await readFile(path.join(output, 'coverage-raw.json'), 'utf8'),
+  );
+  const functions =
+    raw.result.find((entry) => entry.url.endsWith(script))?.functions ?? [];
+
+  expect(offset).toBeGreaterThanOrEqual(0);
+
+  return functions
+    .flatMap((item) => item.ranges.slice(0, 1))
+    .filter((range) => range.startOffset <= offset && offset < range.endOffset)
+    .toSorted(
+      (left, right) =>
+        left.endOffset -
+        left.startOffset -
+        (right.endOffset - right.startOffset),
+    )[0]?.count;
+}
 
 const rawSchema = Schema.Struct({
   result: Schema.Array(
@@ -129,7 +175,8 @@ test('a minified bundle with a linked map resolves the triggered handler as exec
 
   await writeFile(
     path.join(project, 'server.ts'),
-    server.replace(
+    patch(
+      server,
       "    if (pathname === '/app.js') {",
       "    if (pathname === '/app.js.map') {\n      return new Response(Bun.file(`${root}/dist/app.js.map`));\n    }\n\n    if (pathname === '/app.js') {",
     ),
@@ -146,57 +193,25 @@ test('a minified bundle with a linked map resolves the triggered handler as exec
     { script: '/app.js', kind: 'mapped', files: ['app.ts'], excluded: [] },
   ]);
 
-  const [received] = await linesWith(output, 'app.ts', 'Order received for');
-  const [failed] = await linesWith(output, 'app.ts', "= 'Order failed'");
-  const [incomplete] = await linesWith(
-    output,
-    'app.ts',
-    'markup is incomplete',
-  );
+  await expectLineIn(output, 'app.ts', 'Order received for', app?.executed);
+  await expectLineIn(output, 'app.ts', "= 'Order failed'", app?.unexecuted);
+  await expectLineIn(output, 'app.ts', 'markup is incomplete', app?.unexecuted);
 
-  expect(received !== undefined && within(received, app?.executed ?? [])).toBe(
-    true,
-  );
-  expect(failed !== undefined && within(failed, app?.unexecuted ?? [])).toBe(
-    true,
-  );
+  // The setup command reproduces the bundle the browser ran, so the raw
+  // counts can be read without the source map: the innermost function
+  // holding each status text ran once and never.
   expect(
-    incomplete !== undefined && within(incomplete, app?.unexecuted ?? []),
-  ).toBe(true);
-
-  // The same build reproduces the bundle the browser ran, so the raw counts
-  // can be read without the source map: the innermost function holding each
-  // status text ran once and never.
-  const rebuilt = Bun.spawnSync(build, { cwd: project });
-
-  expect(rebuilt.exitCode).toBe(0);
+    Bun.spawnSync(build, { cwd: project, env: setupEnvironment }).exitCode,
+  ).toBe(0);
 
   const bundle = await readFile(path.join(project, 'dist', 'app.js'), 'utf8');
-  const raw = decodeJson(
-    rawSchema,
-    await readFile(path.join(output, 'coverage-raw.json'), 'utf8'),
-  );
-  const functions =
-    raw.result.find((script) => script.url.endsWith('/app.js'))?.functions ??
-    [];
-  const innermostCount = (offset: number) =>
-    functions
-      .map((item) => item.ranges[0])
-      .filter(
-        (range) =>
-          range !== undefined &&
-          range.startOffset <= offset &&
-          offset < range.endOffset,
-      )
-      .toSorted(
-        (left, right) =>
-          (left?.endOffset ?? 0) -
-          (left?.startOffset ?? 0) -
-          ((right?.endOffset ?? 0) - (right?.startOffset ?? 0)),
-      )[0]?.count;
 
-  expect(innermostCount(bundle.indexOf('Order received for'))).toBe(1);
-  expect(innermostCount(bundle.lastIndexOf('Order failed'))).toBe(0);
+  expect(
+    await rawCount(output, '/app.js', bundle.indexOf('Order received for')),
+  ).toBe(1);
+  expect(
+    await rawCount(output, '/app.js', bundle.lastIndexOf('Order failed')),
+  ).toBe(0);
 });
 
 test('a script without a source map records the reason and no ranges', async () => {
@@ -222,28 +237,44 @@ test('a map that embeds a different copy of a file excludes that file and keeps 
   const { output } = await capture(project, 'request-lab');
   const coverage = await coverageOf(output);
   const items = coverage.files.find((file) => file.path === 'items.ts');
-  const [requested] = await linesWith(output, 'items.ts', "fetch('/api/items'");
-  const [thrown] = await linesWith(output, 'items.ts', 'throw new Error');
+  const [script] = coverage.scripts;
 
   expect(coverage.files.map((file) => file.path)).not.toContain('App.tsx');
-  expect(coverage.scripts).toMatchObject([
-    {
-      kind: 'mapped',
-      excluded: [
-        {
-          path: 'App.tsx',
-          reason:
-            "The source map's copy of this file differs from the source snapshot, so its line numbers would not match",
-        },
-      ],
-    },
-  ]);
+  expect(script).toMatchObject({
+    kind: 'mapped',
+    excluded: [
+      {
+        path: 'App.tsx',
+        reason:
+          "The source map's copy of this file differs from the source snapshot, so its line numbers would not match",
+      },
+    ],
+  });
+  await expectLineIn(output, 'items.ts', "fetch('/api/items'", items?.executed);
+  await expectLineIn(output, 'items.ts', 'throw new Error', items?.unexecuted);
+
+  // App.tsx has no lines, so its handlers are read from the raw output in
+  // the bundle the setup commands reproduce: the click handler that sets
+  // the loading state ran, and the .catch callback that sets the failed
+  // state never did.
+  for (const command of [
+    ['bun', 'install', '--frozen-lockfile'],
+    ['bun', 'run', 'build'],
+  ]) {
+    expect(
+      Bun.spawnSync(command, { cwd: project, env: setupEnvironment }).exitCode,
+    ).toBe(0);
+  }
+
+  const name = script?.script ?? '';
+  const bundle = await readFile(path.join(project, 'dist', name), 'utf8');
+
   expect(
-    requested !== undefined && within(requested, items?.executed ?? []),
-  ).toBe(true);
-  expect(thrown !== undefined && within(thrown, items?.unexecuted ?? [])).toBe(
-    true,
-  );
+    await rawCount(output, name, bundle.search(/kind:[`'"]loading[`'"]/)),
+  ).toBe(1);
+  expect(
+    await rawCount(output, name, bundle.search(/kind:[`'"]failed[`'"]/)),
+  ).toBe(0);
 });
 
 test('a journey can turn coverage off, which opens no coverage session', async () => {
@@ -289,12 +320,15 @@ test('a capture cancelled during the coverage journey closes its browser session
   // when the capture is cancelled.
   await writeFile(
     path.join(project, 'server.ts'),
-    server
-      .replace(
+    patch(
+      patch(
+        server,
         "    if (pathname === '/orders' && request.method === 'POST') {",
         "    if (pathname === '/orders' && request.method === 'POST') {\n      await Bun.sleep(4000);",
-      )
-      .replace('  fetch(request) {', '  async fetch(request) {'),
+      ),
+      '  fetch(request) {',
+      '  async fetch(request) {',
+    ),
   );
 
   const output = path.join(workspace, 'shop-cancelled-capture');

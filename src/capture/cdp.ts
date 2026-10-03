@@ -100,6 +100,7 @@ export const connectCdp = (
     const socket = yield* Effect.acquireRelease(
       openSocket(url, timeoutMs),
       closeSocket,
+      { interruptible: true },
     );
     const pending = new Map<number, Pending>();
     let nextId = 0;

@@ -221,9 +221,9 @@ the DevTools output as `coverage-raw.json`.
 How lines are counted:
 
 - Observed fetches each script's source map from the app's own origin:
-  first `<script>.map`, then the script's `sourceMappingURL`. Each counted
-  block maps to a line of a file in the source snapshot. Files under
-  `node_modules` are left out.
+  first `<script>.map`, then the script's `sourceMappingURL`. Each segment of
+  the map takes the count of the code where it starts and names a line of a
+  file in the source snapshot. Files under `node_modules` are left out.
 - A line ran when any code mapped to it ran. A line whose mapped code never
   ran is listed as not run. A line with no generated code, such as a type or
   a comment, is in neither list.
@@ -232,8 +232,9 @@ How lines are counted:
 - A map can embed a copy of each file. When that copy differs from the
   snapshot, the file is left out with the reason, because the map's line
   numbers count the lines of a different text. A build step that drops its
-  own source map causes this. StyleX's Vite plugin 0.19.1 does, so the
-  Request lab example records no lines for `App.tsx`. A map without embedded
+  own source map causes this. `@stylexjs/unplugin` 0.19.1 runs Babel without
+  source maps and returns `map: null` (its `lib/core.js`, read on
+  2026-10-03), so the Request lab example records no lines for `App.tsx`. A map without embedded
   copies can't be checked this way, and its lines are used as the map gives
   them.
 - A line that ran was executed. That says nothing about whether it was
@@ -245,12 +246,17 @@ Limits:
   step fails in that run, coverage is unavailable and the capture still
   completes.
 - Coverage runs in its own session after the performance samples, so it
-  doesn't change them.
+  doesn't change them. Playwright tests run after it, against the server
+  state its repeat left.
+- Coverage that takes longer than 60 seconds is unavailable.
 - Workers, iframes and scripts from other origins were not tested.
 - At most 100 scripts are mapped, and map fetching stops after 20 seconds.
-- agent-browser 0.38.1 has no coverage command, and neither does 0.38.2
-  (checked 2026-10-03). Observed connects its own DevTools client to the
-  address that `agent-browser get cdp-url` prints.
+- agent-browser 0.38.1 has no coverage command, according to its `--help`
+  and bundled skill docs, and the
+  [0.38.2 release notes](https://github.com/vercel-labs/agent-browser/releases/tag/v0.38.2)
+  add none (checked 2026-10-03). Its `profiler` command records a Chrome
+  trace. Observed connects its own DevTools client to the address that
+  `agent-browser get cdp-url` prints.
 
 ## Browser performance
 

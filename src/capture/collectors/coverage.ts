@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Option, Schema } from 'effect';
 import path from 'node:path';
 import type {
   CoverageEvidence,
@@ -22,6 +22,9 @@ import {
 import { scriptLocation } from './react';
 
 const commandTimeoutMs = 20_000;
+// A slow repeat of the journey loses coverage instead of using up the
+// capture's whole timeout.
+const coverageTimeoutMs = 60_000;
 const maxScripts = 100;
 // Map fetching runs inside the capture's own timeout, so it stops starting
 // new fetches after this long.
@@ -343,7 +346,12 @@ const snapshotSources = Effect.fnUntraced(function* (
         .pipe(Effect.orElseSucceed(() => null));
 
       if (snapshot !== embedded) {
-        excluded.set(file, differs);
+        excluded.set(
+          file,
+          snapshot === null
+            ? 'The source snapshot of this file could not be read'
+            : differs,
+        );
         continue;
       }
     }
@@ -381,14 +389,25 @@ const resolveScript = Effect.fnUntraced(function* (
     ),
   ).pipe(Effect.option);
 
-  if (sources._tag === 'None') {
+  if (Option.isNone(sources)) {
     return {
       kind: 'unavailable',
       reason: 'The browser did not return the script source',
     } as const;
   }
 
-  const found = yield* findSourceMap(script.url, origin, sources.value[0]);
+  const [text, ...others] = sources.value;
+
+  // Inline scripts share their page's address, and one map cannot describe
+  // several different texts.
+  if (text === undefined || others.some((other) => other !== text)) {
+    return {
+      kind: 'unavailable',
+      reason: 'Several scripts with different text share this address',
+    } as const;
+  }
+
+  const found = yield* findSourceMap(script.url, origin, text);
 
   if (found.kind === 'missing') {
     return {
@@ -407,34 +426,24 @@ const resolveScript = Effect.fnUntraced(function* (
   }
 
   const { paths, excluded } = yield* snapshotSources(map, context);
-  const runs = sources.value.map((source, index) =>
-    lineRuns({
-      source,
-      map,
-      functions: script.functions[index] ?? [],
-      paths,
-    }),
-  );
+  const resolved: LineRuns[] = [];
 
-  if (runs.some((item) => item === null)) {
-    return {
-      kind: 'unavailable',
-      reason: 'The source map has malformed mappings',
-    } as const;
+  for (const functions of script.functions) {
+    const runs = lineRuns({ source: text, map, functions, paths });
+
+    if (runs === null) {
+      return {
+        kind: 'unavailable',
+        reason: 'The source map has malformed mappings',
+      } as const;
+    }
+
+    resolved.push(runs);
   }
 
-  const resolved = runs.filter((item): item is LineRuns => item !== null);
+  // A map that names only dependencies or files outside the snapshot, such
+  // as a vendor chunk, is mapped and contributes no captured file.
   const named = [...new Set(resolved.flatMap((item) => [...item.keys()]))];
-
-  if (named.length === 0) {
-    return {
-      kind: 'unavailable',
-      reason:
-        excluded.length === 0
-          ? 'Its source map names no file in the source snapshot'
-          : `${differs}: ${excluded.map((item) => item.path).join(', ')}`,
-    } as const;
-  }
 
   return {
     kind: 'mapped',
@@ -465,8 +474,9 @@ const collectCoverage = Effect.fnUntraced(function* (
 
   // The session's first browser call launches it on a blank tab. Coverage
   // must start on that tab before the first navigation, so code that runs
-  // while the page loads is counted. agent-browser 0.38.1 refuses
-  // `open about:blank` under --allowed-domains.
+  // while the page loads is counted. Under --allowed-domains, agent-browser
+  // 0.38.1 answers `open about:blank` with "No hostname in URL" (run on
+  // 2026-10-03), so the tab cannot be reset that way.
   const tabs = yield* decode(
     tabsSchema,
     yield* context.browser(['tab', 'list']),
@@ -539,14 +549,12 @@ const collectCoverage = Effect.fnUntraced(function* (
         yield* context.runSteps(recipe.ready);
         yield* context.runSteps(recipe.steps);
       }).pipe(
-        Effect.catch((failure) =>
-          Effect.fail(
-            failure instanceof EvidenceUnavailable
-              ? failure
-              : unavailable(
-                  `The journey failed in the coverage session: ${failure.message}`,
-                ),
-          ),
+        Effect.mapError((failure) =>
+          failure._tag === 'EvidenceUnavailable'
+            ? failure
+            : unavailable(
+                `The journey failed in the coverage session: ${failure.message}`,
+              ),
         ),
       );
 
@@ -597,6 +605,16 @@ const collectCoverage = Effect.fnUntraced(function* (
       }
 
       return { files: coverageFiles(runs), scripts };
+    }),
+  ).pipe(
+    Effect.timeoutOrElse({
+      duration: coverageTimeoutMs,
+      orElse: () =>
+        Effect.fail(
+          unavailable(
+            `Coverage took longer than ${coverageTimeoutMs / 1000} seconds`,
+          ),
+        ),
     }),
   );
 });

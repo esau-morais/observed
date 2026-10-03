@@ -209,9 +209,7 @@ test('lets a journey turn coverage off and runs coverage after the timing sample
     capture: { ...requestLab.capture, collectors: [{ kind: 'performance' }] },
   });
 
-  expect(
-    result.ok && result.loaded.recipes[0].collectors.map((item) => item),
-  ).toEqual([
+  expect(result.ok && result.loaded.recipes[0].collectors).toEqual([
     { kind: 'accessibility' },
     { kind: 'timeline' },
     { kind: 'browser-errors' },
