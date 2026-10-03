@@ -1614,5 +1614,183 @@
       "reason": "observed.json was not read from the base revision, because this comparison was made from capture directories"
     }
   },
-  "removedJourneys": []
+  "removedJourneys": [],
+  "changeMap": {
+    "kind": "recorded",
+    "blocks": [
+      {
+        "id": "file:src/App.jsx",
+        "kind": "file",
+        "path": "src/App.jsx",
+        "changed": true,
+        "imports": {
+          "kind": "scanned",
+          "unresolved": []
+        }
+      },
+      {
+        "id": "file:src/api.js",
+        "kind": "file",
+        "path": "src/api.js",
+        "changed": false,
+        "imports": {
+          "kind": "scanned",
+          "unresolved": []
+        }
+      },
+      {
+        "id": "file:src/main.jsx",
+        "kind": "file",
+        "path": "src/main.jsx",
+        "changed": false,
+        "imports": {
+          "kind": "scanned",
+          "unresolved": []
+        }
+      },
+      {
+        "id": "package:react",
+        "kind": "package",
+        "name": "react"
+      },
+      {
+        "id": "journey:1",
+        "kind": "journey",
+        "title": "Open Reading shelf"
+      },
+      {
+        "id": "route:GET http://127.0.0.1:4010/api/books",
+        "kind": "route",
+        "method": "GET",
+        "path": "http://127.0.0.1:4010/api/books"
+      }
+    ],
+    "connections": [
+      {
+        "kind": "imports",
+        "from": "file:src/App.jsx",
+        "to": "package:react",
+        "change": "unchanged",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/source/src/App.jsx"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/base/source/src/App.jsx"
+          }
+        ]
+      },
+      {
+        "kind": "imports",
+        "from": "file:src/App.jsx",
+        "to": "file:src/api.js",
+        "change": "unchanged",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/source/src/App.jsx"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/base/source/src/App.jsx"
+          }
+        ]
+      },
+      {
+        "kind": "imports",
+        "from": "file:src/main.jsx",
+        "to": "file:src/App.jsx",
+        "change": "unchanged",
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/source/src/main.jsx"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/base/source/src/main.jsx"
+          }
+        ]
+      },
+      {
+        "kind": "threw-at",
+        "from": "journey:1",
+        "to": "file:src/App.jsx",
+        "line": 10,
+        "subject": "TypeError thrown",
+        "evidence": [
+          {
+            "kind": "finding",
+            "journey": "Open Reading shelf",
+            "id": "browser-errors:8f010383e96d42ba"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/source-maps/1-index-C6AMbicW.js.map"
+          }
+        ]
+      },
+      {
+        "kind": "checked-by",
+        "from": "file:src/App.jsx",
+        "to": "journey:1",
+        "check": "no-browser-errors",
+        "name": "No browser errors",
+        "evidence": [
+          {
+            "kind": "finding",
+            "journey": "Open Reading shelf",
+            "id": "browser-errors:8f010383e96d42ba"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/source-maps/1-index-C6AMbicW.js.map"
+          }
+        ]
+      },
+      {
+        "kind": "threw-at",
+        "from": "journey:1",
+        "to": "file:src/App.jsx",
+        "line": 29,
+        "subject": "TypeError thrown",
+        "evidence": [
+          {
+            "kind": "finding",
+            "journey": "Open Reading shelf",
+            "id": "browser-errors:8f010383e96d42ba"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/source-maps/1-index-C6AMbicW.js.map"
+          }
+        ]
+      },
+      {
+        "kind": "requested",
+        "from": "journey:1",
+        "to": "route:GET http://127.0.0.1:4010/api/books",
+        "base": {
+          "count": 1,
+          "statuses": [200]
+        },
+        "candidate": {
+          "count": 1,
+          "statuses": [200]
+        },
+        "evidence": [
+          {
+            "kind": "artifact",
+            "path": "journey-1/candidate/requests.har"
+          },
+          {
+            "kind": "artifact",
+            "path": "journey-1/base/requests.har"
+          }
+        ]
+      }
+    ]
+  }
 }

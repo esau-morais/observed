@@ -131,7 +131,7 @@ function within(line: number, list: readonly LineRange[]): boolean {
 
 // Candidate line numbers that the change added, or null when the snapshots
 // cannot be read or the diff is too large.
-function addedLines(
+export function addedLines(
   path: string,
   change: ScopeFile['change'],
   base: ReadonlyMap<string, string> | null,

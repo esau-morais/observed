@@ -32,6 +32,7 @@ import {
 } from './evidence-kinds';
 import { json, sha256 } from './encoding';
 import path from 'node:path';
+import { changeMap } from './change-map';
 import {
   changeScope,
   coverageSchemaVersion,
@@ -1770,6 +1771,13 @@ export function summarizeJourneys({
     },
     changeScope: scope,
     removedJourneys,
+    changeMap:
+      scope.kind === 'unavailable'
+        ? scope
+        : {
+            kind: 'unavailable',
+            reason: 'The change map is built only from capture directories',
+          },
   };
 }
 
@@ -2101,6 +2109,22 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
   return {
     journey,
     scope,
+    snapshots:
+      sources.base === null ||
+      sources.candidate === null ||
+      baseDirectory === null
+        ? null
+        : {
+            journey,
+            base: {
+              root: path.join(baseDirectory, 'source'),
+              files: sources.base.files,
+            },
+            candidate: {
+              root: path.join(candidateDirectory, 'source'),
+              files: sources.candidate.files,
+            },
+          },
     visualDiff:
       journey.comparison.kind === 'available' && pixels.diff !== null
         ? { path: diffPath, bytes: pixels.diff.bytes }
@@ -2166,20 +2190,30 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
 
   const changes: GitChanges = selection.changes ?? notRecorded.changes;
 
+  const scope = changeScope({
+    mode: selection.mode,
+    journeys: inspected.map((item) => item.scope),
+    changes,
+    recipe: plan.scope,
+  });
+
   return {
-    result: summarizeJourneys({
-      journeys: [first, ...rest],
-      evaluatedAt: selection.evaluatedAt,
-      mode: selection.mode,
-      scope: changeScope({
+    result: {
+      ...summarizeJourneys({
+        journeys: [first, ...rest],
+        evaluatedAt: selection.evaluatedAt,
         mode: selection.mode,
-        journeys: inspected.map((item) => item.scope),
-        changes,
-        recipe: plan.scope,
+        scope,
+        removedJourneys:
+          selection.mode === 'preview' ? [] : removedJourneys(plan.removed),
       }),
-      removedJourneys:
-        selection.mode === 'preview' ? [] : removedJourneys(plan.removed),
-    }),
+      changeMap: changeMap({
+        scope,
+        journeys: inspected.map((item) => item.scope),
+        snapshots:
+          inspected.find((item) => item.snapshots !== null)?.snapshots ?? null,
+      }),
+    },
     visualDiffs: inspected.flatMap((item) =>
       item.visualDiff === null ? [] : [item.visualDiff],
     ),

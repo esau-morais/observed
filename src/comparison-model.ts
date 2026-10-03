@@ -524,6 +524,120 @@ export type LineRange = typeof lineRangeSchema.Type;
 
 export type RecipeScope = typeof recipeScopeSchema.Type;
 
+// A record a map connection comes from: an artifact by its path in the
+// report, or a journey's finding by its ID.
+const mapEvidenceSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('artifact'), path: text }),
+  Schema.Struct({ kind: Schema.Literal('finding'), journey: text, id: text }),
+]);
+
+const mapBlockSchema = Schema.Union([
+  Schema.Struct({
+    id: text,
+    kind: Schema.Literal('file'),
+    path: text,
+    changed: Schema.Boolean,
+    imports: Schema.Union([
+      Schema.Struct({
+        kind: Schema.Literal('scanned'),
+        // Specifiers that resolved to no file in the snapshot.
+        unresolved: Schema.Array(text),
+      }),
+      unavailableSchema,
+    ]),
+  }),
+  Schema.Struct({ id: text, kind: Schema.Literal('package'), name: text }),
+  Schema.Struct({ id: text, kind: Schema.Literal('journey'), title: text }),
+  Schema.Struct({
+    id: text,
+    kind: Schema.Literal('route'),
+    method: text,
+    path: text,
+  }),
+]);
+
+const requestSide = Schema.Struct({
+  count,
+  statuses: Schema.Array(count),
+});
+
+const connectionIdentity = {
+  from: text,
+  to: text,
+  evidence: Schema.NonEmptyArray(mapEvidenceSchema),
+};
+
+// Each connection has one type and one source of evidence. `from` and `to`
+// name blocks of the same map.
+const mapConnectionSchema = Schema.Union([
+  Schema.Struct({
+    ...connectionIdentity,
+    kind: Schema.Literal('imports'),
+    change: Schema.Literals(['unchanged', 'added', 'removed']),
+  }),
+  Schema.Struct({
+    ...connectionIdentity,
+    kind: Schema.Literal('ran-in'),
+    ran: Schema.Int.check(Schema.isGreaterThan(0)),
+    notRan: count,
+  }),
+  Schema.Struct({
+    ...connectionIdentity,
+    kind: Schema.Literal('requested'),
+    base: Schema.NullOr(requestSide),
+    candidate: requestSide,
+  }),
+  Schema.Struct({
+    ...connectionIdentity,
+    kind: Schema.Literal('threw-at'),
+    line: lineNumber,
+    subject: text,
+  }),
+  Schema.Struct({
+    ...connectionIdentity,
+    kind: Schema.Literal('checked-by'),
+    check: text,
+    name: text,
+  }),
+]);
+
+// The change scope's files with the files they import and the files that
+// import them, and the journeys whose evidence touched them. The viewer lays
+// it out and adds no block or connection.
+export const changeMapSchema = Schema.Union([
+  unavailableSchema,
+  Schema.Struct({
+    kind: Schema.Literal('recorded'),
+    blocks: Schema.Array(mapBlockSchema),
+    connections: Schema.Array(mapConnectionSchema),
+  }).check(
+    Schema.makeFilter(
+      (map) => {
+        const ids = new Set(map.blocks.map((block) => block.id));
+
+        return (
+          ids.size === map.blocks.length &&
+          map.connections.every(
+            (connection) => ids.has(connection.from) && ids.has(connection.to),
+          )
+        );
+      },
+      {
+        message:
+          'Block IDs are unique, and each connection joins two blocks of the map',
+      },
+    ),
+  ),
+]);
+
+export type ChangeMap = typeof changeMapSchema.Type;
+
+export type MapBlock = typeof mapBlockSchema.Type;
+
+export type MapConnection = typeof mapConnectionSchema.Type;
+
+export type MapEvidence = typeof mapEvidenceSchema.Type;
+
 export const resultSchemaVersion = 8;
 
 export const comparisonSchema = Schema.Struct({
@@ -540,6 +654,7 @@ export const comparisonSchema = Schema.Struct({
   removedJourneys: Schema.Array(
     Schema.Struct({ journey: text, checks: Schema.Array(checkVerdictSchema) }),
   ),
+  changeMap: changeMapSchema,
 }).check(
   Schema.makeFilter(
     (result) =>
