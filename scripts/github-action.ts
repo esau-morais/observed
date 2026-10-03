@@ -8,9 +8,11 @@ import {
   conclusionExitCodes,
   everyCaptureFailed,
   resultVersionProblem,
+  type ChangeScope,
   type CheckVerdict,
   type Comparison,
   type Journey,
+  type ScopeFile,
   type Side,
 } from '../src/comparison-model';
 import type { Capture, Source } from '../src/capture/model';
@@ -20,6 +22,7 @@ import { renderReportPage } from '../src/report-page';
 import {
   checkName,
   commentMarker,
+  defaultArtifact,
   DeliveryError,
   findComment,
   failing,
@@ -44,7 +47,7 @@ import {
 import { describeRevision, shortSource } from '../src/provenance-text';
 import { visualChange } from '../src/visual-text';
 import {
-  capturedFiles,
+  fileDetail,
   relationLabels,
   repositoryPath,
   recipeLabels,
@@ -380,7 +383,7 @@ function passedChecks(result: Comparison): string | null {
   );
 }
 
-const listedFiles = 10;
+const listedFiles = 6;
 const shownValue = 80;
 
 function recipeList(result: Comparison): string | null {
@@ -395,21 +398,117 @@ function recipeList(result: Comparison): string | null {
 // files that ran without a check, then checked files.
 const relationRows = ['not-observed', 'exercised', 'checked'] as const;
 
-const readFirst = {
-  'not-observed': statusWords.notObserved,
-  exercised: statusWords.exercised,
-} as const;
+type Row = (typeof relationRows)[number];
+
+const rowReasons = {
+  'not-observed':
+    'No recorded evidence touched these files, so the checks say nothing about them.',
+  exercised: 'These files ran, but no named check evaluated them.',
+  checked: 'Named checks evaluated evidence from these files.',
+} satisfies Record<Row, string>;
 
 function cell(value: string): string {
   return value.replaceAll('|', '\\|');
 }
 
-// Changed files grouped by the evidence that touched them, by path from the
-// repository root. Files outside the captured source are only counted.
-function scopeTable(
+// The project paths that open checks point into, with the check that points
+// first. A failing verdict is read from the row that holds them.
+function anchoredFiles(result: Comparison): Map<string, CheckVerdict> {
+  const anchored = new Map<string, CheckVerdict>();
+
+  for (const { journey, check } of openChecks(result)) {
+    const location = anchorLocation(journey, check, result.changeScope);
+
+    if (location !== null && !anchored.has(location.path)) {
+      anchored.set(location.path, check);
+    }
+  }
+
+  return anchored;
+}
+
+// Each row lists at least one file, files that open checks point into come
+// first, and the rest share what is left of the listed-file limit.
+function selectedFiles(
+  files: readonly ScopeFile[],
+  anchored: ReadonlyMap<string, CheckVerdict>,
+): Map<Row, ScopeFile[]> {
+  const rows = new Map<Row, ScopeFile[]>(
+    relationRows.map((relation) => [
+      relation,
+      files
+        .filter((file) => file.relation === relation)
+        .sort(
+          (left, right) =>
+            Number(anchored.has(right.path)) - Number(anchored.has(left.path)),
+        ),
+    ]),
+  );
+  const chosen = new Map<Row, ScopeFile[]>(
+    relationRows.map((relation) => [
+      relation,
+      (rows.get(relation) ?? []).filter(
+        (file, index) => index === 0 || anchored.has(file.path),
+      ),
+    ]),
+  );
+  let budget =
+    listedFiles -
+    [...chosen.values()].reduce((sum, row) => sum + row.length, 0);
+
+  for (const relation of relationRows) {
+    const row = chosen.get(relation) ?? [];
+
+    for (const file of rows.get(relation) ?? []) {
+      if (budget > 0 && !row.includes(file)) {
+        row.push(file);
+        budget -= 1;
+      }
+    }
+  }
+
+  return chosen;
+}
+
+function readFirst(
   result: Comparison,
+  files: readonly ScopeFile[],
+  anchored: ReadonlyMap<string, CheckVerdict>,
+): string {
+  const failing = files.find(
+    (file) =>
+      anchored.get(file.path)?.verdict === 'regression' ||
+      anchored.get(file.path)?.verdict === 'failed',
+  );
+
+  if (failing !== undefined && failing.relation !== 'outside-captured-source') {
+    const check = anchored.get(failing.path);
+
+    return `Read **${relationLabels[failing.relation]}** first. ${check === undefined ? '' : `${inlineText(check.name)} ${check.verdict === 'regression' ? 'regressed' : 'failed'} with evidence from this row.`}`;
+  }
+
+  const row =
+    relationRows.find((relation) =>
+      files.some((file) => file.relation === relation),
+    ) ?? 'checked';
+
+  return `Read **${relationLabels[row]}** first. ${rowReasons[row]}`;
+}
+
+function shownFile(
+  result: Comparison,
+  scope: Extract<ChangeScope, { kind: 'recorded' }>,
+  file: ScopeFile,
   links: FileLinks | null,
-): string | null {
+): string {
+  return `${fileText(repositoryPath(scope, file), fileHref(result, links, file.path, null))}${file.change === 'modified' ? '' : ` (${file.change})`}`;
+}
+
+type ScopeView = { table: string; details: string } | null;
+
+// Changed files grouped by the evidence that touched them. Files outside the
+// captured source are counted, or marked unknown when Git listed nothing.
+function scopeView(result: Comparison, links: FileLinks | null): ScopeView {
   const scope = result.changeScope;
 
   if (
@@ -419,91 +518,95 @@ function scopeTable(
     return null;
   }
 
-  let listed = 0;
+  const anchored = anchoredFiles(result);
+  const chosen = selectedFiles(scope.files, anchored);
   const rows = relationRows.flatMap((relation) => {
-    const files = scope.files.filter((file) => file.relation === relation);
-    const shown = files.slice(0, Math.max(0, listedFiles - listed));
+    const all = scope.files.filter((file) => file.relation === relation);
+    const shown = chosen.get(relation) ?? [];
 
-    listed += shown.length;
-
-    return files.length === 0
+    return all.length === 0
       ? []
       : [
           `| ${relationLabels[relation]} | ${cell(
             [
-              ...shown.map(
-                (file) =>
-                  `${fileText(repositoryPath(scope, file), fileHref(result, links, file.path, null))}${file.change === 'modified' ? '' : ` (${file.change})`}`,
-              ),
-              ...(files.length > shown.length
-                ? [`${files.length - shown.length} more in the report`]
+              ...shown.map((file) => shownFile(result, scope, file, links)),
+              ...(all.length > shown.length
+                ? [`${all.length - shown.length} more in the report`]
                 : []),
             ].join(', '),
           )} |`,
         ];
   });
   const outside = scope.files.filter((file) => !file.captured).length;
-  const first = relationRows.find(
-    (relation): relation is keyof typeof readFirst =>
-      relation in readFirst &&
-      scope.files.some((file) => file.relation === relation),
+  let outsideRow: string[] = [];
+
+  if (scope.outside.kind === 'unavailable') {
+    outsideRow = [
+      `| ${relationLabels['outside-captured-source']} | ${cell(`${statusWords.unknown.word}: ${inlineText(scope.outside.reason)}`)} |`,
+    ];
+  } else if (outside > 0) {
+    outsideRow = [
+      `| ${relationLabels['outside-captured-source']} | ${outside}, counted only |`,
+    ];
+  }
+
+  // The outside row already carries Git's reason.
+  const notes = scopeNotes(result).filter(
+    (note) => !note.startsWith('Files outside the captured source:'),
+  );
+  const detailed = relationRows.flatMap(
+    (relation) => chosen.get(relation) ?? [],
   );
 
-  return [
-    [
-      '| Evidence | Changed files |',
-      '| --- | --- |',
-      ...rows,
-      ...(scope.outside.kind === 'listed' && outside > 0
-        ? [
-            `| ${relationLabels['outside-captured-source']} | ${outside}, counted only |`,
-          ]
-        : []),
-    ].join('\n'),
-    ...(first === undefined
-      ? []
-      : [
-          `Read **${readFirst[first].word}** first. ${inlineText(readFirst[first].meaning)}`,
-        ]),
-  ].join('\n\n');
-}
-
-// What touched each listed file, and what the change scope could not record.
-function fileDetails(result: Comparison): string | null {
-  const files = capturedFiles(result);
-  const notes = scopeNotes(result);
-
-  return files.length + notes.length === 0
-    ? null
-    : collapsed(
-        'What touched each file',
-        [
-          ...files
-            .slice(0, listedFiles)
-            .map(
-              (file) =>
-                `- ${code(file.path)} · ${inlineText(`${file.relation}. ${file.detail}`)}`,
-            ),
-          ...notes.map((note) => `- ${inlineText(note)}`),
-        ].join('\n'),
-      );
-}
-
-// The browser and viewport each journey's candidate was captured with.
-function conditionsLines(result: Comparison): string[] {
-  return [
-    ...new Set(
-      result.journeys.flatMap((journey) => {
-        const conditions = journey.candidate.capture?.manifest.conditions;
-
-        return conditions?.kind === 'recorded'
-          ? [
-              `Captured in ${conditions.value.browser}, viewport ${conditions.value.viewport.width} × ${conditions.value.viewport.height} CSS px.`,
-            ]
-          : [];
-      }),
+  return {
+    table: [
+      [
+        '| Evidence | Changed files |',
+        '| --- | --- |',
+        ...rows,
+        ...outsideRow,
+      ].join('\n'),
+      ...(notes.length === 0
+        ? []
+        : [notes.map((note) => `- ${inlineText(note)}`).join('\n')]),
+      readFirst(result, scope.files, anchored),
+    ].join('\n\n'),
+    details: collapsed(
+      'What touched each file',
+      detailed
+        .map(
+          (file) =>
+            `- ${shownFile(result, scope, file, links)} · ${inlineText(fileDetail(result, file))}`,
+        )
+        .join('\n'),
     ),
-  ];
+  };
+}
+
+// Each journey's capture browser and viewport, base included when it differs.
+function conditionsLines(result: Comparison): string[] {
+  const described = (side: Side) => {
+    const conditions = side.capture?.manifest.conditions;
+
+    return conditions?.kind === 'recorded'
+      ? `${conditions.value.browser}, viewport ${conditions.value.viewport.width} × ${conditions.value.viewport.height} CSS px`
+      : null;
+  };
+
+  return result.journeys.flatMap((journey) => {
+    const where = result.journeys.length === 1 ? '' : `${journey.title}: `;
+    const candidate = described(journey.candidate);
+    const base = result.mode === 'preview' ? null : described(journey.base);
+
+    return [
+      ...(candidate === null
+        ? []
+        : [`${where}The candidate was captured in ${candidate}.`]),
+      ...(base === null || base === candidate
+        ? []
+        : [`${where}The base was captured in ${base}.`]),
+    ];
+  });
 }
 
 // Where the before, after and difference crops can be seen. An image is
@@ -891,8 +994,8 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
   const recipeSummary =
     result.mode === 'preview' ? null : recipeLine(result.changeScope);
   const cropsNote = screenshotsNote(result, options.screenshots ?? null);
-  const table =
-    result.mode === 'preview' ? null : scopeTable(result, frame.files);
+  const scoped =
+    result.mode === 'preview' ? null : scopeView(result, frame.files);
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -902,8 +1005,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [
             `**${label}** · ${lead === undefined ? inlineText(subject) : rowText(result, lead, frame.files)}`,
           ]),
-      `${kind === 'unavailable' ? `${counts}. Missing evidence is not a pass.` : counts} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}`,
-      ...(result.mode === 'preview' || table !== null
+      `${counts} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}`,
+      ...(kind === 'unavailable' ? ['Missing evidence is not a pass.'] : []),
+      ...(result.mode === 'preview' || scoped !== null
         ? []
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
@@ -911,12 +1015,12 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),
-    ...extra(table),
+    ...extra(scoped?.table),
     ...extra(recipeList(result)),
     page === null
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
-    ...extra(fileDetails(result)),
+    ...extra(scoped?.details),
     ...extra(passedChecks(result)),
     ...(open.length === 0 && kind !== 'unavailable'
       ? []
@@ -950,7 +1054,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         .map((item) => `- ${item}`)
         .join('\n'),
     ),
-    ...(options.artifact === 'observed-bundle'
+    ...(options.artifact === defaultArtifact
       ? []
       : [`<sub>${inlineText(checkName(options.artifact))}</sub>`]),
     ...extra(options.delivery),

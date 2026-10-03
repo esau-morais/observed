@@ -8,8 +8,11 @@ export function failing(kind: Kind | null): boolean {
   return kind === null || conclusionExitCodes[kind] !== 0;
 }
 
+// The action's default artifact-name input.
+export const defaultArtifact = 'observed-bundle';
+
 export function checkName(artifact: string): string {
-  return artifact === 'observed-bundle' ? 'Observed' : `Observed (${artifact})`;
+  return artifact === defaultArtifact ? 'Observed' : `Observed (${artifact})`;
 }
 
 export function commentMarker(artifact: string): string {

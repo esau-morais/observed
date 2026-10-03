@@ -498,7 +498,11 @@ test('a failure shared by every capture is one comment line that names the base'
 // audit log and listed 26 files no evidence touched.
 const visibleCommentLimit = 1_200;
 
-async function typicalFailingRun(): Promise<string> {
+type Unobserved = { path: string; change: 'added' | 'modified' };
+
+async function typicalFailingRun(
+  options: { unobserved?: readonly Unobserved[]; gitListed?: boolean } = {},
+): Promise<string> {
   const fixture = Schema.decodeUnknownSync(
     Schema.fromJsonString(comparisonSchema),
   )(
@@ -574,10 +578,25 @@ async function typicalFailingRun(): Promise<string> {
       summary: { passed: 3, total: 4 },
       changeScope: {
         ...scope,
-        outside: { kind: 'listed', projectDirectory: 'web' },
+        outside:
+          options.gitListed === false
+            ? {
+                kind: 'unavailable',
+                reason: 'Git could not list the changed files.',
+              }
+            : { kind: 'listed', projectDirectory: 'web' },
         files: [
-          ...outside,
+          ...(options.gitListed === false ? [] : outside),
           ...scope.files,
+          ...(options.unobserved ?? []).map((file) => ({
+            ...file,
+            captured: true,
+            relation: 'not-observed',
+            basis: 'none',
+            reason: 'No recorded evidence touched this file.',
+            journeys: [],
+            checks: [],
+          })),
           {
             path: 'src/Shelf.jsx',
             change: 'modified',
@@ -636,17 +655,13 @@ test(`a typical failing run's comment stays within ${String(visibleCommentLimit)
   expect(visible).toContain(
     '| Outside the captured source | 30, counted only |',
   );
-  expect(
-    ['| Not observed |', '| Exercised |', '| Checked |'].map((row) =>
-      visible.indexOf(row),
-    ),
-  ).toEqual(
-    [...['| Not observed |', '| Exercised |', '| Checked |']]
-      .map((row) => visible.indexOf(row))
-      .sort((left, right) => left - right),
+  const rows = ['| Not observed |', '| Exercised |', '| Checked |'].map((row) =>
+    visible.indexOf(row),
   );
+
+  expect(rows.every((at, index) => at > (rows[index - 1] ?? -1))).toBe(true);
   expect(visible).toContain(
-    'Read **Not observed** first. No recorded evidence touched the changed file.',
+    'Read **Checked** first. No browser errors regressed with evidence from this row.',
   );
   expect(visible).not.toContain('docs/page-');
   expect(visible).not.toContain('../');
@@ -693,4 +708,48 @@ test('changed files and the verdict line link to their diff in the pull request,
 
   expect(comment(output, null)).toContain(blob);
   expect(comment(unchangedAnchor, 7)).toContain(blob);
+});
+
+// A long list of unobserved files once used up the listed-file limit and
+// pushed the file the regression points into out of the comment.
+test('with many changed files every row still names a file, the regression file stays listed, and the comment stays within its limit', async () => {
+  const unobserved = Array.from({ length: 14 }, (_, index) => ({
+    path: `src/features/checkout/payment-methods/stored-card-${String(index).padStart(2, '0')}.jsx`,
+    change: 'modified' as const,
+  }));
+  const visible = comment(await typicalFailingRun({ unobserved }), 7);
+  const row = (name: string) =>
+    visible.split('\n').find((line) => line.startsWith(`| ${name} |`)) ?? '';
+
+  expect(row('Checked')).toContain('`web/src/App.jsx`');
+  expect(row('Exercised')).toContain('`web/src/books.js`');
+  expect(row('Not observed')).toContain('more in the report');
+  expect(readable(visible).length).toBeLessThanOrEqual(visibleCommentLimit);
+});
+
+// A pipe in a captured path would split the table row into extra cells.
+test('a pipe in a changed path stays inside its table cell', async () => {
+  const visible = comment(
+    await typicalFailingRun({
+      unobserved: [{ path: 'src/a|b`c.js', change: 'modified' }],
+    }),
+    null,
+  );
+  const row =
+    visible.split('\n').find((line) => line.startsWith('| Not observed |')) ??
+    '';
+
+  expect(row).toContain('web/src/a\\|b');
+  expect(row.replaceAll('\\|', '').split('|')).toHaveLength(4);
+});
+
+// Missing evidence must stay in view: unknown outside files and unavailable
+// coverage weaken what "not observed" means.
+test('when Git listed no changes, the comment says files outside the captured source are unknown, outside any collapsed block', async () => {
+  const visible = comment(await typicalFailingRun({ gitListed: false }), 7);
+
+  expect(visible).toContain(
+    '| Outside the captured source | Unknown: Git could not list the changed files. |',
+  );
+  expect(visible).toContain('- Coverage unavailable');
 });
