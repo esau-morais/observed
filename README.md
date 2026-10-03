@@ -273,7 +273,7 @@ This is the intended final state. Browser capture, comparison, named checks,
 API operations, the report, GitHub and Slack delivery, and test import exist
 today.
 
-Not built yet: relating checks to the files a change touched, protecting
+Not built yet: coverage of the files a change touched, protecting
 expectations from the change that edits them, generated journeys, repair,
 requested reruns, model routing, and database, job, trace and formal
 adapters.

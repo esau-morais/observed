@@ -115,8 +115,10 @@ dictionary, which ASD holds the copyright to.
 
 ## Change scope
 
-Planned for Phase 3a. Not built. Today a result covers its named checks and
-says nothing about the files a change touched.
+Built as `result.json` data and as text in the report, the job summary, and
+the pull request comment. The change map, coverage, recipe differences, and
+generated journeys are not built. Until coverage is, no file is "exercised"
+through coverage.
 
 A saved journey checks the behavior it exercises. It does not check the
 change. Every comparison lists each file that differs between base and

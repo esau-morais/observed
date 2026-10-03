@@ -71,15 +71,18 @@ Hashes detect changed artifacts; they do not establish collector honesty. A stac
 
 ### Change scope
 
-Planned for Phase 3a. Not built.
+Built for result schema version 8, without coverage collectors or recipe
+differences. Recipe differences read as unavailable.
 
 The comparator writes the change scope to `result.json` with the result.
 Delivery adapters and the viewer render it and never compute or adjust it.
 
 1. Changed files come from the two source snapshots, which already hash every
    captured file. Files that Git reports as changed outside `source.paths` are
-   listed as outside the captured source. Without a base snapshot the scope is
-   unavailable, with the reason.
+   listed as outside the captured source. `observe` records those names in
+   `selection.json`, because the comparator reads only capture directories.
+   `compare` has no repository, so it reports them as unavailable. Without a
+   base snapshot the scope is unavailable, with the reason.
 2. A file's relation comes only from recorded evidence. No record means "not
    observed". A file that no collector can execute, such as a stylesheet or a
    type declaration, is "not observed" with that reason.
