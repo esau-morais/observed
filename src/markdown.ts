@@ -8,7 +8,8 @@ export function escapeText(value: string): string {
 }
 
 export function link(label: string, path: string): string {
-  const destination = path.replace(/[<>\s\\]/g, (character) =>
+  // A pipe would end a Markdown table cell, even inside angle brackets.
+  const destination = path.replace(/[<>\s\\|]/g, (character) =>
     encodeURIComponent(character),
   );
 
