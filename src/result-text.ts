@@ -169,7 +169,7 @@ export const leadingVerdicts = {
 
 // The verdict and the one reading that explains it, short enough for a check
 // run title or a notification.
-const anchorWords = {
+export const anchorWords = {
   'stack-frame': 'thrown at',
   'component-source': 'component at',
   'test-location': 'test at',
@@ -320,4 +320,37 @@ export function headline(result: Comparison): string {
   const { label, subject } = headlineParts(result);
 
   return `${label}: ${subject}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A passing run's conclusion names every check that passed on both sides,
+// which the checks section already lists. Only those plain sentences are
+// removed, so notes about not-run checks, added checks or recipe changes
+// stay. A journey title left with nothing after it goes too.
+export function withoutPlainPasses(
+  text: string,
+  checkNames: readonly string[],
+  journeyTitles: readonly string[],
+): string {
+  const stripped = [
+    ...checkNames.map(
+      (name) => `${escapeRegExp(name)} passed on base and candidate\\.`,
+    ),
+    '\\d+ more checks? passed on the candidate\\.',
+  ].reduce(
+    (current, pattern) => current.replaceAll(new RegExp(pattern, 'g'), ''),
+    text,
+  );
+  const titles = journeyTitles.map(escapeRegExp).join('|');
+  const orphan =
+    titles === ''
+      ? null
+      : new RegExp(`(?:${titles}):\\s*(?=(?:${titles}):|$)`, 'g');
+
+  return (orphan === null ? stripped : stripped.replaceAll(orphan, ''))
+    .replaceAll(/\s+/g, ' ')
+    .trim();
 }

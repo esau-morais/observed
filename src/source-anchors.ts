@@ -14,7 +14,11 @@ import type {
 } from './comparison-model';
 import { sha256 } from './encoding';
 import type { EvidenceKind, EvidenceValue } from './evidence-kinds';
-import { renderChanges, renderCount } from './evidence-kinds/react';
+import {
+  renderChanges,
+  renderCount,
+  renderSubjectPrefix,
+} from './evidence-kinds/react';
 import { diffLines, lines, type FileDiff } from './source-diff';
 import {
   applicationScript,
@@ -445,13 +449,13 @@ function renderSubject(
   change: { base: number; candidate: number } | undefined,
   count: number | null,
 ): string {
+  const prefix = renderSubjectPrefix(name);
+
   if (change !== undefined) {
-    return `${name} renders ${change.base} → ${change.candidate}`;
+    return `${prefix}s ${change.base} → ${change.candidate}`;
   }
 
-  return count === null
-    ? `${name} render count unknown`
-    : `${name} renders ${count}`;
+  return count === null ? `${prefix} count unknown` : `${prefix}s ${count}`;
 }
 
 // Whether the base had the same finding, when it was recorded at all.

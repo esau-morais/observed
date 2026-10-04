@@ -123,3 +123,9 @@ export function renderChanges(
       return added === 0 ? left.name.localeCompare(right.name) : added;
     });
 }
+
+// Every React finding's subject starts with this, so a reader can tell which
+// component a finding names.
+export function renderSubjectPrefix(name: string): string {
+  return `${name} render`;
+}

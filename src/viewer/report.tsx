@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
-import { createContext, use, useState, type ReactNode } from 'react';
+import { createContext, use, type ReactNode } from 'react';
 import type {
   ChangeScope,
   CheckVerdict,
@@ -7,7 +7,9 @@ import type {
   Journey,
   Side,
 } from '../comparison-model';
+import type { EvidenceView } from '../evidence-kinds';
 import type { PerformanceMetric } from '../evidence-kinds/performance';
+import { renderSubjectPrefix } from '../evidence-kinds/react';
 import { journeySection, type JourneySection } from '../report-sections';
 import {
   describeObserved,
@@ -16,6 +18,8 @@ import {
 } from '../provenance-text';
 import {
   anchorLocation,
+  anchorWords,
+  fromRepositoryRoot,
   conclusionLabels,
   conclusionTones,
   runTone,
@@ -27,31 +31,34 @@ import {
   toneSymbols,
   verdictLabels,
   verdictTones,
+  withoutPlainPasses,
   type Tone,
 } from '../result-text';
 import { statusWords } from '../status-words';
-import { describeVisual, diffLegend } from '../visual-text';
+import { describeVisual } from '../visual-text';
 import { AgentCopy } from './agent-copy';
 import { ChangeScopeView } from './change-map';
+import { BeforeAfter } from './compare';
 import { fonts, geometry, media } from './constants.stylex';
 import {
   Artifacts,
-  ChangedRegions,
   EvidenceLink,
+  openSection,
+  RequestDiff,
   RequestLedger,
   Screenshot,
-  type Highlight,
 } from './evidence';
 import { HeadingLevel, SubHeading } from './heading';
 import {
   outlineJourney,
+  sectionId,
   type Outline,
   type OutlineSection,
-  type SectionKey,
   type SectionStatus,
 } from './outline';
 import { EvidenceSection } from './sections';
-import { SamplePlot } from './sections/sample-plot';
+import { RenderTree, type ComponentSource } from './sections/react';
+import { PerformanceSection } from './sections/performance';
 import { Steps } from './sections/timeline';
 import { ThemeControl, useTheme } from './theme';
 import { colors } from './tokens.stylex';
@@ -373,23 +380,6 @@ const styles = stylex.create({
     lineHeight: 1.3,
   },
   nav: { display: 'flex', flexWrap: 'wrap', columnGap: 24, rowGap: 12 },
-  toggle: {
-    alignItems: 'center',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    gap: 8,
-    minHeight: geometry.target,
-  },
-  checkbox: {
-    accentColor: colors.focus,
-    height: 20,
-    margin: 0,
-    width: 20,
-    outlineColor: { default: colors.focus, [media.forcedColors]: 'Highlight' },
-    outlineOffset: 3,
-    outlineStyle: 'solid',
-    outlineWidth: { default: 0, ':focus-visible': 2 },
-  },
   skip: {
     backgroundColor: colors.surface,
     color: colors.text,
@@ -452,17 +442,6 @@ const sectionStatusLabels = {
   passed: statusWords.passed.word,
   neutral: '',
 } satisfies Record<SectionStatus, string>;
-
-function sectionId(prefix: string, key: SectionKey): string {
-  return key === 'capture' ||
-    key === 'checks' ||
-    key === 'screenshots' ||
-    key === 'requests' ||
-    key === 'provenance' ||
-    key === 'limits'
-    ? `${prefix}${key}`
-    : `${prefix}evidence-${key}`;
-}
 
 function Field({
   label,
@@ -1004,79 +983,37 @@ function groupUnresolved(result: Comparison): string[] {
 function Screens({
   journey,
   mode,
-  prefix,
 }: {
   journey: Journey;
   mode: Comparison['mode'];
-  prefix: string;
 }) {
-  const sides = journeySides(journey, mode);
-  const [highlighted, setHighlighted] = useState(false);
   const visual =
     journey.comparison.kind === 'available' ? journey.comparison.visual : null;
-  const highlight: Highlight | null =
-    highlighted && visual?.kind === 'changed' ? visual : null;
+
+  if (mode === 'preview') {
+    return <Screenshot side={journey.candidate} label="Current capture" />;
+  }
 
   return (
     <>
       {visual === null ? null : (
-        <div {...stylex.props(styles.stack)}>
-          <p {...stylex.props(styles.text)}>
-            {describeVisual(visual)}
-            {visual.kind === 'changed' || visual.kind === 'size-differs'
-              ? ' An observation, not a check.'
-              : ''}
-          </p>
-          {visual.kind === 'changed' ? (
-            <>
-              <div {...stylex.props(styles.nav)}>
-                <label {...stylex.props(styles.toggle)}>
-                  <input
-                    type="checkbox"
-                    checked={highlighted}
-                    onChange={(event) =>
-                      setHighlighted(event.currentTarget.checked)
-                    }
-                    {...stylex.props(styles.checkbox)}
-                  />
-                  Highlight changed regions
-                </label>
-                <span {...stylex.props(styles.toggle)}>
-                  <EvidenceLink href={visual.diff.path}>
-                    Open pixel difference image
-                  </EvidenceLink>
-                </span>
-              </div>
-              <p {...stylex.props(styles.small)}>{diffLegend}</p>
-            </>
-          ) : null}
-        </div>
+        <p {...stylex.props(styles.text)}>
+          {describeVisual(visual)}
+          {visual.kind === 'changed' || visual.kind === 'size-differs'
+            ? ' An observation, not a check.'
+            : ''}
+        </p>
       )}
-      <div {...stylex.props(mode === 'comparison' && styles.grid)}>
-        {sides.map(({ side, label }) => (
-          <Screenshot
-            key={label}
-            side={side}
-            label={label}
-            highlight={highlight}
-          />
-        ))}
-      </div>
-      {visual?.kind === 'changed' &&
-      journey.base.screenshot !== null &&
-      journey.candidate.screenshot !== null ? (
-        <ChangedRegions
-          visual={visual}
-          before={journey.base.screenshot}
-          after={journey.candidate.screenshot}
-          id={`${prefix}changed-regions`}
-        />
-      ) : null}
+      <BeforeAfter
+        before={journey.base}
+        after={journey.candidate}
+        visual={visual}
+      />
     </>
   );
 }
 
-function PerformancePlots({
+function PerformanceBody({
   journey,
   section,
 }: {
@@ -1092,19 +1029,93 @@ function PerformancePlots({
     }
   }
 
-  if (budgets.size === 0) {
-    budgets.set('lcp', null);
+  return <PerformanceSection {...section.input} budgets={budgets} />;
+}
+
+function recordedReact(view: EvidenceView<'react'> | undefined) {
+  return view?.status === 'recorded' ? view.value : null;
+}
+
+// Where each React finding's evidence places a component of the tree,
+// linked to the captured source file when the bundle holds it.
+function componentSources(
+  journey: Journey,
+  names: readonly string[],
+  scope: ChangeScope | undefined,
+): Map<string, ComponentSource> {
+  const sources = new Map<string, ComponentSource>();
+
+  for (const name of names) {
+    const prefix = renderSubjectPrefix(name);
+    const finding = journey.findings.find(
+      (item) =>
+        item.evidence === 'react' &&
+        item.location.kind === 'anchored' &&
+        (item.subject.startsWith(`${prefix}s `) ||
+          item.subject === `${prefix} count unknown`),
+    );
+
+    if (finding?.location.kind !== 'anchored') {
+      continue;
+    }
+
+    const [anchor] = finding.location.anchors;
+    const side = anchor.side === 'base' ? journey.base : journey.candidate;
+    const file = side.artifacts.find(
+      (artifact) =>
+        artifact.integrity === 'verified' &&
+        artifact.path.endsWith(`/source/${anchor.path}`),
+    );
+
+    sources.set(name, {
+      words: anchorWords[anchor.basis],
+      place: `${scope === undefined ? anchor.path : fromRepositoryRoot(scope, anchor.path)}:${anchor.line}`,
+      href: file?.integrity === 'verified' ? file.path : null,
+    });
   }
 
-  return [...budgets].map(([metric, budget]) => (
-    <SamplePlot
-      key={metric}
-      metric={metric}
-      budget={budget}
-      base={section.input.base?.evidence ?? null}
-      candidate={section.input.candidate.evidence}
+  return sources;
+}
+
+function RenderTreeBody({
+  journey,
+  section,
+}: {
+  journey: Journey;
+  section: JourneySection<'react'>;
+}) {
+  const base = section.input.base?.evidence;
+  const candidate = recordedReact(section.input.candidate.evidence);
+  const before = recordedReact(base);
+  const names = [
+    ...new Set(
+      [before, candidate].flatMap((value) =>
+        value === null
+          ? []
+          : [
+              ...value.subtree.map((node) => node.name),
+              ...value.components.map((item) => item.name),
+            ],
+      ),
+    ),
+  ];
+  let baseUnavailable: string | null = null;
+
+  if (journey.comparison.kind !== 'preview' && before === null) {
+    baseUnavailable =
+      base?.status === 'unavailable'
+        ? base.reason
+        : 'the base capture did not record it.';
+  }
+
+  return (
+    <RenderTree
+      base={before}
+      candidate={candidate}
+      baseUnavailable={baseUnavailable}
+      sources={componentSources(journey, names, use(ChangeScopeContext))}
     />
-  ));
+  );
 }
 
 function requestsOf(side: Side) {
@@ -1175,7 +1186,7 @@ function SectionBody({
         />
       );
     case 'screenshots':
-      return <Screens journey={journey} mode={mode} prefix={prefix} />;
+      return <Screens journey={journey} mode={mode} />;
     case 'requests':
       return (
         <>
@@ -1188,11 +1199,11 @@ function SectionBody({
           <p {...stylex.props(styles.text)}>
             Recorded by the browser. A response status is not a check result.
           </p>
-          <div {...stylex.props(styles.grid)}>
-            {sides.map(({ side, label }) => (
-              <RequestLedger key={label} side={side} label={label} />
-            ))}
-          </div>
+          {mode === 'preview' ? (
+            <RequestLedger side={journey.candidate} label="Current capture" />
+          ) : (
+            <RequestDiff before={journey.base} after={journey.candidate} />
+          )}
         </>
       );
     case 'provenance':
@@ -1255,6 +1266,8 @@ function EvidenceBody({
     section.key === 'performance'
       ? journeySection(journey, 'performance')
       : null;
+  const react =
+    section.key === 'react' ? journeySection(journey, 'react') : null;
 
   if (timeline !== null) {
     return (
@@ -1266,22 +1279,18 @@ function EvidenceBody({
     );
   }
 
+  if (performance !== null) {
+    return <PerformanceBody journey={journey} section={performance} />;
+  }
+
   return section.evidence === null ? null : (
     <>
-      {performance === null ? null : (
-        <PerformancePlots journey={journey} section={performance} />
+      {react === null ? null : (
+        <RenderTreeBody journey={journey} section={react} />
       )}
       <EvidenceSection section={section.evidence} />
     </>
   );
-}
-
-function openSection(id: string) {
-  const target = document.getElementById(id);
-
-  if (target instanceof HTMLDetailsElement) {
-    target.open = true;
-  }
 }
 
 function railSummary(outlines: readonly Outline[]): string {
@@ -1382,6 +1391,14 @@ function JourneyView({
   const level = multiple ? 3 : 2;
   const tone = conclusionTones[journey.conclusion.kind];
   const titleId = `journey-${index + 1}-title`;
+  const journeyLead =
+    journey.conclusion.kind === 'no-regression'
+      ? withoutPlainPasses(
+          journey.conclusion.text,
+          journey.checks.map((check) => check.name),
+          [],
+        )
+      : journey.conclusion.text;
 
   return (
     <section
@@ -1402,7 +1419,9 @@ function JourneyView({
             <span aria-hidden="true">{toneSymbols[tone]}</span>
             {conclusionLabels[journey.conclusion.kind]}
           </span>
-          <p {...stylex.props(styles.text)}>{journey.conclusion.text}</p>
+          {journeyLead === '' ? null : (
+            <p {...stylex.props(styles.text)}>{journeyLead}</p>
+          )}
         </div>
       ) : null}
       <div {...stylex.props(styles.disclosures)}>
@@ -1431,6 +1450,16 @@ function JourneyView({
 }
 
 function Verdict({ result }: { result: Comparison }) {
+  const lead =
+    result.conclusion.kind === 'no-regression'
+      ? withoutPlainPasses(
+          result.conclusion.text,
+          result.journeys.flatMap((journey) =>
+            journey.checks.map((check) => check.name),
+          ),
+          result.journeys.map((journey) => journey.title),
+        )
+      : result.conclusion.text;
   const tone = runTone(result);
   const multiple = result.journeys.length > 1;
   const { label, subject, restated } = headlineParts(result);
@@ -1455,7 +1484,7 @@ function Verdict({ result }: { result: Comparison }) {
       {subject === result.title || restated ? null : (
         <p {...stylex.props(styles.values)}>{subject}</p>
       )}
-      <p {...stylex.props(styles.lead)}>{result.conclusion.text}</p>
+      {lead === '' ? null : <p {...stylex.props(styles.lead)}>{lead}</p>}
       <p {...stylex.props(styles.text)}>
         {result.summary.total === 0
           ? 'No named check is configured, so no behavior was checked.'

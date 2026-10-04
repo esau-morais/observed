@@ -32,7 +32,8 @@ import {
   type Tone,
 } from '../result-text';
 import { fonts, geometry, media, motion } from './constants.stylex';
-import { EvidenceLink } from './evidence';
+import { EvidenceLink, openSection, RequestDiff } from './evidence';
+import { HeadingLevel } from './heading';
 import { curve, layoutGraph, type Box, type Point } from './map-layout';
 import {
   connectionKinds,
@@ -67,6 +68,7 @@ import {
   type MapIndex,
   type Status,
 } from './map-view';
+import { outlineJourney, sectionId } from './outline';
 import { colors } from './tokens.stylex';
 
 const styles = stylex.create({
@@ -1997,13 +1999,35 @@ function VerdictEvidence({
     (check) => check.verdict !== 'not-run',
   ).length;
 
+  const prefix = (index: number) =>
+    result.journeys.length > 1 ? `journey-${index + 1}-` : '';
+
   if (failing.length === 0) {
     return (
-      <p {...stylex.props(styles.text)}>
-        {ran === 0
-          ? 'No named check ran, so no behavior was checked.'
-          : `${ran === 1 ? 'The named check' : `All ${ran} named checks`} passed. Select a block to see its evidence.`}
-      </p>
+      <>
+        <p {...stylex.props(styles.text)}>
+          {ran === 0
+            ? 'No named check ran, so no behavior was checked.'
+            : `${ran === 1 ? 'The named check' : `All ${ran} named checks`} passed. Select a block to see its evidence.`}
+        </p>
+        {result.mode === 'comparison'
+          ? result.journeys.map((journey, index) => {
+              const id = sectionId(prefix(index), 'screenshots');
+
+              return (
+                <a
+                  key={index}
+                  href={`#${id}`}
+                  onClick={() => openSection(id)}
+                  {...stylex.props(styles.linkButton)}
+                >
+                  Show full comparison
+                  {result.journeys.length > 1 ? `: ${journey.title}` : ''}
+                </a>
+              );
+            })
+          : null}
+      </>
     );
   }
 
@@ -2013,6 +2037,13 @@ function VerdictEvidence({
       <ul {...stylex.props(styles.list)}>
         {failing.map(({ journey, index, check }) => {
           const location = anchorLocation(journey, check, result.changeScope);
+          const outline = outlineJourney(journey);
+          const key = outline.placement.get(check.id);
+          const placed =
+            key === undefined || key === 'checks'
+              ? undefined
+              : outline.sections.find((section) => section.key === key);
+          const target = sectionId(prefix(index), placed?.key ?? 'checks');
           const evidence = [
             ...new Map(
               map.connections
@@ -2047,11 +2078,22 @@ function VerdictEvidence({
                 </p>
               )}
               {evidence.length === 0 ? null : <Evidence evidence={evidence} />}
+              {placed?.key === 'requests' && result.mode === 'comparison' ? (
+                <HeadingLevel value={5}>
+                  <RequestDiff
+                    before={journey.base}
+                    after={journey.candidate}
+                  />
+                </HeadingLevel>
+              ) : null}
               <a
-                href={`#${result.journeys.length > 1 ? `journey-${index + 1}-` : ''}checks`}
+                href={`#${target}`}
+                onClick={() => openSection(target)}
                 {...stylex.props(styles.linkButton)}
               >
-                Open the checks of this journey
+                {placed === undefined
+                  ? 'Open the checks of this journey'
+                  : `Show the evidence: ${placed.title}`}
               </a>
             </li>
           );

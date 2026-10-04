@@ -1,7 +1,9 @@
 import type { CheckDefinition } from '../checks';
 import type { CheckVerdict, Journey } from '../comparison-model';
 import { evidenceKinds, type EvidenceKind } from '../evidence-kinds';
+import { renderChanges } from '../evidence-kinds/react';
 import { journeySections, type JourneySection } from '../report-sections';
+import { requestDiff } from '../request-diff';
 
 export type SectionKey =
   | EvidenceKind
@@ -32,7 +34,7 @@ export type Outline = {
   readonly lead: SectionKey;
   // The section that shows each check's evidence, when one does.
   readonly placement: ReadonlyMap<string, SectionKey>;
-  // Browser errors and requests render on the steps they were read in.
+  // Browser errors render on the steps they were read in.
   readonly onSteps: boolean;
 };
 
@@ -95,9 +97,7 @@ function sectionFor(
   const kind = recipe?.checks.find((entry) => entry.id === check.id)?.kind;
   const section = kind === undefined ? null : checkSections[kind];
 
-  return onSteps && (section === 'requests' || section === 'browser-errors')
-    ? 'timeline'
-    : section;
+  return onSteps && section === 'browser-errors' ? 'timeline' : section;
 }
 
 function evidenceCount(section: JourneySection): string {
@@ -216,12 +216,53 @@ function screenshots(
   }
 }
 
-function requestCount(journey: Journey): string {
-  const side = journey.candidate;
+function requests(journey: Journey): Pick<OutlineSection, 'status' | 'count'> {
+  const { base, candidate } = journey;
 
-  return side.execution === 'complete'
-    ? plural(side.observations.requests.length, 'request')
-    : 'unavailable';
+  if (candidate.execution !== 'complete') {
+    return { status: 'unknown', count: 'unavailable' };
+  }
+
+  const total = plural(candidate.observations.requests.length, 'request');
+
+  if (journey.comparison.kind === 'preview') {
+    return { status: 'neutral', count: total };
+  }
+
+  // The capture section explains a base that did not complete.
+  if (base.execution !== 'complete') {
+    return { status: 'neutral', count: `${total} · not compared` };
+  }
+
+  const rows = requestDiff(
+    base.observations.requests,
+    candidate.observations.requests,
+  );
+  const changed = rows.filter(
+    (row) => row.change !== 'same' && row.change !== 'unknown',
+  ).length;
+  const unknown = rows.filter((row) => row.change === 'unknown').length;
+
+  if (changed > 0) {
+    return { status: 'changed', count: `${changed} changed · ${total}` };
+  }
+
+  return unknown === 0
+    ? { status: 'neutral', count: `${total} · none changed` }
+    : { status: 'neutral', count: `${unknown} status unknown · ${total}` };
+}
+
+function rendersChanged(section: JourneySection): boolean {
+  const base = section.input.base?.evidence;
+  const candidate = section.input.candidate.evidence;
+
+  return (
+    base?.kind === 'react' &&
+    base.status === 'recorded' &&
+    candidate.kind === 'react' &&
+    candidate.status === 'recorded' &&
+    renderChanges(base.value, candidate.value).length > 0
+  );
 }
 
 function recorded(section: JourneySection): boolean {
@@ -286,7 +327,7 @@ export function outlineJourney(journey: Journey): Outline {
     journey.candidate.execution === 'complete' ||
     (journey.comparison.kind !== 'preview' &&
       journey.base.execution === 'complete');
-  const withRequests = !onSteps && (capture === null || requestsRecorded);
+  const withRequests = capture === null || requestsRecorded;
   const byKey = new Map<SectionKey, CheckVerdict[]>();
   const placement = new Map<string, SectionKey>();
 
@@ -335,6 +376,7 @@ export function outlineJourney(journey: Journey): Outline {
           missing.length > 0
             ? 'unknown'
             : 'neutral',
+          rendersChanged(section) ? 'changed' : 'neutral',
         ]),
         count,
         checks: byKey.get(section.kind) ?? [],
@@ -354,26 +396,9 @@ export function outlineJourney(journey: Journey): Outline {
   const unknown = journey.checks.filter(
     (check) => verdictStatus[check.verdict] === 'unknown',
   ).length;
+  const requestSection = requests(journey);
   const sections: OutlineSection[] = [
     ...(capture === null ? [] : [capture]),
-    ...evidenceSections,
-    ...(!withRequests
-      ? []
-      : [
-          {
-            key: 'requests' as const,
-            title: 'Requests',
-            status: statusOf('requests', [
-              journey.candidate.execution === 'complete'
-                ? 'neutral'
-                : 'unknown',
-            ]),
-            count: requestCount(journey),
-            checks: byKey.get('requests') ?? [],
-            evidence: null,
-            open: false,
-          },
-        ]),
     ...(withoutScreenshots
       ? []
       : [
@@ -386,6 +411,20 @@ export function outlineJourney(journey: Journey): Outline {
             open: false,
           },
         ]),
+    ...(!withRequests
+      ? []
+      : [
+          {
+            key: 'requests' as const,
+            title: 'Requests',
+            status: statusOf('requests', [requestSection.status]),
+            count: requestSection.count,
+            checks: byKey.get('requests') ?? [],
+            evidence: null,
+            open: false,
+          },
+        ]),
+    ...evidenceSections,
     {
       key: 'checks',
       title: 'Checks',
@@ -407,8 +446,10 @@ export function outlineJourney(journey: Journey): Outline {
     })
     .map(({ section }) => section);
   const [first] = ordered;
+  // Failed or unknown evidence leads; otherwise the captured application does,
+  // even when requests or renders changed.
   const lead =
-    first !== undefined && rank[first.status] <= rank.changed
+    first !== undefined && rank[first.status] <= rank.unknown
       ? first.key
       : 'screenshots';
   const leading = [
@@ -459,11 +500,22 @@ export function outlineJourney(journey: Journey): Outline {
     ],
     unrecorded: [
       ...unrecorded,
-      ...(onSteps || withRequests ? [] : ['Requests']),
+      ...(withRequests ? [] : ['Requests']),
       ...(withoutScreenshots ? ['Screenshots'] : []),
     ],
     lead,
     placement,
     onSteps,
   };
+}
+
+export function sectionId(prefix: string, key: SectionKey): string {
+  return key === 'capture' ||
+    key === 'checks' ||
+    key === 'screenshots' ||
+    key === 'requests' ||
+    key === 'provenance' ||
+    key === 'limits'
+    ? `${prefix}${key}`
+    : `${prefix}evidence-${key}`;
 }

@@ -287,7 +287,7 @@ async function reportPage(
     await browser('wait', '#screenshots');
     const viewed = await evaluate(
       browser,
-      '[...document.querySelectorAll("#screenshots a img")].map((image) => image.complete && image.naturalWidth > 0 && image.src.startsWith("blob:"))',
+      '[...document.querySelectorAll("#screenshots img")].map((image) => image.complete && image.naturalWidth > 0 && image.src.startsWith("blob:"))',
       Schema.Array(Schema.Boolean),
     );
     expect(viewed).toEqual([true, true]);
@@ -307,15 +307,23 @@ async function reportPage(
     expect(links.every(([, blob]) => blob)).toBe(true);
 
     if (highlightedRegions > 0) {
-      await browser('focus', 'input[type=checkbox]');
-      await browser('press', 'Space');
+      // Outlines show on both panes; selecting a region zooms both to it.
       expect(
         await evaluate(
           browser,
-          '[...document.querySelectorAll("[aria-labelledby=changed-regions] img")].filter((image) => image.complete && image.naturalWidth > 0).length + document.querySelectorAll("[data-region]").length',
+          'document.querySelectorAll("#screenshots [data-region]").length',
           Schema.Number,
         ),
-      ).toBe(highlightedRegions * 4);
+      ).toBe(highlightedRegions * 2);
+      await browser('focus', '#screenshots ol button');
+      await browser('press', 'Enter');
+      expect(
+        await evaluate(
+          browser,
+          'JSON.stringify([document.querySelector("#screenshots output").textContent, ...[...document.querySelectorAll("#screenshots [role=region]")].map((pane) => pane.scrollLeft)])',
+          Schema.String,
+        ),
+      ).toMatch(/^\["\d+%",(\d+),\1\]$/);
     }
 
     await browser('screenshot', path.join(evidence, `${session}.png`));
@@ -392,7 +400,7 @@ async function viewer(
             'eval',
             '-b',
             Buffer.from(
-              '({images: document.querySelectorAll("#screenshots a img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, leadTop: (document.querySelector("#change-map-title") ?? document.querySelector("#report details[open]")).getBoundingClientRect().top})',
+              '({images: document.querySelectorAll("#screenshots img").length, text: document.querySelector("#report").innerText, detailsOpen: document.querySelector("#checks").open, height: innerHeight, leadTop: (document.querySelector("#change-map-title") ?? document.querySelector("#report details[open]")).getBoundingClientRect().top})',
             ).toString('base64'),
           );
           const viewed = Schema.decodeUnknownSync(
@@ -437,23 +445,12 @@ async function viewer(
                   }),
                 ),
               )(await browser('get', 'count', '[data-region]')).data.count;
-            expect(await regions()).toBe(0);
-            await browser('focus', 'input[type=checkbox]');
-            await browser('press', 'Space');
             expect(await regions()).toBe(highlightedRegions * 2);
-            const crops = await browser(
-              'eval',
-              '[...document.querySelectorAll("[aria-labelledby=changed-regions] img")].filter((image) => image.complete && image.naturalWidth > 0).length',
-            );
-            expect(
-              Schema.decodeUnknownSync(
-                Schema.fromJsonString(
-                  Schema.Struct({
-                    data: Schema.Struct({ result: Schema.Number }),
-                  }),
-                ),
-              )(crops).data.result,
-            ).toBe(highlightedRegions * 2);
+            await browser('focus', '#screenshots button[aria-pressed]');
+            await browser('press', 'Enter');
+            expect(await regions()).toBe(0);
+            await browser('press', 'Enter');
+            expect(await regions()).toBe(highlightedRegions * 2);
             await browser(
               'screenshot',
               path.join(evidence, 'viewer-highlighted.png'),

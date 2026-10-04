@@ -1,10 +1,14 @@
 import * as stylex from '@stylexjs/stylex';
 import { createContext, use, useState, type ReactNode } from 'react';
-import type { Side, Visual, VisualRegion } from '../comparison-model';
+import type { Side } from '../comparison-model';
 import { describeRevision, shortSource } from '../provenance-text';
+import {
+  requestDiff,
+  type RequestChange,
+  type RequestRow,
+} from '../request-diff';
 import { describeStatus } from '../request-text';
 import { integrityLabels } from '../result-text';
-import { describeRegion } from '../visual-text';
 import { fonts, geometry, media } from './constants.stylex';
 import { SubHeading } from './heading';
 import { colors } from './tokens.stylex';
@@ -85,64 +89,52 @@ const styles = stylex.create({
     overflowWrap: 'anywhere',
   },
   frame: { display: 'block', position: 'relative' },
-  region: {
-    borderColor: {
-      default: colors.changed,
-      [media.forcedColors]: 'Highlight',
-    },
-    borderStyle: 'solid',
-    borderWidth: 2,
-    boxSizing: 'border-box',
-    outlineColor: colors.surface,
-    outlineStyle: 'solid',
-    outlineWidth: 2,
-    pointerEvents: 'none',
-    position: 'absolute',
+  changeChip: {
+    alignItems: 'center',
+    backgroundColor: colors.changedFill,
+    borderRadius: 4,
+    color: colors.changed,
+    display: 'inline-flex',
+    fontSize: '0.8125rem',
+    fontWeight: 500,
+    gap: 6,
+    paddingBlock: 2,
+    paddingInline: 8,
+    whiteSpace: 'nowrap',
   },
-  regionList: { display: 'grid', gap: 24, margin: 0, padding: 0 },
-  cropPair: {
+  changedRow: { backgroundColor: colors.surface },
+  laneAxis: { stroke: colors.border },
+  laneBefore: { fill: colors.textMuted },
+  laneAfter: { fill: colors.text },
+  unknownChip: { backgroundColor: colors.unknownFill, color: colors.unknown },
+  dim: { color: colors.textMuted },
+  summary: {
+    alignItems: 'center',
+    cursor: 'pointer',
+    display: 'flex',
+    gap: 8,
+    minHeight: geometry.target,
+    outlineColor: { default: colors.focus, [media.forcedColors]: 'Highlight' },
+    outlineOffset: 3,
+    outlineStyle: 'solid',
+    outlineWidth: { default: 0, ':focus-visible': 2 },
+  },
+  sides: {
     display: 'grid',
-    gap: 16,
+    gap: 24,
     gridTemplateColumns: {
       default: 'minmax(0, 1fr)',
-      [media.tablet]: 'repeat(2, minmax(0, 1fr))',
+      [media.desktop]: 'repeat(2, minmax(0, 1fr))',
     },
   },
-  crop: {
-    backgroundColor: colors.surface,
-    borderColor: colors.borderControl,
-    borderRadius: 4,
-    borderStyle: 'solid',
-    borderWidth: 1,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  cropBox: (ratio: string, width: string) => ({ aspectRatio: ratio, width }),
-  cropImage: {
-    imageRendering: 'pixelated',
-    maxWidth: 'none',
-    position: 'absolute',
-  },
-  cropOffset: (left: string, top: string, width: string) => ({
-    left,
-    top,
-    width,
-  }),
-  regionBox: (left: string, top: string, width: string, height: string) => ({
-    height: `calc(${height} + 12px)`,
-    left: `calc(${left} - 6px)`,
-    top: `calc(${top} - 6px)`,
-    width: `calc(${width} + 12px)`,
-  }),
 });
 
-export type Highlight = Pick<
-  Extract<Visual, { kind: 'changed' }>,
-  'width' | 'height' | 'regions'
->;
+export function openSection(id: string) {
+  const target = document.getElementById(id);
 
-function percent(value: number, total: number): string {
-  return `${(value / total) * 100}%`;
+  if (target instanceof HTMLDetailsElement) {
+    target.open = true;
+  }
 }
 
 export const EvidenceUrls = createContext((href: string) => href);
@@ -163,15 +155,7 @@ export function EvidenceLink({
   );
 }
 
-export function Screenshot({
-  side,
-  label,
-  highlight,
-}: {
-  side: Side;
-  label: string;
-  highlight: Highlight | null;
-}) {
+export function Screenshot({ side, label }: { side: Side; label: string }) {
   const [failed, setFailed] = useState(false);
   const resolve = use(EvidenceUrls);
   const capture = side.capture?.manifest ?? null;
@@ -215,22 +199,6 @@ export function Screenshot({
                 onError={() => setFailed(true)}
                 {...stylex.props(styles.image)}
               />
-              {highlight?.regions.map((region, index) => (
-                <span
-                  key={index}
-                  aria-hidden="true"
-                  data-region=""
-                  {...stylex.props(
-                    styles.region,
-                    styles.regionBox(
-                      percent(region.x, highlight.width),
-                      percent(region.y, highlight.height),
-                      percent(region.width, highlight.width),
-                      percent(region.height, highlight.height),
-                    ),
-                  )}
-                />
-              ))}
             </span>
           )}
         </a>
@@ -359,90 +327,302 @@ export function Artifacts({ side, label }: { side: Side; label: string }) {
   );
 }
 
-const cropPadding = 16;
-const maxZoomedWidth = 560;
+const changeWords = {
+  added: { symbol: '+', word: 'Added' },
+  removed: { symbol: '−', word: 'Removed' },
+  count: { symbol: 'Δ', word: 'Count changed' },
+  status: { symbol: 'Δ', word: 'Status changed' },
+  unknown: { symbol: '?', word: 'Status not recorded' },
+  same: { symbol: '·', word: 'Unchanged' },
+} satisfies Record<RequestChange, { symbol: string; word: string }>;
 
-function cropAround(
-  region: VisualRegion,
-  image: { width: number; height: number },
-) {
-  const x = Math.max(0, region.x - cropPadding);
-  const y = Math.max(0, region.y - cropPadding);
-  const width =
-    Math.min(image.width, region.x + region.width + cropPadding) - x;
-  const height =
-    Math.min(image.height, region.y + region.height + cropPadding) - y;
+function describeStatuses(statuses: readonly number[]): string {
+  if (statuses.length === 0) {
+    return 'none';
+  }
 
-  return { x, y, width, height, zoom: width * 2 <= maxZoomedWidth ? 2 : 1 };
+  const counts = new Map<number, number>();
+
+  for (const status of statuses) {
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+
+  return [...counts]
+    .map(([status, count]) => `${count} × ${describeStatus(status)}`)
+    .join(', ');
 }
 
-export function ChangedRegions({
-  visual,
-  before,
-  after,
-  id,
-}: {
-  visual: Extract<Visual, { kind: 'changed' }>;
-  before: string;
-  after: string;
-  id: string;
-}) {
-  const resolve = use(EvidenceUrls);
+type Starts = {
+  // Milliseconds from each side's recorded window start, per row key.
+  readonly of: (row: RequestRow, side: 'base' | 'candidate') => number[];
+  readonly span: number;
+};
+
+const laneWidth = 160;
+
+function rowKey(row: Pick<RequestRow, 'method' | 'origin' | 'path'>): string {
+  return JSON.stringify([row.method, row.origin, row.path]);
+}
+
+function StartLanes({ row, starts }: { row: RequestRow; starts: Starts }) {
+  const x = (value: number) =>
+    4 + (starts.span === 0 ? 0 : (value / starts.span) * (laneWidth - 8));
+  const before = starts.of(row, 'base');
+  const after = starts.of(row, 'candidate');
+  const words = (label: string, values: number[]) =>
+    values.length === 0
+      ? `${label} none`
+      : `${label} at ${values
+          .slice(0, 10)
+          .map((value) => `${Math.round(value)} ms`)
+          .join(
+            ', ',
+          )}${values.length > 10 ? ` and ${values.length - 10} more` : ''}`;
 
   return (
-    <section {...stylex.props(styles.stack)} aria-labelledby={id}>
-      <SubHeading id={id} xstyle={styles.heading}>
-        Changed regions
-      </SubHeading>
-      <ol {...stylex.props(styles.regionList)}>
-        {visual.regions.map((region, index) => {
-          const crop = cropAround(region, visual);
+    <svg
+      viewBox={`0 0 ${laneWidth} 24`}
+      width={laneWidth}
+      height={24}
+      role="img"
+      aria-label={`Start times: ${words('Before', before)}; ${words('After', after)}`}
+    >
+      <line
+        x1={0}
+        x2={laneWidth}
+        y1={12}
+        y2={12}
+        {...stylex.props(styles.laneAxis)}
+      />
+      {before.map((value, index) => (
+        <circle
+          key={`b${index}`}
+          cx={x(value)}
+          cy={6}
+          r={3}
+          {...stylex.props(styles.laneBefore)}
+        />
+      ))}
+      {after.map((value, index) => (
+        <rect
+          key={`a${index}`}
+          x={x(value) - 3}
+          y={15}
+          width={6}
+          height={6}
+          {...stylex.props(styles.laneAfter)}
+        />
+      ))}
+    </svg>
+  );
+}
 
-          return (
-            <li key={index} {...stylex.props(styles.stack)}>
-              <p {...stylex.props(styles.text)}>
-                Region {index + 1}: {describeRegion(region)}
-              </p>
-              <div {...stylex.props(styles.cropPair)}>
-                {(
-                  [
-                    ['Before', before],
-                    ['After', after],
-                  ] as const
-                ).map(([label, source]) => (
-                  <figure key={label} {...stylex.props(styles.figure)}>
-                    <figcaption {...stylex.props(styles.caption)}>
-                      {label}
-                    </figcaption>
-                    <div
-                      {...stylex.props(
-                        styles.crop,
-                        styles.cropBox(
-                          `${crop.width} / ${crop.height}`,
-                          `min(100%, ${crop.width * crop.zoom}px)`,
-                        ),
-                      )}
-                    >
-                      <img
-                        src={resolve(source)}
-                        alt={`${label}, region ${index + 1}`}
-                        {...stylex.props(
-                          styles.cropImage,
-                          styles.cropOffset(
-                            `${(-crop.x / crop.width) * 100}%`,
-                            `${(-crop.y / crop.height) * 100}%`,
-                            `${(visual.width / crop.width) * 100}%`,
-                          ),
-                        )}
-                      />
-                    </div>
-                  </figure>
-                ))}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+function RequestRows({
+  label,
+  rows,
+  changes,
+  starts,
+}: {
+  label: string;
+  rows: readonly RequestRow[];
+  changes: boolean;
+  starts: Starts;
+}) {
+  const columns = [
+    ...(changes ? ['Change'] : []),
+    'Method',
+    'Path',
+    'Before',
+    'After',
+    'Start in window',
+  ];
+
+  return (
+    <div
+      {...stylex.props(styles.scroll)}
+      role="region"
+      aria-label={`${label}, scroll horizontally for all columns`}
+      tabIndex={0}
+    >
+      <table {...stylex.props(styles.table)}>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                {...stylex.props(styles.cell, styles.column, styles.nowrap)}
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={`${row.method} ${row.origin} ${row.path}`}
+              {...stylex.props(changes && styles.changedRow)}
+            >
+              {changes ? (
+                <td {...stylex.props(styles.cell)}>
+                  <span
+                    {...stylex.props(
+                      styles.changeChip,
+                      row.change === 'unknown' && styles.unknownChip,
+                    )}
+                  >
+                    {`${changeWords[row.change].symbol} ${changeWords[row.change].word}`}
+                    {row.change === 'count'
+                      ? ` ${row.candidate.length > row.base.length ? '+' : '−'}${Math.abs(row.candidate.length - row.base.length)}`
+                      : ''}
+                  </span>
+                </td>
+              ) : null}
+              <td {...stylex.props(styles.cell, styles.mono)}>{row.method}</td>
+              <th scope="row" {...stylex.props(styles.cell, styles.mono)}>
+                {row.origin === 'application' ? '' : row.origin}
+                {row.path}
+              </th>
+              <td
+                {...stylex.props(
+                  styles.cell,
+                  styles.mono,
+                  styles.nowrap,
+                  row.base.length === 0 && styles.dim,
+                )}
+              >
+                {describeStatuses(row.base)}
+              </td>
+              <td
+                {...stylex.props(
+                  styles.cell,
+                  styles.mono,
+                  styles.nowrap,
+                  row.candidate.length === 0 && styles.dim,
+                )}
+              >
+                {describeStatuses(row.candidate)}
+              </td>
+              <td {...stylex.props(styles.cell)}>
+                <StartLanes row={row} starts={starts} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+export function RequestDiff({ before, after }: { before: Side; after: Side }) {
+  if (before.execution !== 'complete' || after.execution !== 'complete') {
+    return (
+      <div {...stylex.props(styles.sides)}>
+        <RequestLedger side={before} label="Before" />
+        <RequestLedger side={after} label="After" />
+      </div>
+    );
+  }
+
+  const rows = requestDiff(
+    before.observations.requests,
+    after.observations.requests,
+  );
+  const offsets = (side: Side & { execution: 'complete' }) => {
+    const start = Date.parse(side.observations.window.startedAt);
+    const byRow = new Map<string, number[]>();
+
+    for (const request of side.observations.requests) {
+      const key = rowKey(request);
+
+      byRow.set(key, [
+        ...(byRow.get(key) ?? []),
+        Date.parse(request.startedAt) - start,
+      ]);
+    }
+
+    return {
+      byRow,
+      span: Date.parse(side.observations.window.finishedAt) - start,
+    };
+  };
+
+  const beforeStarts = offsets(before);
+  const afterStarts = offsets(after);
+  const starts: Starts = {
+    of: (row, side) =>
+      (side === 'base' ? beforeStarts : afterStarts).byRow.get(rowKey(row)) ??
+      [],
+    span: Math.max(beforeStarts.span, afterStarts.span),
+  };
+  const listed = rows.filter((row) => row.change !== 'same');
+  const changed = listed.filter((row) => row.change !== 'unknown');
+  const unknown = listed.length - changed.length;
+  const same = rows.filter((row) => row.change === 'same');
+  const unchangedCount = same.reduce((sum, row) => sum + row.base.length, 0);
+
+  return (
+    <section {...stylex.props(styles.stack)} aria-label="Request ledger diff">
+      <p {...stylex.props(styles.text)}>
+        Before {plural(before.observations.requests.length, 'request')}, after{' '}
+        {after.observations.requests.length}.{' '}
+        {changed.length === 0
+          ? 'No method, path, count or status changed.'
+          : `${plural(changed.length, 'row')} changed.`}
+        {unknown === 0
+          ? ''
+          : ` ${plural(unknown, 'row')} with a status not recorded.`}
+      </p>
+      {rows.length === 0 ? (
+        <p {...stylex.props(styles.text)}>
+          No requests recorded on either side.
+        </p>
+      ) : null}
+      {listed.length === 0 ? null : (
+        <RequestRows
+          label="Changed requests"
+          rows={listed}
+          changes
+          starts={starts}
+        />
+      )}
+      {same.length === 0 ? null : (
+        <details open={listed.length === 0}>
+          <summary {...stylex.props(styles.summary)}>
+            Unchanged: {plural(same.length, 'row')},{' '}
+            {plural(unchangedCount, 'request')} per side
+          </summary>
+          <RequestRows
+            label="Unchanged requests"
+            rows={same}
+            changes={false}
+            starts={starts}
+          />
+        </details>
+      )}
+      <p {...stylex.props(styles.caption)}>
+        Start in window: ● Before, ■ After, from each recorded window&apos;s
+        start on one scale of {Math.round(starts.span)} ms. Response durations
+        are not recorded.
+      </p>
+      <p {...stylex.props(styles.caption)}>
+        Recorded windows: Before{' '}
+        <span {...stylex.props(styles.mono)}>
+          {before.observations.window.startedAt} to{' '}
+          {before.observations.window.finishedAt}
+        </span>
+        , After{' '}
+        <span {...stylex.props(styles.mono)}>
+          {after.observations.window.startedAt} to{' '}
+          {after.observations.window.finishedAt}
+        </span>
+        .
+      </p>
     </section>
   );
 }

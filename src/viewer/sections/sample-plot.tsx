@@ -1,7 +1,6 @@
 import * as stylex from '@stylexjs/stylex';
 import type { EvidenceView } from '../../evidence-kinds';
 import {
-  describeViewport,
   formatMetric,
   metricAbbreviations,
   sampleDifference,
@@ -12,7 +11,7 @@ import {
 import { fonts } from '../constants.stylex';
 import { colors } from '../tokens.stylex';
 
-const width = 600;
+const width = 520;
 const left = 88;
 const right = 24;
 const laneGap = 36;
@@ -25,12 +24,14 @@ const styles = stylex.create({
   tick: {
     fill: colors.textMuted,
     fontFamily: fonts.mono,
-    fontSize: 11,
+    fontSize: 12,
     fontVariantNumeric: 'tabular-nums',
   },
-  lane: { fill: colors.textSecondary, fontFamily: fonts.sans, fontSize: 12 },
+  lane: { fill: colors.textSecondary, fontFamily: fonts.sans, fontSize: 14 },
   base: { fill: colors.textMuted },
   candidate: { fill: colors.text },
+  range: { stroke: colors.borderControl, strokeWidth: 2 },
+  median: { stroke: colors.textSecondary, strokeWidth: 3 },
   budget: { stroke: colors.textSecondary, strokeDasharray: '4 3' },
   budgetLabel: {
     fill: colors.textSecondary,
@@ -119,12 +120,12 @@ export function SamplePlot({
 }) {
   const sides = [
     ...(base?.status === 'recorded'
-      ? [{ label: 'Base', shape: 'circle' as const, value: base.value }]
+      ? [{ label: 'Before', shape: 'circle' as const, value: base.value }]
       : []),
     ...(candidate.status === 'recorded'
       ? [
           {
-            label: base === null ? 'Capture' : 'Candidate',
+            label: base === null ? 'Capture' : 'After',
             shape: 'square' as const,
             value: candidate.value,
           },
@@ -206,12 +207,31 @@ export function SamplePlot({
         {sides.map((side, lane) => {
           const y = 36 + lane * laneGap;
           const placed: number[] = [];
+          const summary = summarize(side.value, metric);
 
           return (
             <g key={side.label}>
               <text x={0} y={y + 4} {...stylex.props(styles.lane)}>
                 {side.label}
               </text>
+              {summary.kind === 'measured' ? (
+                <>
+                  <line
+                    x1={x(summary.min)}
+                    x2={x(summary.max)}
+                    y1={y}
+                    y2={y}
+                    {...stylex.props(styles.range)}
+                  />
+                  <line
+                    x1={x(summary.median)}
+                    x2={x(summary.median)}
+                    y1={y - 12}
+                    y2={y + 12}
+                    {...stylex.props(styles.median)}
+                  />
+                </>
+              ) : null}
               {side.values.map((value, index) => {
                 const cx = x(value);
                 const stacked = placed.filter(
@@ -247,13 +267,11 @@ export function SamplePlot({
       </svg>
       {conditions === undefined || first === undefined ? null : (
         <figcaption {...stylex.props(styles.caption)}>
-          {abbreviation}: {sampleCounts(sides)}
+          {sampleCounts(sides)}
           {difference === 'conditions'
-            ? ' · sample conditions differ between sides, see below'
-            : ` after ${conditions.warmup} warm-up · viewport ${describeViewport(first.value)}`}
-          {difference === 'page' ? ' · the sides sampled different pages' : ''}{' '}
-          · CPU and network unthrottled · local samples, not production
-          percentiles
+            ? ' · sample conditions differ between sides'
+            : ''}
+          {difference === 'page' ? ' · the sides sampled different pages' : ''}
         </figcaption>
       )}
     </figure>
