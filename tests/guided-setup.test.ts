@@ -176,7 +176,7 @@ test('the generated workflow pins a full commit SHA and grants exactly three per
       ?.split('\n')
       .filter((line) => line !== '')
       .map((line) => line.replace(/\s+#.*$/, '').trim()),
-  ).toEqual(['contents: read', 'checks: write', 'pull-requests: write']);
+  ).toEqual(['contents: write', 'checks: write', 'pull-requests: write']);
   expect(yaml).toContain('    name: Observed\n');
   expect(() =>
     workflowYaml({ project: '.', sha: 'v0.3.0', version: '0.3.0' }),

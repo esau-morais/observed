@@ -453,6 +453,18 @@ test('the workflow token stores the crops in a dated ref outside refs/heads, the
     'DELETE /refs/observed/crops/2026-09-20/1-1-observed-bundle',
   ]);
 
+  // upload-artifact reads 0 as the repository default, which can be longer.
+  expect(imageCutoff(new Date('2026-10-04T12:00:00Z'), '0')).toBeNull();
+
+  const refFor = (artifact: string) =>
+    imageRef(new Date('2026-10-04T12:00:00Z'), {
+      run: '9',
+      attempt: '1',
+      artifact,
+    });
+
+  expect(refFor('a.b')).not.toBe(refFor('a-b'));
+
   await rm(directory, { recursive: true, force: true });
 });
 
@@ -491,6 +503,7 @@ test('a refused store keeps the crops link and says why, falls back to a user to
     image: null,
     link: artifactLink,
     note: "The comment links the screenshot crops because the workflow token cannot write to this repository. Add contents: write to the workflow's permissions to show them.",
+    expected: true,
   });
   expect(fetch).toHaveBeenCalledTimes(1);
 
@@ -498,6 +511,7 @@ test('a refused store keeps the crops link and says why, falls back to a user to
     image: null,
     link: artifactLink,
     note: 'The comment links the screenshot crops. GitHub refused the image upload with HTTP 404. It accepts only a user token with write access to this repository.',
+    expected: false,
   });
   expect(fetch).toHaveBeenCalledTimes(3);
 

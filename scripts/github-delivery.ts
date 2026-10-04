@@ -315,6 +315,14 @@ export async function commitImage(
   target: Target,
   image: { server: string; ref: string; name: string; bytes: Uint8Array },
 ): Promise<string> {
+  if (image.server !== 'https://github.com') {
+    throw new DeliveryError({
+      message: 'Inline images need github.com',
+      status: null,
+      permissions: null,
+    });
+  }
+
   const repository = `/repos/${target.repository}/git`;
   const blob = await request(target, shaSchema, 'POST', `${repository}/blobs`, {
     content: Buffer.from(image.bytes).toString('base64'),
@@ -336,11 +344,18 @@ export async function commitImage(
     sha: commit.sha,
   });
 
-  return `${image.server}/${target.repository}/raw/${commit.sha}/${encodeURIComponent(image.name)}`;
+  // Parentheses would end the Markdown image early.
+  const file = encodeURIComponent(image.name).replace(
+    /[()'!*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+  return `${image.server}/${target.repository}/raw/${commit.sha}/${file}`;
 }
 
 const matchingRefs = Schema.Array(Schema.Struct({ ref: Schema.String }));
 
+// Bounds the API calls one delivery step spends on cleanup.
 const prunedPerRun = 50;
 
 // Deletes crop refs from days before the cutoff, a few per run, so stored

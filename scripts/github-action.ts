@@ -355,7 +355,6 @@ export function checkRows(
   ];
 }
 
-// A passing check still states what it covered.
 function passedChecks(result: Comparison): string | null {
   const passed = result.journeys.flatMap((journey) =>
     journey.checks
@@ -653,57 +652,72 @@ export type Screenshots = {
   image: string | null;
   link: string | null;
   note: string | null;
+  // A fork, or a workflow that kept contents: read, links the crops by
+  // choice, so its note is a notice rather than a warning.
+  expected?: boolean;
 };
 
 const cropsAlt = 'Before, after and changed pixels, left to right';
 
-// The crops come from the first journey whose screenshots changed. Its line
-// carries the link, which still works where a reader cannot load the image;
-// other changed journeys are counted.
+function changedScreens(
+  result: Comparison,
+): { journey: Journey; change: string }[] {
+  return result.journeys.flatMap((journey) => {
+    const change =
+      journey.comparison.kind === 'available'
+        ? visualChange(journey.comparison.visual)
+        : null;
+
+    return change === null ? [] : [{ journey, change }];
+  });
+}
+
+// One line however many journeys changed; the crops image has a row for
+// each. The link stays beside an image, since a reader who cannot load the
+// image can still open it.
 function screenshotSection(
   result: Comparison,
   screenshots: Screenshots | null,
 ): string | null {
   const image = httpsUrl(screenshots?.image);
   const file = httpsUrl(screenshots?.link);
-  const changed = result.journeys.flatMap((journey) => {
-    const change =
-      journey.comparison.kind === 'available'
-        ? visualChange(journey.comparison.visual)
-        : null;
+  const changed = changedScreens(result);
+  const [only] = changed;
 
-    return change === null
-      ? []
-      : [
-          {
-            journey,
-            change,
-            cropped:
-              journey.comparison.kind === 'available' &&
-              journey.comparison.visual.kind === 'changed',
-          },
-        ];
-  });
-  const shown = changed.find((item) => item.cropped) ?? changed[0];
-
-  if (shown === undefined) {
+  if (only === undefined) {
     return null;
   }
 
-  const others = changed.length - 1;
   const line = [
-    `**Screenshots${result.journeys.length === 1 ? '' : ` · ${inlineText(shown.journey.title)}`}** · ${inlineText(shown.change)}`,
-    ...(shown.cropped && file !== null ? [`[${cropsAlt}](${file})`] : []),
-    ...(others === 0
-      ? []
-      : [
-          `${others === 1 ? '1 more journey' : `${String(others)} more journeys`} changed too.`,
-        ]),
+    changed.length > 1
+      ? `**Screenshots** · ${changed.length} journeys changed: ${changed.map(({ journey }) => inlineText(journey.title)).join(', ')}.`
+      : `**Screenshots${result.journeys.length === 1 ? '' : ` · ${inlineText(only.journey.title)}`}** · ${inlineText(only.change)}`,
+    ...(file === null ? [] : [`[${cropsAlt}](${file})`]),
   ].join(' ');
 
   return [line, ...(image === null ? [] : [`![${cropsAlt}](${image})`])].join(
     '\n\n',
   );
+}
+
+function screenshotDetails(result: Comparison): string | null {
+  const changed = changedScreens(result);
+
+  return changed.length === 0
+    ? null
+    : [
+        'An observation, not a check.',
+        ...(changed.length === 1
+          ? []
+          : [
+              changed
+                .map(
+                  ({ journey, change }) =>
+                    `- ${inlineText(journey.title)}: ${inlineText(change)}`,
+                )
+                .join('\n'),
+            ]),
+      ].join('\n\n');
 }
 
 // Why changed screenshots have no crops to show, such as a crop step that
@@ -1097,6 +1111,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
     details([
+      ['screenshots', 'Screenshots', screenshotDetails(result)],
       ['files', 'What touched each file', scoped?.details],
       ['journey changes', 'Changes to journeys and checks', recipeList(result)],
       [
@@ -1516,7 +1531,7 @@ export async function deliveredScreenshots(options: {
   target: Target;
   server: string;
   ref: string;
-  cutoff: string;
+  cutoff: string | null;
   userToken: string;
   repositoryId: string;
 }): Promise<Screenshots | null> {
@@ -1535,11 +1550,27 @@ export async function deliveredScreenshots(options: {
       image: null,
       link,
       note: 'The comment links the screenshot crops: Observed stores no images from pull requests from forks.',
+      expected: true,
     };
   }
 
-  const bytes = await readFile(options.path);
   const name = path.basename(options.path);
+  let bytes: Uint8Array;
+
+  try {
+    bytes = await readFile(options.path);
+  } catch (error) {
+    process.stderr.write(
+      `Observed: the screenshot crops could not be read: ${describeError(error)}\n`,
+    );
+
+    return {
+      image: null,
+      link,
+      note: 'The comment links the screenshot crops. Their file could not be read; the job log has details.',
+    };
+  }
+
   let refused: unknown;
 
   try {
@@ -1549,12 +1580,15 @@ export async function deliveredScreenshots(options: {
       name,
       bytes,
     });
+    const { cutoff } = options;
 
-    await pruneImages(options.target, options.cutoff).catch((error: unknown) =>
-      process.stderr.write(
-        `Observed: old screenshot refs were not pruned: ${describeError(error)}\n`,
-      ),
-    );
+    if (cutoff !== null) {
+      await pruneImages(options.target, cutoff).catch((error: unknown) =>
+        process.stderr.write(
+          `Observed: old screenshot refs were not pruned: ${describeError(error)}\n`,
+        ),
+      );
+    }
 
     return { image, link, note: null };
   } catch (error) {
@@ -1589,6 +1623,10 @@ export async function deliveredScreenshots(options: {
     image: null,
     link,
     note: imageRefusal(refused, options.userToken !== ''),
+    expected:
+      options.userToken === '' &&
+      refused instanceof DeliveryError &&
+      refused.status === 403,
   };
 }
 
@@ -1598,12 +1636,12 @@ function describeError(error: unknown): string {
     : String(error);
 }
 
-function imageRefusal(error: unknown, uploaded: boolean): string {
+function imageRefusal(error: unknown, userToken: boolean): string {
   if (!(error instanceof DeliveryError)) {
     return 'The comment links the screenshot crops. Storing them failed unexpectedly; the job log has details.';
   }
 
-  return !uploaded && error.status === 403
+  return !userToken && error.status === 403
     ? "The comment links the screenshot crops because the workflow token cannot write to this repository. Add contents: write to the workflow's permissions to show them."
     : `The comment links the screenshot crops. ${error.message}.`;
 }
@@ -1613,16 +1651,31 @@ export function imageRef(
   now: Date,
   run: { run: string; attempt: string; artifact: string },
 ): string {
-  const artifact = run.artifact.replace(/[^A-Za-z0-9_-]+/g, '-');
+  // Other characters become .xx, so two artifact names never share a ref.
+  const artifact = [...run.artifact]
+    .map((character) =>
+      /[A-Za-z0-9_-]/.test(character)
+        ? character
+        : [...Buffer.from(character)]
+            .map((byte) => `.${byte.toString(16).padStart(2, '0')}`)
+            .join(''),
+    )
+    .join('');
 
   return `${imageRefPrefix}${now.toISOString().slice(0, 10)}/${run.run}-${run.attempt}-${artifact}`;
 }
 
 // Refs stored before this day are older than the artifacts they stand in for.
-export function imageCutoff(now: Date, retentionDays: string): string {
-  const days = /^\d+$/.test(retentionDays) ? Number(retentionDays) : 90;
+// Nothing is pruned without a retention in days: 0 asks upload-artifact for
+// the repository's default, which the action cannot read.
+export function imageCutoff(now: Date, retentionDays: string): string | null {
+  const days = retentionDays.trim();
 
-  return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
+  return /^[1-9]\d*$/.test(days)
+    ? new Date(now.getTime() - Number(days) * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
+    : null;
 }
 
 function link(label: string, url: string | null): string | null {
@@ -1941,7 +1994,7 @@ if (import.meta.main) {
 
     if (screenshots?.note !== null && screenshots?.note !== undefined) {
       process.stdout.write(
-        `::warning title=Observed::${escapeCommand(screenshots.note)}\n`,
+        `::${screenshots.expected === true ? 'notice' : 'warning'} title=Observed::${escapeCommand(screenshots.note)}\n`,
       );
       notes.push(screenshots.note);
     } else if (

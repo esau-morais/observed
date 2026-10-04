@@ -145,13 +145,18 @@ visitors see the image too (checked on esau-morais/observed-trial-express#15,
 2026-10-04).
 
 Each run stores one small commit under the day it ran. Later runs delete refs
-older than `retention-days`, so an image lasts about as long as the artifact
-it stands in for, and Git drops the unreferenced commits.
+older than `retention-days`. GitHub does not document when it removes a
+commit no ref points to, and may serve it by SHA for some time after.
+
+The image shows page content, including text. On a public repository anyone
+can open it, signed in or not, which the artifact link does not allow.
 
 This needs `contents: write`, which also lets the token push. The job runs
-the pull request's code during the capture, and the action passes the token
-only to steps before and after it. Keep `contents: read` if you'd rather not
-grant it; the comment then links the crops.
+the pull request's code during the capture. The action passes the token only
+to steps before and after it, so keep `persist-credentials: false` on the
+checkout step, or the checkout leaves the token in `.git/config` where that
+code can read it. Keep `contents: read` if you'd rather not grant it; the
+comment then links the crops.
 
 The action stores no image for a pull request from a fork: GitHub gives it a
 read-only token, and its pixels come from code the repository didn't accept.

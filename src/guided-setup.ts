@@ -186,7 +186,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write       # check out, and store the screenshot crops the comment shows
   checks: write         # title this job's check with the verdict
   pull-requests: write  # post and update one comment
 
@@ -500,7 +500,7 @@ export function setupPullRequestBody(options: {
     '',
     '| Permission | Why |',
     '| --- | --- |',
-    '| `contents: read` | Check out the base and the head |',
+    '| `contents: write` | Check out the base and the head, and store the screenshot crops the comment shows |',
     "| `checks: write` | Put the result in the title of this job's own check |",
     '| `pull-requests: write` | Post one comment and edit it on later runs |',
     '',
