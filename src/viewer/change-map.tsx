@@ -2013,8 +2013,13 @@ function VerdictEvidence({
         {result.mode === 'comparison'
           ? result.journeys.map((journey, index) => {
               const id = sectionId(prefix(index), 'screenshots');
+              const compared =
+                journey.comparison.kind === 'available' &&
+                outlineJourney(journey).sections.some(
+                  (section) => section.key === 'screenshots',
+                );
 
-              return (
+              return compared ? (
                 <a
                   key={index}
                   href={`#${id}`}
@@ -2024,7 +2029,7 @@ function VerdictEvidence({
                   Show full comparison
                   {result.journeys.length > 1 ? `: ${journey.title}` : ''}
                 </a>
-              );
+              ) : null;
             })
           : null}
       </>

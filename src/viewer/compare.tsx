@@ -365,7 +365,7 @@ function unionOf(regions: readonly Box[]): Box | null {
 
 function zoomLabel(zoom: number | 'fit' | 'changes'): string {
   if (zoom === 'fit') {
-    return 'Fit';
+    return 'Fit width';
   }
 
   return zoom === 'changes' ? 'Changes' : `${Math.round(zoom * 100)}%`;
@@ -657,10 +657,8 @@ export function BeforeAfter({
     }
   };
 
-  // An image's height is known only once it loads, so centering repeats then.
-  const imagesReady = loaded.before !== undefined || loaded.after !== undefined;
-
-  // Runs after the zoom for a newly selected region has been laid out.
+  // Centers the target after its zoom is laid out, and again once the images
+  // load (their height is unknown before) or a new mode mounts new panes.
   useLayoutEffect(() => {
     const region = jump?.box;
 
@@ -678,16 +676,19 @@ export function BeforeAfter({
       pane.scrollTop =
         (region.y + region.height / 2) * scale - pane.clientHeight / 2;
     }
-  }, [jump, changed, linked, imagesReady]);
+  }, [jump, changed, linked, loaded.before, loaded.after, effectiveMode]);
 
   // Each side keeps its own scale when the screenshots differ in size.
   const frameWidth = (side?: 'before' | 'after') => {
     const own = (side === undefined || sameSize ? null : loaded[side]) ?? size;
 
     if (zoom === 'changes' && changes !== null && own !== null) {
-      const scale = own.width / (changes.width + regionPadding * 2);
+      // Fit the box's width to the pane and its height to 60vh, the
+      // shortest pane height, whichever needs the smaller zoom.
+      const byWidth = own.width / (changes.width + regionPadding * 2);
+      const byHeight = own.width / (changes.height + regionPadding * 2);
 
-      return `clamp(100%, calc(100% * ${scale.toFixed(4)}), ${own.width * 2}px)`;
+      return `clamp(100%, min(calc(100% * ${byWidth.toFixed(4)}), calc(60vh * ${byHeight.toFixed(4)})), ${own.width * 2}px)`;
     }
 
     return typeof zoom !== 'number' || own === null

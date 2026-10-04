@@ -14,7 +14,7 @@ export function SubHeading({
   xstyle?: stylex.StyleXStyles;
   children: ReactNode;
 }) {
-  const Heading = (['h3', 'h4', 'h5'] as const)[use(HeadingLevel) - 3] ?? 'h5';
+  const Heading = ({ 3: 'h3', 4: 'h4', 5: 'h5' } as const)[use(HeadingLevel)];
 
   return (
     <Heading id={id} {...stylex.props(xstyle)}>

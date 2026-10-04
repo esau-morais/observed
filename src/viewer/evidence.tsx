@@ -538,7 +538,10 @@ function CompactRows({ rows }: { rows: readonly RequestRow[] }) {
   return rows.length === 0 ? (
     <p {...stylex.props(styles.text)}>No request changed.</p>
   ) : (
-    <ul aria-label="Changed requests" {...stylex.props(styles.compactList)}>
+    <ul
+      aria-label="Requests that changed or have a status not recorded"
+      {...stylex.props(styles.compactList)}
+    >
       {rows.map((row) => (
         <li
           key={`${row.method} ${row.origin} ${row.path}`}
@@ -576,7 +579,13 @@ export function RequestDiff({
   compact?: boolean;
 }) {
   if (before.execution !== 'complete' || after.execution !== 'complete') {
-    return (
+    return compact ? (
+      <p {...stylex.props(styles.missing)}>
+        Requests were not compared:{' '}
+        {before.execution === 'complete' ? 'After' : 'Before'} capture did not
+        complete.
+      </p>
+    ) : (
       <div {...stylex.props(styles.sides)}>
         <RequestLedger side={before} label="Before" />
         <RequestLedger side={after} label="After" />
@@ -588,6 +597,12 @@ export function RequestDiff({
     before.observations.requests,
     after.observations.requests,
   );
+  const listed = rows.filter((row) => row.change !== 'same');
+
+  if (compact) {
+    return <CompactRows rows={listed} />;
+  }
+
   const offsets = (side: Side & { execution: 'complete' }) => {
     const start = Date.parse(side.observations.window.startedAt);
     const byRow = new Map<string, number[]>();
@@ -615,11 +630,6 @@ export function RequestDiff({
       [],
     span: Math.max(beforeStarts.span, afterStarts.span),
   };
-  const listed = rows.filter((row) => row.change !== 'same');
-
-  if (compact) {
-    return <CompactRows rows={listed} />;
-  }
 
   const changed = listed.filter((row) => row.change !== 'unknown');
   const unknown = listed.length - changed.length;
