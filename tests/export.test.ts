@@ -6,6 +6,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { exportComparison } from '../src/export';
 import { serveReport } from '../src/view';
+import { findSourceMap } from '../src/capture/source-maps';
 import { json } from '../src/encoding';
 import { comparisonSchema } from '../src/comparison-model';
 import { Schema } from 'effect';
@@ -181,3 +182,51 @@ test.each(['missing', 'malformed'])(
     }
   },
 );
+
+// Self-observe builds the viewer with hidden source maps. Export once refused
+// them, so setup failed before any capture ran.
+test('a viewer build with a hidden source map exports, and coverage finds the map next to its script', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'observed-map-export-'));
+  try {
+    const viewer = path.join(root, 'dist/viewer');
+    const map = json({
+      version: 3,
+      sources: ['../../../src/viewer/main.tsx'],
+      mappings: 'AAAA',
+    });
+    await mkdir(path.join(viewer, 'assets'), { recursive: true });
+    await writeFile(path.join(viewer, 'index.html'), '<!doctype html>');
+    await writeFile(path.join(viewer, 'assets/index-a.js'), 'run();\n');
+    await writeFile(path.join(viewer, 'assets/index-a.js.map'), map);
+
+    const exported = await Effect.runPromise(
+      exportComparison({
+        journeys: [
+          {
+            baseDirectory: null,
+            candidateDirectory: path.join(root, 'missing-candidate'),
+          },
+        ],
+        directory: path.join(root, 'report'),
+        viewerDirectory: viewer,
+      }).pipe(Effect.provide(BunServices.layer)),
+    );
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const url = yield* serveReport({
+          directory: exported.directory,
+          port: 0,
+        });
+        const found = yield* findSourceMap(
+          new URL('assets/index-a.js', url),
+          new URL(url).origin,
+        );
+
+        expect(found).toEqual({ kind: 'found', text: map, via: 'adjacent' });
+      }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

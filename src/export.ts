@@ -34,6 +34,7 @@ const viewerPath = text.check(
         value.split('/').every((part) => !['', '.', '..'].includes(part)) &&
         [
           '.js',
+          '.map',
           '.css',
           '.woff',
           '.woff2',
