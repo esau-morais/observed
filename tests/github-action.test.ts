@@ -305,7 +305,7 @@ test('captured text cannot close the agent prompt fence, and the artifact name c
     surface: { kind: 'comment' },
   });
   const prompt =
-    /<summary>Prompt for your agent<\/summary>\n\n(`{4,})text\n([\s\S]*?)\n\1\n\n<\/details>/.exec(
+    /\*\*Prompt for your agent\*\*\n\n(`{4,})text\n([\s\S]*?)\n\1\n/.exec(
       markdown,
     );
   const block = /<!-- observed:agent\n([\s\S]*?)\n-->/.exec(markdown);
@@ -496,7 +496,7 @@ test('a failure shared by every capture is one comment line that names the base'
 // The comment is the glance: verdict, screenshots, the files that matter and
 // the report link. Features once added lines until the comment read like an
 // audit log and listed 26 files no evidence touched.
-const visibleCommentLimit = 1_200;
+const visibleCommentLimit = 900;
 
 type Unobserved = { path: string; change: 'added' | 'modified' };
 
@@ -660,9 +660,6 @@ test(`a typical failing run's comment stays within ${String(visibleCommentLimit)
   );
 
   expect(rows.every((at, index) => at > (rows[index - 1] ?? -1))).toBe(true);
-  expect(visible).toContain(
-    'Read **Checked** first. No browser errors regressed with evidence from this row.',
-  );
   expect(visible).not.toContain('docs/page-');
   expect(visible).not.toContain('../');
   expect(visible).toContain(
@@ -725,6 +722,31 @@ test('with many changed files every row still names a file, the regression file 
   expect(row('Exercised')).toContain('`web/src/books.js`');
   expect(row('Not observed')).toContain('more in the report');
   expect(readable(visible).length).toBeLessThanOrEqual(visibleCommentLimit);
+});
+
+// Self-observe once repeated one missing source map under every file it
+// listed, and spread the rest over three collapsed blocks.
+test('files that share a reason name it once, inside the one collapsed block after the report link', async () => {
+  const reason = 'No recorded evidence touched this file.';
+  const unobserved = ['src/a.jsx', 'src/b.jsx'].map((file) => ({
+    path: file,
+    change: 'modified' as const,
+  }));
+  const { markdown } = summarize({
+    output: await typicalFailingRun({ unobserved }),
+    exitCode: 2,
+    artifact: 'observed-bundle',
+    page: 'https://github.com/o/r/actions/runs/1/artifacts/2',
+    surface: { kind: 'comment' },
+  });
+  const [visible = '', collapsedPart = ''] = markdown.split('<details>');
+
+  expect(markdown.split(reason)).toHaveLength(2);
+  expect(collapsedPart).toContain(
+    `- \`web/src/a.jsx\`, \`web/src/b.jsx\`, \`web/src/Shelf.jsx\` · ${reason}`,
+  );
+  expect(markdown.split('<details>')).toHaveLength(2);
+  expect(visible.trimEnd()).toMatch(/\*\*\[Open the report\]\([^)]+\)\*\*$/);
 });
 
 // A pipe in a captured path would split the table row into extra cells.

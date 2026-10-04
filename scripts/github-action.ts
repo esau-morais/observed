@@ -351,7 +351,7 @@ export function checkRows(
   ];
 }
 
-// Collapsed, so a passing check still states what it covered.
+// A passing check still states what it covered.
 function passedChecks(result: Comparison): string | null {
   const passed = result.journeys.flatMap((journey) =>
     journey.checks
@@ -363,24 +363,21 @@ function passedChecks(result: Comparison): string | null {
     return null;
   }
 
-  return collapsed(
-    `${toneSymbols.checked} What the passing checks covered`,
-    [
-      ...passed.slice(0, listedChecks).map(({ journey, check }) => {
-        const where =
-          result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
-        const measured =
-          check.measure === undefined
-            ? ''
-            : ` · ${inlineText(describeMeasure(check.measure, result.mode))}`;
+  return [
+    ...passed.slice(0, listedChecks).map(({ journey, check }) => {
+      const where =
+        result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
+      const measured =
+        check.measure === undefined
+          ? ''
+          : ` · ${inlineText(describeMeasure(check.measure, result.mode))}`;
 
-        return `- ${where}${inlineText(check.name)}${measured} · scope: ${inlineText(check.scope)}${label(check)}`;
-      }),
-      ...(passed.length > listedChecks
-        ? [`- ${passed.length - listedChecks} more in the report.`]
-        : []),
-    ].join('\n'),
-  );
+      return `- ${where}${inlineText(check.name)}${measured} · scope: ${inlineText(check.scope)}${label(check)}`;
+    }),
+    ...(passed.length > listedChecks
+      ? [`- ${passed.length - listedChecks} more in the report.`]
+      : []),
+  ].join('\n');
 }
 
 const listedFiles = 6;
@@ -504,6 +501,30 @@ function shownFile(
   return `${fileText(repositoryPath(scope, file), fileHref(result, links, file.path, null))}${file.change === 'modified' ? '' : ` (${file.change})`}`;
 }
 
+// Files that share a reason, such as a script with no source map, are listed
+// together so the reason reads once.
+function fileReasons(
+  result: Comparison,
+  scope: Extract<ChangeScope, { kind: 'recorded' }>,
+  files: readonly ScopeFile[],
+  links: FileLinks | null,
+): string {
+  const groups = new Map<string, string[]>();
+
+  for (const file of files) {
+    const detail = inlineText(fileDetail(result, file));
+
+    groups.set(detail, [
+      ...(groups.get(detail) ?? []),
+      shownFile(result, scope, file, links),
+    ]);
+  }
+
+  return [...groups]
+    .map(([detail, shown]) => `- ${shown.join(', ')} · ${detail}`)
+    .join('\n');
+}
+
 type ScopeView = { table: string; details: string } | null;
 
 // Changed files grouped by the evidence that touched them. Files outside the
@@ -569,21 +590,16 @@ function scopeView(result: Comparison, links: FileLinks | null): ScopeView {
       ...(notes.length === 0
         ? []
         : [notes.map((note) => `- ${inlineText(note)}`).join('\n')]),
-      readFirst(result, scope.files, anchored),
     ].join('\n\n'),
-    details: collapsed(
-      'What touched each file',
-      detailed
-        .map(
-          (file) =>
-            `- ${shownFile(result, scope, file, links)} · ${inlineText(fileDetail(result, file))}`,
-        )
-        .join('\n'),
-    ),
+    details: [
+      readFirst(result, scope.files, anchored),
+      fileReasons(result, scope, detailed, links),
+    ].join('\n\n'),
   };
 }
 
-// Each journey's capture browser and viewport, base included when it differs.
+// Each journey's capture browser and viewport, base included when it
+// differs. Conditions every journey shares are said once.
 function conditionsLines(result: Comparison): string[] {
   const described = (side: Side) => {
     const conditions = side.capture?.manifest.conditions;
@@ -593,19 +609,37 @@ function conditionsLines(result: Comparison): string[] {
       : null;
   };
 
-  return result.journeys.flatMap((journey) => {
-    const where = result.journeys.length === 1 ? '' : `${journey.title}: `;
+  const sentences = result.journeys.map((journey) => {
     const candidate = described(journey.candidate);
     const base = result.mode === 'preview' ? null : described(journey.base);
 
     return [
       ...(candidate === null
         ? []
-        : [`${where}The candidate was captured in ${candidate}.`]),
+        : [`The candidate was captured in ${candidate}.`]),
       ...(base === null || base === candidate
         ? []
-        : [`${where}The base was captured in ${base}.`]),
-    ];
+        : [`The base was captured in ${base}.`]),
+    ].join(' ');
+  });
+
+  if (
+    result.journeys.length > 1 &&
+    sentences.every((sentence) => sentence === sentences[0])
+  ) {
+    return sentences[0] === '' || sentences[0] === undefined
+      ? []
+      : [sentences[0]];
+  }
+
+  return result.journeys.flatMap((journey, index) => {
+    const sentence = sentences[index] ?? '';
+
+    return sentence === ''
+      ? []
+      : [
+          `${result.journeys.length === 1 ? '' : `${journey.title}: `}${sentence}`,
+        ];
   });
 }
 
@@ -619,11 +653,16 @@ export type Screenshots = {
 
 const cropsAlt = 'Before, after and changed pixels, left to right';
 
+// The crops come from the first journey whose screenshots changed. Its line
+// carries the link when no image is shown; other changed journeys are
+// counted.
 function screenshotSection(
   result: Comparison,
   screenshots: Screenshots | null,
 ): string | null {
-  const lines = result.journeys.flatMap((journey) => {
+  const image = httpsUrl(screenshots?.image);
+  const file = image === null ? httpsUrl(screenshots?.link) : null;
+  const changed = result.journeys.flatMap((journey) => {
     const change =
       journey.comparison.kind === 'available'
         ? visualChange(journey.comparison.visual)
@@ -632,22 +671,35 @@ function screenshotSection(
     return change === null
       ? []
       : [
-          `**Screenshots${result.journeys.length === 1 ? '' : ` · ${inlineText(journey.title)}`}** · ${inlineText(change)} An observation, not a check.`,
+          {
+            journey,
+            change,
+            cropped:
+              journey.comparison.kind === 'available' &&
+              journey.comparison.visual.kind === 'changed',
+          },
         ];
   });
-  const image = httpsUrl(screenshots?.image);
-  const file = httpsUrl(screenshots?.link);
+  const shown = changed.find((item) => item.cropped) ?? changed[0];
 
-  if (lines.length === 0) {
+  if (shown === undefined) {
     return null;
   }
 
-  return [
-    ...lines,
-    ...(image === null
-      ? extra(file === null ? null : `[${cropsAlt}](${file})`)
-      : [`![${cropsAlt}](${image})`]),
-  ].join('\n\n');
+  const others = changed.length - 1;
+  const line = [
+    `**Screenshots${result.journeys.length === 1 ? '' : ` · ${inlineText(shown.journey.title)}`}** · ${inlineText(shown.change)}`,
+    ...(shown.cropped && file !== null ? [`[${cropsAlt}](${file})`] : []),
+    ...(others === 0
+      ? []
+      : [
+          `${others === 1 ? '1 more journey' : `${String(others)} more journeys`} changed too.`,
+        ]),
+  ].join(' ');
+
+  return [line, ...(image === null ? [] : [`![${cropsAlt}](${image})`])].join(
+    '\n\n',
+  );
 }
 
 // Why changed screenshots have no crops to show, such as a crop step that
@@ -805,6 +857,22 @@ function collapsed(summary: string, body: string): string {
     '',
     '</details>',
   ].join('\n');
+}
+
+// Everything after the report link sits in one collapsed block, whose summary
+// names what it holds.
+function details(
+  parts: readonly (readonly [string, string, string | null | undefined])[],
+): string {
+  const shown = parts.filter(
+    (part): part is readonly [string, string, string] =>
+      part[2] !== null && part[2] !== undefined,
+  );
+
+  return collapsed(
+    `Details: ${shown.map(([name]) => name).join(', ')}`,
+    shown.map(([, heading, body]) => `**${heading}**\n\n${body}`).join('\n\n'),
+  );
 }
 
 const promptedChecks = 10;
@@ -996,6 +1064,11 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
   const cropsNote = screenshotsNote(result, options.screenshots ?? null);
   const scoped =
     result.mode === 'preview' ? null : scopeView(result, frame.files);
+  const passedCount = result.journeys.reduce(
+    (sum, journey) =>
+      sum + journey.checks.filter((check) => check.verdict === 'passed').length,
+    0,
+  );
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -1016,44 +1089,50 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),
     ...extra(scoped?.table),
-    ...extra(recipeList(result)),
     page === null
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
-    ...extra(scoped?.details),
-    ...extra(passedChecks(result)),
-    ...(open.length === 0 && kind !== 'unavailable'
-      ? []
-      : [
-          collapsed(
-            'Prompt for your agent',
-            fenced(
+    details([
+      ['files', 'What touched each file', scoped?.details],
+      ['journey changes', 'Changes to journeys and checks', recipeList(result)],
+      [
+        passedCount === 1 ? '1 passing check' : `${passedCount} passing checks`,
+        'What the passing checks covered',
+        passedChecks(result),
+      ],
+      [
+        'agent prompt',
+        'Prompt for your agent',
+        open.length === 0 && kind !== 'unavailable'
+          ? null
+          : fenced(
               agentPrompt(result, {
                 artifact: frame.artifact,
                 download: options.download ?? null,
               }),
             ),
-          ),
-        ]),
-    collapsed(
-      'Run details and limits',
+      ],
       [
-        ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
-        ...extra(unchanged(result)),
-        ...extra(cropsNote === null ? null : inlineText(cropsNote)),
-        ...conditionsLines(result).map(inlineText),
-        ...limitations.map(inlineText),
-        ...(page === null
-          ? []
-          : [
-              'The report opens for signed-in users who can read this repository, until the artifact expires.',
-              bundle,
-            ]),
-        `Observed exited with code ${formatExit(options.exitCode)}.`,
-      ]
-        .map((item) => `- ${item}`)
-        .join('\n'),
-    ),
+        'run limits',
+        'Run details and limits',
+        [
+          ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
+          ...extra(unchanged(result)),
+          ...extra(cropsNote === null ? null : inlineText(cropsNote)),
+          ...conditionsLines(result).map(inlineText),
+          ...limitations.map(inlineText),
+          ...(page === null
+            ? []
+            : [
+                'The report opens for signed-in users who can read this repository, until the artifact expires.',
+                bundle,
+              ]),
+          `Observed exited with code ${formatExit(options.exitCode)}.`,
+        ]
+          .map((item) => `- ${item}`)
+          .join('\n'),
+      ],
+    ]),
     ...(options.artifact === defaultArtifact
       ? []
       : [`<sub>${inlineText(checkName(options.artifact))}</sub>`]),
