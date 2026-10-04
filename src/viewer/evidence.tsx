@@ -106,6 +106,14 @@ const styles = stylex.create({
   laneAxis: { stroke: colors.border },
   laneBefore: { fill: colors.textMuted },
   laneAfter: { fill: colors.text },
+  compactList: {
+    display: 'grid',
+    gap: 12,
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+  },
+  compactRow: { display: 'grid', gap: 4, justifyItems: 'start' },
   unknownChip: { backgroundColor: colors.unknownFill, color: colors.unknown },
   dim: { color: colors.textMuted },
   summary: {
@@ -472,10 +480,7 @@ function RequestRows({
                       row.change === 'unknown' && styles.unknownChip,
                     )}
                   >
-                    {`${changeWords[row.change].symbol} ${changeWords[row.change].word}`}
-                    {row.change === 'count'
-                      ? ` ${row.candidate.length > row.base.length ? '+' : '−'}${Math.abs(row.candidate.length - row.base.length)}`
-                      : ''}
+                    {changeLabel(row)}
                   </span>
                 </td>
               ) : null}
@@ -519,7 +524,57 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-export function RequestDiff({ before, after }: { before: Side; after: Side }) {
+function changeLabel(row: RequestRow): string {
+  const { symbol, word } = changeWords[row.change];
+  const delta = row.candidate.length - row.base.length;
+
+  return row.change === 'count'
+    ? `${symbol} ${word} ${delta > 0 ? '+' : '−'}${Math.abs(delta)}`
+    : `${symbol} ${word}`;
+}
+
+// The changed rows alone, one line each, for a narrow panel.
+function CompactRows({ rows }: { rows: readonly RequestRow[] }) {
+  return rows.length === 0 ? (
+    <p {...stylex.props(styles.text)}>No request changed.</p>
+  ) : (
+    <ul aria-label="Changed requests" {...stylex.props(styles.compactList)}>
+      {rows.map((row) => (
+        <li
+          key={`${row.method} ${row.origin} ${row.path}`}
+          {...stylex.props(styles.compactRow)}
+        >
+          <span
+            {...stylex.props(
+              styles.changeChip,
+              row.change === 'unknown' && styles.unknownChip,
+            )}
+          >
+            {changeLabel(row)}
+          </span>
+          <span {...stylex.props(styles.mono)}>
+            {row.method} {row.origin === 'application' ? '' : row.origin}
+            {row.path}
+          </span>
+          <span {...stylex.props(styles.mono)}>
+            Before {describeStatuses(row.base)} · After{' '}
+            {describeStatuses(row.candidate)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function RequestDiff({
+  before,
+  after,
+  compact = false,
+}: {
+  before: Side;
+  after: Side;
+  compact?: boolean;
+}) {
   if (before.execution !== 'complete' || after.execution !== 'complete') {
     return (
       <div {...stylex.props(styles.sides)}>
@@ -561,6 +616,11 @@ export function RequestDiff({ before, after }: { before: Side; after: Side }) {
     span: Math.max(beforeStarts.span, afterStarts.span),
   };
   const listed = rows.filter((row) => row.change !== 'same');
+
+  if (compact) {
+    return <CompactRows rows={listed} />;
+  }
+
   const changed = listed.filter((row) => row.change !== 'unknown');
   const unknown = listed.length - changed.length;
   const same = rows.filter((row) => row.change === 'same');

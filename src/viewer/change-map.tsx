@@ -2083,6 +2083,7 @@ function VerdictEvidence({
                   <RequestDiff
                     before={journey.base}
                     after={journey.candidate}
+                    compact
                   />
                 </HeadingLevel>
               ) : null}
