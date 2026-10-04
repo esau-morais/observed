@@ -12,7 +12,7 @@ import type {
   MapConnection,
   ScopeFile,
 } from '../comparison-model';
-import type { Tone } from '../result-text';
+import { fromRepositoryRoot, type Tone } from '../result-text';
 
 export type RecordedMap = Extract<ChangeMap, { kind: 'recorded' }>;
 
@@ -73,22 +73,30 @@ export function blockName(block: MapBlock): string {
   }
 }
 
-export function blockTitle(block: MapBlock): string {
-  return block.kind === 'file' ? block.path : blockName(block);
+export function blockTitle(block: MapBlock, scope?: ChangeScope): string {
+  if (block.kind !== 'file') {
+    return blockName(block);
+  }
+
+  return scope === undefined
+    ? block.path
+    : fromRepositoryRoot(scope, block.path);
 }
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+// With a scope, file paths read from the repository root.
 export function connectionText(
   connection: MapConnection,
   blocks: ReadonlyMap<string, MapBlock>,
+  scope?: ChangeScope,
 ): string {
   const from = blocks.get(connection.from);
   const to = blocks.get(connection.to);
   const name = (block: MapBlock | undefined) =>
-    block === undefined ? 'an unknown block' : blockTitle(block);
+    block === undefined ? 'an unknown block' : blockTitle(block, scope);
 
   switch (connection.kind) {
     case 'imports': {

@@ -162,8 +162,8 @@ function normalize(file: string): string {
   return out.join('/');
 }
 
-// A path as people read it: from the repository root when the run recorded
-// where the project sits, otherwise from the project.
+// fromRepositoryRoot, then without `.` segments or a `..` a later segment
+// undoes.
 export function repoPath(scope: RecordedScope, file: string): string {
   return normalize(fromRepositoryRoot(scope, file));
 }
@@ -187,8 +187,7 @@ export type MapIndex = {
   captured: FileBlock[];
   outsideFiles: ScopeFile[];
   root: string;
-  // The level the map opens on.
-  start: string;
+  opening: string;
 };
 
 export function indexMap(
@@ -220,7 +219,7 @@ export function indexMap(
     captured,
     outsideFiles,
     root,
-    start: root,
+    opening: root,
   };
 
   // The top is the first directory that holds more than one thing.
@@ -234,7 +233,7 @@ export function indexMap(
     index.root = level[0].path;
   }
 
-  index.start = startLevel(index);
+  index.opening = openingLevel(index);
 
   return index;
 }
@@ -242,20 +241,26 @@ export function indexMap(
 // The map opens where the change is: the deepest directory holding at least
 // three quarters of the captured changed files, so a change inside `src`
 // opens on `src`'s parts rather than on one `src` block.
-function startLevel(index: MapIndex): string {
+const openingShare = 0.75;
+
+function openingLevel(index: MapIndex): string {
   const changed = index.captured.filter((block) => index.files.has(block.path));
   const share = (directory: string) =>
     changed.filter((block) => under(block.path, directory)).length;
   let level = index.root;
 
+  if (changed.length === 0) {
+    return level;
+  }
+
   for (;;) {
     const next = children(index, level).find(
       (card) =>
         card.kind === 'directory' &&
-        share(card.path) >= Math.ceil(changed.length * 0.75),
+        share(card.path) >= Math.ceil(changed.length * openingShare),
     );
 
-    if (next?.kind !== 'directory' || changed.length === 0) {
+    if (next?.kind !== 'directory') {
       return level;
     }
 
@@ -713,7 +718,8 @@ export function openLevel(
           (left, right) =>
             Number(left.kind === 'package') - Number(right.kind === 'package'),
         ),
-      ...(directory === index.root && index.outsideFiles.length > 0
+      ...((directory === index.root || directory === index.opening) &&
+      index.outsideFiles.length > 0
         ? [
             {
               kind: 'outside-files' as const,

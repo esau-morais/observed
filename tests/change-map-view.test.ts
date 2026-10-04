@@ -211,7 +211,7 @@ test('the map opens on the directory that holds most of the change', () => {
   );
 
   expect(index.root).toBe('');
-  expect(index.start).toBe('src');
+  expect(index.opening).toBe('src');
 });
 
 test('layout wraps a wide row inside the width and gives the same layout twice', () => {

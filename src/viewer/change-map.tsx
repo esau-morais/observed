@@ -1015,11 +1015,13 @@ function Tooltip({
   links,
   names,
   blocks,
+  scope,
   at,
 }: {
   links: readonly Link[];
   names: ReadonlyMap<string, string>;
   blocks: ReadonlyMap<string, MapBlock>;
+  scope: RecordedScope;
   at: Point;
 }) {
   const [first] = links;
@@ -1058,7 +1060,7 @@ function Tooltip({
       {connections.slice(0, 8).map(({ link, connection }, position) => (
         <span key={position} {...stylex.props(styles.connectionHead)}>
           <LineSample kind={connection.kind} removed={link.removed} />
-          <span>{connectionText(connection, blocks)}</span>
+          <span>{connectionText(connection, blocks, scope)}</span>
         </span>
       ))}
       {connections.length > 8 ? (
@@ -1577,6 +1579,7 @@ function MapCanvas({
                 links={hoveredLinks}
                 names={names}
                 blocks={index.blocks}
+                scope={index.scope}
                 at={hovered.at}
               />
             )}
@@ -1651,6 +1654,7 @@ function ConnectionRows({
   links,
   names,
   blocks,
+  scope,
   onSelect,
 }: {
   title: string;
@@ -1659,6 +1663,7 @@ function ConnectionRows({
   links: readonly Link[];
   names: ReadonlyMap<string, string>;
   blocks: ReadonlyMap<string, MapBlock>;
+  scope: RecordedScope;
   onSelect: (id: string) => void;
 }) {
   const rows = links
@@ -1700,7 +1705,7 @@ function ConnectionRows({
                 </span>
                 <details>
                   <summary {...stylex.props(styles.reason, styles.summary)}>
-                    {connectionText(connection, blocks)}
+                    {connectionText(connection, blocks, scope)}
                   </summary>
                   <p {...stylex.props(styles.text, styles.muted)}>
                     Source: {connectionSources[connection.kind]}.
@@ -2099,7 +2104,7 @@ function Counts({ index }: { index: MapIndex }) {
   return (
     <section {...stylex.props(styles.group)}>
       <h4 {...stylex.props(styles.panelHeading)}>
-        Changed files ({files.length})
+        Changed files in this run ({files.length})
       </h4>
       <ul {...stylex.props(styles.list)}>
         {rows.map(({ status, count }) => (
@@ -2199,6 +2204,7 @@ function Panel({
                 links={links}
                 names={names}
                 blocks={index.blocks}
+                scope={index.scope}
                 onSelect={onSelect}
               />
               <ConnectionRows
@@ -2208,6 +2214,7 @@ function Panel({
                 links={links}
                 names={names}
                 blocks={index.blocks}
+                scope={index.scope}
                 onSelect={onSelect}
               />
             </>
@@ -2240,7 +2247,7 @@ function isFold(value: string): value is Fold {
 
 function readHash(index: MapIndex): MapState {
   const fallback = {
-    directory: index.start,
+    directory: index.opening,
     opened: [],
     selection: null,
   };
@@ -2290,7 +2297,7 @@ function writeHash(index: MapIndex, state: MapState) {
   }
 
   const hash =
-    state.directory === index.start &&
+    state.directory === index.opening &&
     state.opened.length === 0 &&
     state.selection === null
       ? ''
@@ -2495,6 +2502,15 @@ function MapSection({
   };
 
   const trail = levelTrail(index, directory);
+  // Changed captured files the open level does not hold; Escape or the
+  // trail reaches them.
+  const elsewhere = root
+    ? 0
+    : index.captured.filter(
+        (block) =>
+          index.files.has(block.path) &&
+          !block.path.startsWith(`${directory}/`),
+      ).length;
   const legend = (
     <>
       <Legend level={level} />
@@ -2566,6 +2582,7 @@ function MapSection({
           <p {...stylex.props(styles.counts)}>
             {level.inside.length} blocks · {linkTotal} connections ·{' '}
             {level.outside.length} outside
+            {elsewhere === 0 ? '' : ` · ${elsewhere} changed elsewhere`}
             {journeyTotal === 0
               ? ''
               : ` · ${journeyTotal} journey links show on hover`}
@@ -2770,13 +2787,13 @@ function ConnectionTable({ index }: { index: MapIndex }) {
       <tbody>
         {connections.map((connection) => (
           <tr
-            key={`${connection.kind} ${connection.from} ${connection.to} ${connectionText(connection, index.blocks)}`}
+            key={`${connection.kind} ${connection.from} ${connection.to} ${connectionText(connection, index.blocks, index.scope)}`}
           >
             <td {...stylex.props(styles.cell)}>
               {connectionLabels[connection.kind]}
             </td>
             <td {...stylex.props(styles.cell, styles.text)}>
-              {connectionText(connection, index.blocks)}
+              {connectionText(connection, index.blocks, index.scope)}
             </td>
             <td {...stylex.props(styles.cell)}>
               <Evidence evidence={connection.evidence} />
