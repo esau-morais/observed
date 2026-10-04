@@ -10,6 +10,7 @@ import type {
 import {
   conclusionLabels,
   conclusionTones,
+  fromRepositoryRoot,
   toneSymbols,
   type Tone,
 } from '../result-text';
@@ -161,11 +162,10 @@ function normalize(file: string): string {
   return out.join('/');
 }
 
-// A path as people read it, without `.` segments or a `..` that a later
-// segment undoes. Paths stay relative to the captured project until the
-// scope records where the project sits in the repository.
-export function repoPath(file: string): string {
-  return normalize(file);
+// A path as people read it: from the repository root when the run recorded
+// where the project sits, otherwise from the project.
+export function repoPath(scope: RecordedScope, file: string): string {
+  return normalize(fromRepositoryRoot(scope, file));
 }
 
 function parent(directory: string): string {
@@ -187,6 +187,8 @@ export type MapIndex = {
   captured: FileBlock[];
   outsideFiles: ScopeFile[];
   root: string;
+  // The level the map opens on.
+  start: string;
 };
 
 export function indexMap(
@@ -218,17 +220,46 @@ export function indexMap(
     captured,
     outsideFiles,
     root,
+    start: root,
   };
 
-  // Open the first directory that holds more than one thing.
+  // The top is the first directory that holds more than one thing.
   for (;;) {
     const level = children(index, index.root);
 
     if (level.length !== 1 || level[0]?.kind !== 'directory') {
-      return index;
+      break;
     }
 
     index.root = level[0].path;
+  }
+
+  index.start = startLevel(index);
+
+  return index;
+}
+
+// The map opens where the change is: the deepest directory holding at least
+// three quarters of the captured changed files, so a change inside `src`
+// opens on `src`'s parts rather than on one `src` block.
+function startLevel(index: MapIndex): string {
+  const changed = index.captured.filter((block) => index.files.has(block.path));
+  const share = (directory: string) =>
+    changed.filter((block) => under(block.path, directory)).length;
+  let level = index.root;
+
+  for (;;) {
+    const next = children(index, level).find(
+      (card) =>
+        card.kind === 'directory' &&
+        share(card.path) >= Math.ceil(changed.length * 0.75),
+    );
+
+    if (next?.kind !== 'directory' || changed.length === 0) {
+      return level;
+    }
+
+    level = next.path;
   }
 }
 
@@ -761,9 +792,9 @@ export function cardSentence(index: MapIndex, card: Card): string {
 export function cardPath(index: MapIndex, card: Card): string | null {
   switch (card.kind) {
     case 'directory':
-      return `${repoPath(card.path)}/`;
+      return `${repoPath(index.scope, card.path)}/`;
     case 'file':
-      return repoPath(card.path);
+      return repoPath(index.scope, card.path);
     case 'package':
     case 'folded':
     case 'outside-files':

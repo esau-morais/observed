@@ -12,6 +12,7 @@ import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
 import {
   selectionSchema,
+  selectionSchemaVersion,
   type GitChanges,
   type JourneySelection,
   type RecipeSources,
@@ -388,7 +389,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   }
 
   const selection = yield* Schema.decodeUnknownEffect(selectionSchema)({
-    schemaVersion: 2,
+    schemaVersion: selectionSchemaVersion,
     mode,
     evaluatedAt,
     journeys: selected,

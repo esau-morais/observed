@@ -1,6 +1,7 @@
 import * as stylex from '@stylexjs/stylex';
-import { useState, type ReactNode } from 'react';
+import { createContext, use, useState, type ReactNode } from 'react';
 import type {
+  ChangeScope,
   CheckVerdict,
   Comparison,
   Journey,
@@ -509,6 +510,10 @@ function SectionStatusLine({ section }: { section: OutlineSection }) {
   );
 }
 
+// Lets a check's location read the run's change scope, which places it from
+// the repository root, without passing the scope through every section.
+const ChangeScopeContext = createContext<ChangeScope | undefined>(undefined);
+
 function Location({
   journey,
   check,
@@ -516,7 +521,7 @@ function Location({
   journey: Journey;
   check: CheckVerdict;
 }) {
-  const location = anchorLocation(journey, check);
+  const location = anchorLocation(journey, check, use(ChangeScopeContext));
 
   return location === null ? null : (
     <p {...stylex.props(styles.small)}>
@@ -1513,66 +1518,71 @@ export function ComparisonReport({ result }: { result: Comparison }) {
           </span>
           <ThemeControl {...theme} />
         </header>
-        <main
-          id="report"
-          tabIndex={-1}
-          {...stylex.props(styles.layout, mapFirst && styles.mapLayout)}
-        >
-          <div
-            {...stylex.props(styles.verdictArea, mapFirst && styles.mapVerdict)}
+        <ChangeScopeContext value={result.changeScope}>
+          <main
+            id="report"
+            tabIndex={-1}
+            {...stylex.props(styles.layout, mapFirst && styles.mapLayout)}
           >
-            <Verdict result={result} />
-          </div>
-          {mapFirst && scope !== null ? (
-            <div {...stylex.props(styles.mapArea)}>
-              <ChangeScopeView result={result} scope={scope} />
+            <div
+              {...stylex.props(
+                styles.verdictArea,
+                mapFirst && styles.mapVerdict,
+              )}
+            >
+              <Verdict result={result} />
             </div>
-          ) : null}
-          <div {...stylex.props(styles.railArea, mapFirst && styles.mapRest)}>
-            <div {...stylex.props(styles.wide)}>
-              <Rail outlines={outlines} journeys={result.journeys} />
-            </div>
-            {/* Phones show the index collapsed so the lead evidence stays on
-            the first screen. */}
-            <details {...stylex.props(styles.narrow)}>
-              <summary {...stylex.props(styles.summary)}>
-                Sections
-                <span {...stylex.props(styles.railCount)}>
-                  {railSummary(outlines)}
-                </span>
-              </summary>
-              <Rail outlines={outlines} journeys={result.journeys} />
-            </details>
-          </div>
-          <div {...stylex.props(styles.bodyArea, mapFirst && styles.mapRest)}>
-            {result.journeys.map((journey, index) => {
-              const outline = outlines[index];
-
-              return outline === undefined ? null : (
-                <JourneyView
-                  key={index}
-                  journey={journey}
-                  outline={outline}
-                  mode={result.mode}
-                  evaluatedAt={result.evaluatedAt}
-                  shown={[
-                    result.conclusion.text,
-                    headlineParts(result).subject,
-                  ]}
-                  index={index}
-                  multiple={multiple}
-                />
-              );
-            })}
-            {!mapFirst && scope !== null ? (
-              <ChangeScopeView result={result} scope={scope} />
+            {mapFirst && scope !== null ? (
+              <div {...stylex.props(styles.mapArea)}>
+                <ChangeScopeView result={result} scope={scope} />
+              </div>
             ) : null}
-            <nav aria-label="Report files" {...stylex.props(styles.nav)}>
-              <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
-              <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
-            </nav>
-          </div>
-        </main>
+            <div {...stylex.props(styles.railArea, mapFirst && styles.mapRest)}>
+              <div {...stylex.props(styles.wide)}>
+                <Rail outlines={outlines} journeys={result.journeys} />
+              </div>
+              {/* Phones show the index collapsed so the lead evidence stays on
+            the first screen. */}
+              <details {...stylex.props(styles.narrow)}>
+                <summary {...stylex.props(styles.summary)}>
+                  Sections
+                  <span {...stylex.props(styles.railCount)}>
+                    {railSummary(outlines)}
+                  </span>
+                </summary>
+                <Rail outlines={outlines} journeys={result.journeys} />
+              </details>
+            </div>
+            <div {...stylex.props(styles.bodyArea, mapFirst && styles.mapRest)}>
+              {result.journeys.map((journey, index) => {
+                const outline = outlines[index];
+
+                return outline === undefined ? null : (
+                  <JourneyView
+                    key={index}
+                    journey={journey}
+                    outline={outline}
+                    mode={result.mode}
+                    evaluatedAt={result.evaluatedAt}
+                    shown={[
+                      result.conclusion.text,
+                      headlineParts(result).subject,
+                    ]}
+                    index={index}
+                    multiple={multiple}
+                  />
+                );
+              })}
+              {!mapFirst && scope !== null ? (
+                <ChangeScopeView result={result} scope={scope} />
+              ) : null}
+              <nav aria-label="Report files" {...stylex.props(styles.nav)}>
+                <EvidenceLink href="./report.md">Markdown report</EvidenceLink>
+                <EvidenceLink href="./result.json">Result JSON</EvidenceLink>
+              </nav>
+            </div>
+          </main>
+        </ChangeScopeContext>
         <footer {...stylex.props(styles.footer)}>
           Captured evidence · Select a screenshot to open it at full size.
         </footer>

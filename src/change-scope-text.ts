@@ -6,7 +6,7 @@ import type {
   VerdictRecipe,
 } from './comparison-model';
 import { proposedOf } from './comparison-model';
-import { verdictLabels } from './result-text';
+import { fromRepositoryRoot, verdictLabels } from './result-text';
 import { statusWords } from './status-words';
 
 type Recorded = Extract<ChangeScope, { kind: 'recorded' }>;
@@ -127,9 +127,15 @@ export function fileDetail(result: Comparison, file: ScopeFile): string {
   return sentence(file.reason);
 }
 
-// One line per changed file, then any missing coverage, Git listing, or
+// The path people read: from the repository root when Git listed the
+// changes, otherwise from the project directory.
+export function repositoryPath(scope: ChangeScope, file: ScopeFile): string {
+  return fromRepositoryRoot(scope, file.path);
+}
+
+// What the change scope could not record: coverage, the Git listing, or the
 // recipe comparison.
-export function scopeFileLines(result: Comparison): string[] {
+export function scopeNotes(result: Comparison): string[] {
   const scope = result.changeScope;
 
   if (scope.kind === 'unavailable') {
@@ -137,10 +143,6 @@ export function scopeFileLines(result: Comparison): string[] {
   }
 
   return [
-    ...scope.files.map(
-      (file) =>
-        `${file.path} (${file.change}): ${relationLabels[file.relation]}. ${fileDetail(result, file)}`,
-    ),
     ...scope.coverage.flatMap((journey) =>
       journey.kind === 'unavailable' && captured(scope).length > 0
         ? [
@@ -155,6 +157,48 @@ export function scopeFileLines(result: Comparison): string[] {
     scope.files.some((file) => file.path === 'observed.json')
       ? [`Changes to journeys and checks: ${sentence(scope.recipe.reason)}`]
       : []),
+  ];
+}
+
+export type ShownFile = {
+  path: string;
+  projectPath: string;
+  change: ScopeFile['change'];
+  relation: string;
+  detail: string;
+};
+
+// The changed files inside the captured source: the ones evidence could
+// touch. Files outside it are only counted, in the scope line.
+export function capturedFiles(result: Comparison): ShownFile[] {
+  const scope = result.changeScope;
+
+  return scope.kind === 'unavailable'
+    ? []
+    : captured(scope).map((file) => ({
+        path: repositoryPath(scope, file),
+        projectPath: file.path,
+        change: file.change,
+        relation: relationLabels[file.relation],
+        detail: fileDetail(result, file),
+      }));
+}
+
+// One line per changed file, then any missing coverage, Git listing, or
+// recipe comparison.
+export function scopeFileLines(result: Comparison): string[] {
+  const scope = result.changeScope;
+
+  if (scope.kind === 'unavailable') {
+    return [];
+  }
+
+  return [
+    ...scope.files.map(
+      (file) =>
+        `${repositoryPath(scope, file)} (${file.change}): ${relationLabels[file.relation]}. ${fileDetail(result, file)}`,
+    ),
+    ...scopeNotes(result),
   ];
 }
 

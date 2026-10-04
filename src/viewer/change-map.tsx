@@ -1820,7 +1820,7 @@ function Sources({ index, card }: { index: MapIndex; card: Card }) {
             card.kind === 'outside-files'
               ? null
               : sourceArtifact(index.result, file);
-          const shown = repoPath(file);
+          const shown = repoPath(index.scope, file);
 
           return (
             <li key={file} {...stylex.props(styles.mono)}>
@@ -2007,7 +2007,7 @@ function VerdictEvidence({
       <h4 {...stylex.props(styles.panelHeading)}>Evidence for the verdict</h4>
       <ul {...stylex.props(styles.list)}>
         {failing.map(({ journey, index, check }) => {
-          const location = anchorLocation(journey, check);
+          const location = anchorLocation(journey, check, result.changeScope);
           const evidence = [
             ...new Map(
               map.connections
@@ -2177,12 +2177,13 @@ function Panel({
           <p {...stylex.props(styles.text)}>{cardSentence(index, shown)}</p>
         )}
       </div>
-      {shown === null ? (
+      {card === null ? (
         <>
           <Counts index={index} />
           <VerdictEvidence result={index.result} map={index.map} />
         </>
-      ) : (
+      ) : null}
+      {shown === null ? null : (
         <>
           <ChangedLines card={shown} />
           <Sources index={index} card={shown} />
@@ -2239,7 +2240,7 @@ function isFold(value: string): value is Fold {
 
 function readHash(index: MapIndex): MapState {
   const fallback = {
-    directory: index.root,
+    directory: index.start,
     opened: [],
     selection: null,
   };
@@ -2289,7 +2290,7 @@ function writeHash(index: MapIndex, state: MapState) {
   }
 
   const hash =
-    state.directory === index.root &&
+    state.directory === index.start &&
     state.opened.length === 0 &&
     state.selection === null
       ? ''
@@ -2639,7 +2640,7 @@ function fileTree(index: MapIndex): TreeNode {
   const top: TreeNode = { name: '', path: '', files: [], directories: [] };
 
   for (const file of index.scope.files) {
-    const parts = repoPath(file.path).split('/');
+    const parts = repoPath(index.scope, file.path).split('/');
     let node = top;
 
     for (const part of parts.slice(0, -1)) {
@@ -2705,7 +2706,7 @@ function TreeLevel({
               <span {...stylex.props(styles.srOnly)}>{file.change}</span>
             </span>
             <span {...stylex.props(styles.mono)}>
-              {repoPath(file.path).split('/').at(-1)}
+              {repoPath(index.scope, file.path).split('/').at(-1)}
             </span>
             <StatusChip status={statusOf(file.relation)} />
           </span>

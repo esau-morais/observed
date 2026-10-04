@@ -29,6 +29,9 @@ jobs:
         with:
           project: examples/request-lab
           base: ${{ github.event.pull_request.base.sha }}
+          # Only self-observe comments; this job's result stays in its check
+          # and job summary.
+          comment: off
 
   # Observed observes its own report viewer with the previous release, never
   # this checkout's action, so the pull request's code is only ever the

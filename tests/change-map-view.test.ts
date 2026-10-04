@@ -11,7 +11,7 @@ import {
 } from '../src/comparison-model';
 import { layoutGraph } from '../src/viewer/map-layout';
 import type { RecordedScope } from '../src/viewer/map-model';
-import { indexMap, openLevel } from '../src/viewer/map-view';
+import { indexMap, openLevel, repoPath } from '../src/viewer/map-view';
 
 const fixture = Schema.decodeUnknownSync(
   Schema.fromJsonString(comparisonSchema),
@@ -188,6 +188,30 @@ test('a directory holding a not observed file never reads checked', () => {
 
   expect(directory?.kind).toBe('directory');
   expect(directory?.status.label).toBe('not observed');
+});
+
+test('paths read from the repository root when the run recorded the project directory', () => {
+  const scope: RecordedScope = {
+    ...recordedScope,
+    outside: { kind: 'listed', projectDirectory: 'examples/request-lab' },
+  };
+
+  expect(repoPath(scope, '../../DESIGN.md')).toBe('DESIGN.md');
+  expect(repoPath(scope, 'lib/count.ts')).toBe(
+    'examples/request-lab/lib/count.ts',
+  );
+});
+
+test('the map opens on the directory that holds most of the change', () => {
+  const inside = ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/viewer/d.ts'];
+  const index = view(
+    [...inside, 'scripts/e.ts'].map((name) => file(name, true)),
+    [],
+    [...inside, 'scripts/e.ts'].map(notObserved),
+  );
+
+  expect(index.root).toBe('');
+  expect(index.start).toBe('src');
 });
 
 test('layout wraps a wide row inside the width and gives the same layout twice', () => {

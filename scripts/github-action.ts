@@ -8,29 +8,34 @@ import {
   conclusionExitCodes,
   everyCaptureFailed,
   resultVersionProblem,
+  type ChangeScope,
   type CheckVerdict,
   type Comparison,
   type Journey,
+  type ScopeFile,
   type Side,
 } from '../src/comparison-model';
 import type { Capture, Source } from '../src/capture/model';
 import { loadProject } from '../src/project';
 import { packageName, packaged } from '../src/installation';
 import { renderReportPage } from '../src/report-page';
-import { sha256 } from '../src/encoding';
 import {
   checkName,
   commentMarker,
+  defaultArtifact,
   DeliveryError,
   findComment,
   failing,
   permissionLines,
   titleJobCheck,
+  uploadImage,
   writeComment,
 } from './github-delivery';
+import { screenshotCrops } from './screenshot-crops';
+import { statusWords } from '../src/status-words';
+import { sha256 } from '../src/encoding';
 import {
   callSlack,
-  diffCrop,
   readSlackState,
   slackAction,
   slackMessage,
@@ -40,16 +45,20 @@ import {
   writeSlackState,
 } from './slack-delivery';
 import { describeRevision, shortSource } from '../src/provenance-text';
-import { describeVisual } from '../src/visual-text';
+import { visualChange } from '../src/visual-text';
 import {
+  fileDetail,
+  relationLabels,
+  repositoryPath,
   recipeLabels,
   recipeLine,
   recipeLines,
-  scopeFileLines,
   scopeLine,
+  scopeNotes,
 } from '../src/change-scope-text';
 import {
   checkSummary,
+  rootedPath,
   runTone,
   describeMeasure,
   headline,
@@ -213,10 +222,60 @@ function reading(result: Comparison, check: CheckVerdict): string {
     : check.detail;
 }
 
-function rowLocation(open: Open): string | null {
-  const location = anchorLocation(open.journey, open.check);
+// Where a changed file opens on GitHub: its diff in the pull request, or its
+// blob at the head commit.
+type FileLinks = {
+  repository: string;
+  pullRequest: number | null;
+  head: string | null;
+};
 
-  return location === null ? null : `${location.words} ${code(location.place)}`;
+// GitHub anchors a file in a pull request's diff at the SHA-256 of its path
+// from the repository root, and a line on the new side by appending R and the
+// line. /changes is the route of the current Files changed page, and GitHub
+// redirects it to /files where that page is off
+// (https://github.blog/changelog/2025-12-11-review-commit-by-commit-improved-filtering-and-more-in-the-pull-request-files-changed-public-preview/).
+// Both anchors were followed on esau-morais/observed-trial-express#14,
+// 2026-10-03.
+function fileHref(
+  result: Comparison,
+  links: FileLinks | null,
+  projectPath: string,
+  line: number | null,
+): string | null {
+  const rooted = rootedPath(result.changeScope, projectPath);
+  const changed =
+    result.changeScope.kind === 'recorded'
+      ? result.changeScope.files.find((file) => file.path === projectPath)
+      : undefined;
+
+  if (links === null || rooted === null) {
+    return null;
+  }
+
+  if (links.pullRequest !== null && changed !== undefined) {
+    return `${links.repository}/pull/${String(links.pullRequest)}/changes#diff-${sha256(rooted)}${line === null ? '' : `R${String(line)}`}`;
+  }
+
+  return links.head === null || changed?.change === 'removed'
+    ? null
+    : `${links.repository}/blob/${links.head}/${rooted.split('/').map(encodeURIComponent).join('/')}${line === null ? '' : `#L${String(line)}`}`;
+}
+
+function fileText(text: string, href: string | null): string {
+  return href === null ? code(text) : `[${code(text)}](${href})`;
+}
+
+function rowLocation(
+  result: Comparison,
+  open: Open,
+  links: FileLinks | null,
+): string | null {
+  const location = anchorLocation(open.journey, open.check, result.changeScope);
+
+  return location === null
+    ? null
+    : `${location.words} ${fileText(location.place, fileHref(result, links, location.path, location.line))}`;
 }
 
 function rowName(result: Comparison, open: Open): string {
@@ -231,11 +290,15 @@ function label(check: CheckVerdict): string {
     : ` · ${recipeLabels[check.recipe.change].toLowerCase()}`;
 }
 
-function rowText(result: Comparison, open: Open): string {
+function rowText(
+  result: Comparison,
+  open: Open,
+  links: FileLinks | null = null,
+): string {
   const { journey, check } = open;
   const where =
     result.journeys.length === 1 ? '' : `${inlineText(journey.title)}: `;
-  const location = rowLocation(open);
+  const location = rowLocation(result, open, links);
 
   return `${where}${inlineText(check.name)} · ${inlineText(reading(result, check))}${location === null ? '' : ` · ${location}`}${label(check)}`;
 }
@@ -258,7 +321,11 @@ function groupedRows(result: Comparison, open: readonly Open[]): string[] {
   });
 }
 
-export function checkRows(result: Comparison, lead?: Open): string[] {
+export function checkRows(
+  result: Comparison,
+  lead?: Open,
+  links: FileLinks | null = null,
+): string[] {
   const open = openChecks(result).filter(
     (item) => lead === undefined || item.check !== lead.check,
   );
@@ -278,7 +345,7 @@ export function checkRows(result: Comparison, lead?: Open): string[] {
       .slice(0, listedChecks)
       .map(
         (item) =>
-          `- ${toneSymbols[verdictTones[item.check.verdict]]} **${verdictLabels[item.check.verdict]}** · ${rowText(result, item)}`,
+          `- ${toneSymbols[verdictTones[item.check.verdict]]} **${verdictLabels[item.check.verdict]}** · ${rowText(result, item, links)}`,
       ),
     ...(more.length === 0 ? [] : [`- More in the report: ${more.join(', ')}.`]),
   ];
@@ -297,7 +364,7 @@ function passedChecks(result: Comparison): string | null {
   }
 
   return collapsed(
-    `${toneSymbols.checked} ${passed.length} ${passed.length === 1 ? 'check' : 'checks'} passed`,
+    `${toneSymbols.checked} What the passing checks covered`,
     [
       ...passed.slice(0, listedChecks).map(({ journey, check }) => {
         const where =
@@ -316,7 +383,7 @@ function passedChecks(result: Comparison): string | null {
   );
 }
 
-const listedFiles = 10;
+const listedFiles = 6;
 const shownValue = 80;
 
 function recipeList(result: Comparison): string | null {
@@ -327,19 +394,283 @@ function recipeList(result: Comparison): string | null {
     : lines.map((line) => `- ${inlineText(line)}`).join('\n');
 }
 
-function scopeFiles(result: Comparison): string | null {
-  const lines = scopeFileLines(result);
+// Rows a reviewer reads first come first: files no evidence touched, then
+// files that ran without a check, then checked files.
+const relationRows = ['not-observed', 'exercised', 'checked'] as const;
+
+type Row = (typeof relationRows)[number];
+
+const rowReasons = {
+  'not-observed':
+    'No recorded evidence touched these files, so the checks say nothing about them.',
+  exercised: 'These files ran, but no named check evaluated them.',
+  checked: 'Named checks evaluated evidence from these files.',
+} satisfies Record<Row, string>;
+
+function cell(value: string): string {
+  return value.replaceAll('|', '\\|');
+}
+
+// The project paths that open checks point into, with the check that points
+// first. A failing verdict is read from the row that holds them.
+function anchoredFiles(result: Comparison): Map<string, CheckVerdict> {
+  const anchored = new Map<string, CheckVerdict>();
+
+  for (const { journey, check } of openChecks(result)) {
+    const location = anchorLocation(journey, check, result.changeScope);
+
+    if (location !== null && !anchored.has(location.path)) {
+      anchored.set(location.path, check);
+    }
+  }
+
+  return anchored;
+}
+
+// Each row lists at least one file, files that open checks point into come
+// first, and the rest share what is left of the listed-file limit.
+function selectedFiles(
+  files: readonly ScopeFile[],
+  anchored: ReadonlyMap<string, CheckVerdict>,
+): Map<Row, ScopeFile[]> {
+  const rows = new Map<Row, ScopeFile[]>(
+    relationRows.map((relation) => [
+      relation,
+      files
+        .filter((file) => file.relation === relation)
+        .sort(
+          (left, right) =>
+            Number(anchored.has(right.path)) - Number(anchored.has(left.path)),
+        ),
+    ]),
+  );
+  const chosen = new Map<Row, ScopeFile[]>(
+    relationRows.map((relation) => [
+      relation,
+      (rows.get(relation) ?? []).filter(
+        (file, index) => index === 0 || anchored.has(file.path),
+      ),
+    ]),
+  );
+  let budget =
+    listedFiles -
+    [...chosen.values()].reduce((sum, row) => sum + row.length, 0);
+
+  for (const relation of relationRows) {
+    const row = chosen.get(relation) ?? [];
+
+    for (const file of rows.get(relation) ?? []) {
+      if (budget > 0 && !row.includes(file)) {
+        row.push(file);
+        budget -= 1;
+      }
+    }
+  }
+
+  return chosen;
+}
+
+function readFirst(
+  result: Comparison,
+  files: readonly ScopeFile[],
+  anchored: ReadonlyMap<string, CheckVerdict>,
+): string {
+  const failing = files.find(
+    (file) =>
+      anchored.get(file.path)?.verdict === 'regression' ||
+      anchored.get(file.path)?.verdict === 'failed',
+  );
+
+  if (failing !== undefined && failing.relation !== 'outside-captured-source') {
+    const check = anchored.get(failing.path);
+
+    return `Read **${relationLabels[failing.relation]}** first. ${check === undefined ? '' : `${inlineText(check.name)} ${check.verdict === 'regression' ? 'regressed' : 'failed'} with evidence from this row.`}`;
+  }
+
+  const row =
+    relationRows.find((relation) =>
+      files.some((file) => file.relation === relation),
+    ) ?? 'checked';
+
+  return `Read **${relationLabels[row]}** first. ${rowReasons[row]}`;
+}
+
+function shownFile(
+  result: Comparison,
+  scope: Extract<ChangeScope, { kind: 'recorded' }>,
+  file: ScopeFile,
+  links: FileLinks | null,
+): string {
+  return `${fileText(repositoryPath(scope, file), fileHref(result, links, file.path, null))}${file.change === 'modified' ? '' : ` (${file.change})`}`;
+}
+
+type ScopeView = { table: string; details: string } | null;
+
+// Changed files grouped by the evidence that touched them. Files outside the
+// captured source are counted, or marked unknown when Git listed nothing.
+function scopeView(result: Comparison, links: FileLinks | null): ScopeView {
+  const scope = result.changeScope;
+
+  if (
+    scope.kind === 'unavailable' ||
+    !scope.files.some((file) => file.captured)
+  ) {
+    return null;
+  }
+
+  const anchored = anchoredFiles(result);
+  const chosen = selectedFiles(scope.files, anchored);
+  const rows = relationRows.flatMap((relation) => {
+    const all = scope.files.filter((file) => file.relation === relation);
+    const shown = chosen.get(relation) ?? [];
+
+    return all.length === 0
+      ? []
+      : [
+          `| ${relationLabels[relation]} | ${cell(
+            [
+              ...shown.map((file) => shownFile(result, scope, file, links)),
+              ...(all.length > shown.length
+                ? [`${all.length - shown.length} more in the report`]
+                : []),
+            ].join(', '),
+          )} |`,
+        ];
+  });
+  const outside = scope.files.filter((file) => !file.captured).length;
+  let outsideRow: string[] = [];
+
+  if (scope.outside.kind === 'unavailable') {
+    outsideRow = [
+      `| ${relationLabels['outside-captured-source']} | ${cell(`${statusWords.unknown.word}: ${inlineText(scope.outside.reason)}`)} |`,
+    ];
+  } else if (outside > 0) {
+    outsideRow = [
+      `| ${relationLabels['outside-captured-source']} | ${outside}, counted only |`,
+    ];
+  }
+
+  // The outside row already carries Git's reason.
+  const notes = scopeNotes(result).filter(
+    (note) => !note.startsWith('Files outside the captured source:'),
+  );
+  const detailed = relationRows.flatMap(
+    (relation) => chosen.get(relation) ?? [],
+  );
+
+  return {
+    table: [
+      [
+        '| Evidence | Changed files |',
+        '| --- | --- |',
+        ...rows,
+        ...outsideRow,
+      ].join('\n'),
+      ...(notes.length === 0
+        ? []
+        : [notes.map((note) => `- ${inlineText(note)}`).join('\n')]),
+      readFirst(result, scope.files, anchored),
+    ].join('\n\n'),
+    details: collapsed(
+      'What touched each file',
+      detailed
+        .map(
+          (file) =>
+            `- ${shownFile(result, scope, file, links)} · ${inlineText(fileDetail(result, file))}`,
+        )
+        .join('\n'),
+    ),
+  };
+}
+
+// Each journey's capture browser and viewport, base included when it differs.
+function conditionsLines(result: Comparison): string[] {
+  const described = (side: Side) => {
+    const conditions = side.capture?.manifest.conditions;
+
+    return conditions?.kind === 'recorded'
+      ? `${conditions.value.browser}, viewport ${conditions.value.viewport.width} × ${conditions.value.viewport.height} CSS px`
+      : null;
+  };
+
+  return result.journeys.flatMap((journey) => {
+    const where = result.journeys.length === 1 ? '' : `${journey.title}: `;
+    const candidate = described(journey.candidate);
+    const base = result.mode === 'preview' ? null : described(journey.base);
+
+    return [
+      ...(candidate === null
+        ? []
+        : [`${where}The candidate was captured in ${candidate}.`]),
+      ...(base === null || base === candidate
+        ? []
+        : [`${where}The base was captured in ${base}.`]),
+    ];
+  });
+}
+
+// Where the before, after and difference crops can be seen. An image is
+// shown inline; a link opens the uploaded file.
+export type Screenshots = {
+  image: string | null;
+  link: string | null;
+  note: string | null;
+};
+
+const cropsAlt = 'Before, after and changed pixels, left to right';
+
+function screenshotSection(
+  result: Comparison,
+  screenshots: Screenshots | null,
+): string | null {
+  const lines = result.journeys.flatMap((journey) => {
+    const change =
+      journey.comparison.kind === 'available'
+        ? visualChange(journey.comparison.visual)
+        : null;
+
+    return change === null
+      ? []
+      : [
+          `**Screenshots${result.journeys.length === 1 ? '' : ` · ${inlineText(journey.title)}`}** · ${inlineText(change)} An observation, not a check.`,
+        ];
+  });
+  const image = httpsUrl(screenshots?.image);
+  const file = httpsUrl(screenshots?.link);
 
   if (lines.length === 0) {
     return null;
   }
 
   return [
-    ...lines.slice(0, listedFiles).map((line) => `- ${inlineText(line)}`),
-    ...(lines.length > listedFiles
-      ? [`- ${lines.length - listedFiles} more in the report.`]
-      : []),
-  ].join('\n');
+    ...lines,
+    ...(image === null
+      ? extra(file === null ? null : `[${cropsAlt}](${file})`)
+      : [`![${cropsAlt}](${image})`]),
+  ].join('\n\n');
+}
+
+// Why changed screenshots have no crops to show, such as a crop step that
+// failed or an image that no longer matches its hash.
+function screenshotsNote(
+  result: Comparison,
+  screenshots: Screenshots | null,
+): string | null {
+  if (screenshots?.note !== undefined && screenshots.note !== null) {
+    return screenshots.note;
+  }
+
+  const changed = result.journeys.some(
+    (journey) =>
+      journey.comparison.kind === 'available' &&
+      journey.comparison.visual.kind === 'changed',
+  );
+
+  return changed &&
+    httpsUrl(screenshots?.image) === null &&
+    httpsUrl(screenshots?.link) === null
+    ? 'No screenshot crops were uploaded. The report has the screenshots.'
+    : null;
 }
 
 function unchanged(result: Comparison): string | null {
@@ -440,6 +771,15 @@ export function pageMatchesRun(page: string, output: string | null): boolean {
 const httpsUrlSchema = Schema.String.check(
   Schema.isPattern(/^https:\/\/[^\s()<>[\]]+$/),
 );
+
+// A Git object ID: SHA-1, or SHA-256 in repositories that use it.
+const objectIdSchema = Schema.String.check(
+  Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
+);
+
+function httpsUrl(value: string | null | undefined): string | null {
+  return Option.getOrNull(Schema.decodeUnknownOption(httpsUrlSchema)(value));
+}
 
 export type Summary = {
   markdown: string;
@@ -572,9 +912,12 @@ export type SummaryOptions = {
   surface: Surface;
   repository?: string | null;
   delivery?: string | null;
+  screenshots?: Screenshots | null;
   run?: string | null;
   download?: string | null;
   sourceBuild?: { commit: string | null } | null;
+  pullRequest?: number | null;
+  headSha?: string | null;
 };
 
 type Frame = {
@@ -582,6 +925,7 @@ type Frame = {
   artifact: string;
   page: string | null;
   repository: string | null;
+  files: FileLinks | null;
   bundle: string;
 };
 
@@ -623,15 +967,6 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         )
       : [],
   );
-  const visuals = result.journeys.flatMap((journey) =>
-    journey.comparison.kind === 'available' &&
-    (journey.comparison.visual.kind === 'changed' ||
-      journey.comparison.visual.kind === 'size-differs')
-      ? [
-          `Screenshots${result.journeys.length === 1 ? '' : ` (${inlineText(journey.title)})`}: ${inlineText(describeVisual(journey.comparison.visual))} An observation, not a check.`,
-        ]
-      : [],
-  );
   const limitations = [
     ...new Set(result.journeys.flatMap((journey) => journey.limitations)),
   ];
@@ -653,9 +988,14 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     first?.check.verdict === leadingVerdicts[kind]
       ? first
       : undefined;
-  const rows = allFailed ? groupedRows(result, open) : checkRows(result, lead);
+  const rows = allFailed
+    ? groupedRows(result, open)
+    : checkRows(result, lead, frame.files);
   const recipeSummary =
     result.mode === 'preview' ? null : recipeLine(result.changeScope);
+  const cropsNote = screenshotsNote(result, options.screenshots ?? null);
+  const scoped =
+    result.mode === 'preview' ? null : scopeView(result, frame.files);
 
   const markdown = [
     agentBlock(result, { artifact: frame.artifact, run: options.run ?? null }),
@@ -663,26 +1003,25 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       ...(options.surface.kind === 'check'
         ? []
         : [
-            `**${label}** · ${lead === undefined ? inlineText(subject) : rowText(result, lead)}`,
+            `**${label}** · ${lead === undefined ? inlineText(subject) : rowText(result, lead, frame.files)}`,
           ]),
-      kind === 'unavailable'
-        ? `${counts}. Missing evidence is not a pass.`
-        : counts,
-      ...(result.mode === 'preview'
+      `${counts} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}`,
+      ...(kind === 'unavailable' ? ['Missing evidence is not a pass.'] : []),
+      ...(result.mode === 'preview' || scoped !== null
         ? []
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
-    ...extra(scopeFiles(result)),
-    ...extra(recipeList(result)),
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
-    ...extra(unchanged(result)),
-    ...visuals,
-    ...extra(passedChecks(result)),
+    ...extra(screenshotSection(result, options.screenshots ?? null)),
+    ...extra(scoped?.table),
+    ...extra(recipeList(result)),
     page === null
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
+    ...extra(scoped?.details),
+    ...extra(passedChecks(result)),
     ...(open.length === 0 && kind !== 'unavailable'
       ? []
       : [
@@ -700,6 +1039,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
       'Run details and limits',
       [
         ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
+        ...extra(unchanged(result)),
+        ...extra(cropsNote === null ? null : inlineText(cropsNote)),
+        ...conditionsLines(result).map(inlineText),
         ...limitations.map(inlineText),
         ...(page === null
           ? []
@@ -712,7 +1054,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         .map((item) => `- ${item}`)
         .join('\n'),
     ),
-    `<sub>${inlineText(checkName(options.artifact))} · ${result.mode === 'preview' ? '' : `base ${revisionLink(base, repository)} → `}head ${revisionLink(head, repository)}</sub>`,
+    ...(options.artifact === defaultArtifact
+      ? []
+      : [`<sub>${inlineText(checkName(options.artifact))}</sub>`]),
     ...extra(options.delivery),
   ].join('\n\n');
 
@@ -740,15 +1084,22 @@ export function summarize(options: SummaryOptions): Summary {
     options.sourceBuild === undefined || options.sourceBuild === null
       ? `run \`bunx ${packageName}${packaged === null ? '' : `@${packaged.version}`} view <download>/run/report\``
       : `run \`bun run view <download>/run/report\` in an Observed checkout${options.sourceBuild.commit === null ? '' : ` at ${code(options.sourceBuild.commit.slice(0, 7))}`}, since this job built Observed from source`;
+  const repository = httpsUrl(options.repository);
   const frame: Frame = {
     options,
     artifact,
-    page: Option.getOrNull(
-      Schema.decodeUnknownOption(httpsUrlSchema)(options.page),
-    ),
-    repository: Option.getOrNull(
-      Schema.decodeUnknownOption(httpsUrlSchema)(options.repository ?? null),
-    ),
+    page: httpsUrl(options.page),
+    repository,
+    files:
+      repository === null
+        ? null
+        : {
+            repository,
+            pullRequest: options.pullRequest ?? null,
+            head: Option.getOrNull(
+              Schema.decodeUnknownOption(objectIdSchema)(options.headSha),
+            ),
+          },
     bundle: `Raw evidence: workflow artifact ${code(artifact)}. Download it and ${viewer}.`,
   };
 
@@ -1043,52 +1394,80 @@ export function candidateIdentity(
 }
 
 const imageNotes = {
-  uploaded: 'Slack: added the changed pixels to the thread',
+  uploaded: 'Slack: added the screenshot crops to the thread',
   'missing-scope': 'Slack: no image, because the Slack app lacks files:write',
   mismatch:
-    'Slack: no image, because the diff image does not match its recorded hash',
+    'Slack: no image, because a screenshot does not match its recorded hash',
   none: null,
 } satisfies Record<string, string | null>;
 
-// The largest changed region of the first journey whose screenshots changed,
-// cut from the diff image only when its bytes still match the result's hash.
-async function changedPixels(run: {
-  directory: string;
-  result: Comparison;
-}): Promise<
-  | { kind: 'crop'; bytes: Uint8Array; altText: string }
-  | { kind: 'mismatch' }
-  | { kind: 'none' }
-> {
-  for (const journey of run.result.journeys) {
-    const visual =
-      journey.comparison.kind === 'available'
-        ? journey.comparison.visual
-        : null;
+const commentModeSchema = Schema.Literals(['always', 'off']);
 
-    if (visual?.kind === 'changed') {
-      const bytes = await readFile(path.join(run.directory, visual.diff.path));
-      const [largest] = visual.regions;
+function commentMode(value: string): {
+  mode: typeof commentModeSchema.Type;
+  problem: string | null;
+} {
+  const mode = Schema.decodeUnknownOption(commentModeSchema)(
+    value === '' ? 'always' : value,
+  );
 
-      if (sha256(bytes) !== visual.diff.sha256) {
-        return { kind: 'mismatch' };
-      }
-
-      const crop = diffCrop(bytes, largest);
-
-      if (crop === null) {
-        return { kind: 'none' };
-      }
-
-      return {
-        kind: 'crop',
-        bytes: crop,
-        altText: `Changed pixels: the largest of ${visual.regionCount} ${visual.regionCount === 1 ? 'region' : 'regions'}, ${largest.width} by ${largest.height} pixels`,
+  return Option.isSome(mode)
+    ? { mode: mode.value, problem: null }
+    : {
+        mode: 'always',
+        problem: `The comment input accepts always or off, not ${JSON.stringify(value.slice(0, 40))}. Observed treats it as always.`,
       };
-    }
+}
+
+// An earlier step uploaded the crops as a workflow artifact. A user token
+// also uploads them for the comment to show; any failure keeps the link and
+// says why.
+// Uploads only for a trusted result that will be commented on, so the
+// token's user never publishes images nobody shows.
+export async function deliveredScreenshots(options: {
+  trusted: boolean;
+  commenting: boolean;
+  path: string;
+  link: string;
+  token: string;
+  server: string;
+  repositoryId: string;
+}): Promise<Screenshots | null> {
+  if (!options.trusted || options.path === '') {
+    return null;
   }
 
-  return { kind: 'none' };
+  const link = options.link === '' ? null : options.link;
+
+  if (options.token === '' || !options.commenting) {
+    return { image: null, link, note: null };
+  }
+
+  try {
+    return {
+      image: await uploadImage({
+        server: options.server,
+        token: options.token,
+        repositoryId: options.repositoryId,
+        name: path.basename(options.path),
+        bytes: await readFile(options.path),
+      }),
+      link,
+      note: null,
+    };
+  } catch (error) {
+    if (!(error instanceof DeliveryError)) {
+      process.stderr.write(
+        `Observed: the image upload failed: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}\n`,
+      );
+    }
+
+    return {
+      image: null,
+      link,
+      note: `The comment does not show the screenshot crops. ${error instanceof DeliveryError ? `${error.message}.` : 'An unexpected error; the job log has details.'}`,
+    };
+  }
 }
 
 function link(label: string, url: string | null): string | null {
@@ -1107,6 +1486,10 @@ async function writeOutput(name: string, value: string) {
 
 function environment(name: string): string {
   return process.env[name] ?? '';
+}
+
+function emptyAsNull(value: string): string | null {
+  return value === '' ? null : value;
 }
 
 function repositoryUrl(): string | null {
@@ -1154,7 +1537,15 @@ function runContext(args: {
       environment('OBSERVED_FROM_SOURCE') === 'true'
         ? { commit: packaged?.commit ?? null }
         : null,
+    pullRequest: pullRequestNumber(),
+    headSha: emptyAsNull(environment('OBSERVED_HEAD_SHA')),
   };
+}
+
+function pullRequestNumber(): number | null {
+  const number = Number(environment('OBSERVED_PULL_REQUEST'));
+
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 async function readOptional(file: string): Promise<string | null> {
@@ -1170,9 +1561,7 @@ async function readOptional(file: string): Promise<string | null> {
 }
 
 function runSource(): PullRequestSource | null {
-  const pullRequest = Number(environment('OBSERVED_PULL_REQUEST'));
-
-  return Number.isInteger(pullRequest) && pullRequest > 0
+  return pullRequestNumber() !== null
     ? pullRequestSource({
         repository: environment('GITHUB_REPOSITORY'),
         headRepository: environment('OBSERVED_HEAD_REPOSITORY'),
@@ -1283,11 +1672,6 @@ if (import.meta.main) {
     const output = await readOptional(resultFile);
     const repository = repositoryUrl();
     const context = runContext({ exitCode, artifact, page });
-    const summary = summarize({
-      output,
-      ...context,
-      surface: { kind: 'comment' },
-    });
     const headSha = environment('OBSERVED_HEAD_SHA');
     const decoded =
       output === null
@@ -1299,9 +1683,7 @@ if (import.meta.main) {
           headSha,
           environment('GITHUB_SHA'),
         ]);
-    const pullRequest = Number(environment('OBSERVED_PULL_REQUEST'));
-    const pullRequestNumber =
-      Number.isInteger(pullRequest) && pullRequest > 0 ? pullRequest : null;
+    const { pullRequest } = context;
     const source = runSource();
     const finish = async (items: DeliveryItem[], notes: string[]) => {
       for (const annotation of deliveryAnnotations(items)) {
@@ -1320,7 +1702,7 @@ if (import.meta.main) {
       api,
       repository: environment('GITHUB_REPOSITORY'),
       token: environment('OBSERVED_GITHUB_TOKEN'),
-      pullRequest: pullRequestNumber,
+      pullRequest,
       botLogin: 'github-actions[bot]',
     };
     const signer = appToken({
@@ -1336,6 +1718,25 @@ if (import.meta.main) {
         ? { ...workflow, token: signer.token, botLogin: signer.login }
         : workflow;
     const notes: string[] = [];
+    const comment = commentMode(environment('OBSERVED_COMMENT'));
+    const commenting = pullRequest !== null && comment.mode === 'always';
+
+    if (comment.problem !== null) {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(comment.problem)}\n`,
+      );
+      notes.push(comment.problem);
+    }
+
+    if (pullRequest !== null && comment.mode === 'off') {
+      notes.push('No comment, because the comment input is off');
+
+      if (environment('OBSERVED_SLACK_BOT_TOKEN') !== '') {
+        notes.push(
+          'Slack: each failing run posts a new message, because the comment that remembers the earlier one is off',
+        );
+      }
+    }
 
     if (signer.kind === 'workflow' && signer.problem !== null) {
       process.stdout.write(
@@ -1354,14 +1755,47 @@ if (import.meta.main) {
       await finish(
         [
           { name: 'check title', outcome: mismatch },
-          ...(pullRequestNumber === null
-            ? []
-            : [{ name: 'comment', outcome: mismatch }]),
+          ...(commenting ? [{ name: 'comment', outcome: mismatch }] : []),
         ],
         notes,
       );
       process.exit(0);
     }
+
+    const screenshots = await deliveredScreenshots({
+      trusted:
+        Option.isSome(decoded) &&
+        context.exitCode ===
+          conclusionExitCodes[decoded.value.result.conclusion.kind],
+      commenting,
+      path: environment('OBSERVED_CROPS_PATH'),
+      link: environment('OBSERVED_CROPS_URL'),
+      token: source === 'fork' ? '' : environment('OBSERVED_IMAGE_TOKEN'),
+      server: environment('GITHUB_SERVER_URL'),
+      repositoryId: environment('GITHUB_REPOSITORY_ID'),
+    });
+
+    if (screenshots?.note !== null && screenshots?.note !== undefined) {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(screenshots.note)}\n`,
+      );
+      notes.push(screenshots.note);
+    } else if (
+      screenshots?.image !== null &&
+      screenshots?.image !== undefined
+    ) {
+      notes.push('Showed the screenshot crops in the comment');
+    }
+
+    await writeOutput('image', screenshots?.image ?? '');
+    await writeOutput('image-note', screenshots?.note ?? '');
+
+    const summary = summarize({
+      output,
+      ...context,
+      screenshots,
+      surface: { kind: 'comment' },
+    });
 
     // Slack failures are notes, not items.
     const attempt = async <A>(
@@ -1414,7 +1848,7 @@ if (import.meta.main) {
     const name = checkName(artifact);
     const marker = commentMarker(artifact);
     const canComment =
-      pullRequestNumber !== null && source !== 'fork' && commenter.token !== '';
+      commenting && source !== 'fork' && commenter.token !== '';
     const lookup = canComment
       ? await (async () => {
           try {
@@ -1436,7 +1870,7 @@ if (import.meta.main) {
     const slackSkip = slackSkipReason({
       token: slackToken,
       channel: slackChannel,
-      pullRequest: pullRequestNumber,
+      pullRequest,
       lookupFailed: lookup?.kind === 'failed',
     });
 
@@ -1456,13 +1890,13 @@ if (import.meta.main) {
       const message = slackMessage(trusted?.result ?? null, {
         name,
         pullRequest:
-          pullRequestNumber === null || repository === null
+          pullRequest === null || repository === null
             ? null
-            : `${repository}/pull/${String(pullRequestNumber)}`,
+            : `${repository}/pull/${String(pullRequest)}`,
         pullRequestLabel:
-          pullRequestNumber === null
+          pullRequest === null
             ? workflow.repository
-            : `${workflow.repository}#${String(pullRequestNumber)}`,
+            : `${workflow.repository}#${String(pullRequest)}`,
         report: Schema.is(httpsUrlSchema)(page) ? page : null,
         run: runUrl,
       });
@@ -1524,14 +1958,14 @@ if (import.meta.main) {
 
           if (posted && trusted !== null && slackImages) {
             const uploaded = await attempt('The Slack image', async () => {
-              const image = await changedPixels(trusted);
+              const image = await screenshotCrops(trusted);
 
-              return image.kind === 'crop'
+              return image.kind === 'image'
                 ? uploadSlackImage(slackToken, {
                     channel: sent.channel,
                     threadTs: sent.ts,
-                    filename: 'observed-changed-pixels.png',
-                    title: 'Changed pixels',
+                    filename: 'observed-screenshots.png',
+                    title: 'Before, after and changed pixels',
                     altText: image.altText,
                     bytes: image.bytes,
                   })
@@ -1548,7 +1982,7 @@ if (import.meta.main) {
 
     const items: DeliveryItem[] = [];
 
-    if (pullRequestNumber !== null) {
+    if (commenting) {
       items.push({
         name: 'comment',
         outcome:
@@ -1587,6 +2021,7 @@ if (import.meta.main) {
             markdown: summarize({
               output,
               ...context,
+              screenshots,
               surface: { kind: 'check' },
               delivery: deliveryLine(
                 titled({ kind: 'posted', url: null }),
@@ -1602,11 +2037,39 @@ if (import.meta.main) {
         } satisfies Delivered);
 
     await finish(titled(title), notes);
+  } else if (command === 'crops' && args.length === 2) {
+    const [resultFile = '', output = ''] = args;
+    const decoded = Schema.decodeUnknownOption(runOutputSchema)(
+      await readOptional(resultFile),
+    );
+    const crops = Option.isNone(decoded)
+      ? ({ kind: 'none' } as const)
+      : await screenshotCrops(decoded.value);
+
+    if (crops.kind === 'mismatch') {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand('No screenshot crops: a screenshot does not match its recorded hash.')}\n`,
+      );
+    }
+
+    if (crops.kind === 'image') {
+      await writeFile(output, crops.bytes, { flag: 'wx' });
+      await writeOutput('path', output);
+    }
   } else if (command === 'summary' && args.length === 4) {
     const [resultFile = '', exitCode = '', artifact = '', page = ''] = args;
+    const crops = environment('OBSERVED_CROPS_PATH');
     const summary = summarize({
       output: await readOptional(resultFile),
       ...runContext({ exitCode, artifact, page }),
+      screenshots:
+        crops === ''
+          ? null
+          : {
+              image: emptyAsNull(environment('OBSERVED_IMAGE')),
+              link: emptyAsNull(environment('OBSERVED_CROPS_URL')),
+              note: emptyAsNull(environment('OBSERVED_IMAGE_NOTE')),
+            },
       surface: { kind: 'job' },
       delivery: jobDelivery(environment('OBSERVED_DELIVERY_NOTE')),
     });
@@ -1621,7 +2084,7 @@ if (import.meta.main) {
     await writeOutput('trusted', String(summary.trusted));
   } else {
     process.stderr.write(
-      'Usage: github-action.ts preflight <project> | page <report-directory> <result.json> <output.html> | summary|deliver <result.json> <exit-code> <artifact-name> <page-url>\n',
+      'Usage: github-action.ts preflight <project> | page <report-directory> <result.json> <output.html> | crops <result.json> <output.png> | summary|deliver <result.json> <exit-code> <artifact-name> <page-url>\n',
     );
     process.exit(64);
   }

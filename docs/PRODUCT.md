@@ -320,13 +320,16 @@ output appears only where a finding has a source location.
   credentials, risk, or an unapproved action prevents progress.
 - Update an existing result instead of adding a message for every retry.
 
-Planned posting modes, set by the `comment` input:
+Posting modes, set by the `comment` input. `always` and `off` ship today;
+`off` lets a workflow that runs the action in several jobs keep one comment
+per pull request:
 
 | Mode | Behavior |
 | --- | --- |
 | `always` (default) | Post or update the check and the comment on every run |
-| `quiet` | Always post the check. Comment only when a result fails or is unknown, and still update an existing comment when the result recovers |
-| `mention` | Run only when a PR comment starts with `/observed`. A slash command, because an @handle can notify a real user |
+| `off` | Post the check and the job summary, and no comment |
+| `quiet` (planned) | Always post the check. Comment only when a result fails or is unknown, and still update an existing comment when the result recovers |
+| `mention` (planned) | Run only when a PR comment starts with `/observed`. A slash command, because an @handle can notify a real user |
 
 Each result includes a deterministic prompt for the user's own agent: the
 values, commit SHAs, source locations, artifact paths, and the reminder that a

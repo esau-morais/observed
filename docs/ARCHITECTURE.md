@@ -83,7 +83,11 @@ Delivery adapters and the viewer render it and never compute or adjust it.
    listed as outside the captured source. `observe` records those names in
    `selection.json`, because the comparator reads only capture directories.
    `compare` has no repository, so it reports them as unavailable. Without a
-   base snapshot the scope is unavailable, with the reason.
+   base snapshot the scope is unavailable, with the reason. Paths stay
+   relative to the project, as in the snapshots. The Git listing records the
+   project's directory. The pull request comment, job summary, check run, Slack
+   and `report.md` join the two and show paths from the repository root. The
+   viewer still shows project-relative paths.
 2. A file's relation comes only from recorded evidence. No record means "not
    observed". A file that no collector can execute, such as a stylesheet or a
    type declaration, is "not observed" with that reason.

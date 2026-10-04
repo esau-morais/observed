@@ -1,4 +1,5 @@
 import type {
+  ChangeScope,
   Anchor,
   Check,
   CheckVerdict,
@@ -175,11 +176,48 @@ const anchorWords = {
   'diff-name-match': 'name matches changed line',
 } satisfies Record<Anchor['basis'], string>;
 
+// The viewer bundles this module, so it joins paths without node:path.
+function joined(directory: string, file: string): string {
+  const parts: string[] = [];
+
+  for (const part of `${directory}/${file}`.split('/')) {
+    if (part === '..') {
+      parts.pop();
+    } else if (part !== '.' && part !== '') {
+      parts.push(part);
+    }
+  }
+
+  return parts.join('/');
+}
+
+// A project-relative path from the repository root, or null when the run
+// did not record where the project sits, as when Git listed no changes.
+export function rootedPath(
+  scope: ChangeScope,
+  projectPath: string,
+): string | null {
+  return scope.kind === 'recorded' && scope.outside.kind === 'listed'
+    ? joined(scope.outside.projectDirectory, projectPath)
+    : null;
+}
+
+// A project-relative path as people read it: from the repository root when
+// the run recorded where the project sits.
+export function fromRepositoryRoot(
+  scope: ChangeScope,
+  projectPath: string,
+): string {
+  return rootedPath(scope, projectPath) ?? projectPath;
+}
+
 // A location is a fact about where the evidence points, never a cause.
+// Without a change scope the place stays relative to the project.
 export function anchorLocation(
   journey: Journey,
   check: CheckVerdict,
-): { words: string; place: string } | null {
+  scope?: ChangeScope,
+): { words: string; place: string; path: string; line: number } | null {
   for (const finding of journey.findings) {
     if (
       finding.checks.includes(check.id) &&
@@ -192,7 +230,9 @@ export function anchorLocation(
           anchor.basis === 'stack-frame' && finding.subject === 'Console error'
             ? 'logged at'
             : anchorWords[anchor.basis],
-        place: `${anchor.path}:${anchor.line}`,
+        place: `${scope === undefined ? anchor.path : fromRepositoryRoot(scope, anchor.path)}:${anchor.line}`,
+        path: anchor.path,
+        line: anchor.line,
       };
     }
   }
