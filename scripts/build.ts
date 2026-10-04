@@ -98,10 +98,17 @@ const collectModules: Plugin = {
   },
 };
 
+// Self-observe builds with `--viewer-source-maps` so coverage can map the
+// viewer script to src/. The maps are hidden: no sourceMappingURL comment
+// enters the single-file report, and coverage finds each map next to its
+// script. Published builds leave them out.
 await buildViewer({
   configFile: path.join(root, 'vite.config.ts'),
   plugins: [collectModules],
   logLevel: 'warn',
+  ...(process.argv.includes('--viewer-source-maps')
+    ? { build: { sourcemap: 'hidden' } }
+    : {}),
 });
 
 // Bundling drops the dependencies' own license files, which their licenses

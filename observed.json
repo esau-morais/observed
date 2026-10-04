@@ -17,7 +17,7 @@
   },
   "setup": [
     ["bun", "install", "--frozen-lockfile"],
-    ["bun", "run", "build"],
+    ["bun", "run", "build", "--viewer-source-maps"],
     [
       "tar",
       "-xzf",
