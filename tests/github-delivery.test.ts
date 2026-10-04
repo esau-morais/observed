@@ -14,6 +14,8 @@ import {
 } from '../scripts/github-delivery';
 import {
   deliveredScreenshots,
+  imageCutoff,
+  imageRef,
   deliveryLine,
   deliveryUnfinished,
   inlineText,
@@ -355,45 +357,149 @@ test('a Dependabot run without write permissions gets a read-only notice', async
   expect(run.stdout).not.toContain('::warning');
 });
 
-// The upload endpoint answers 404 to GITHUB_TOKEN and App installation
-// tokens (cli/cli#14309, and run 37130909012 on
-// esau-morais/observed-trial-express). A refusal must keep the link and say
-// why, and no run may publish images that no comment shows.
-test('a refused image upload keeps the crops link and says why, and nothing is uploaded unless a trusted result is commented on', async () => {
+const target = {
+  api: 'https://api.github.com',
+  repository: 'o/r',
+  token: 'ghs_workflow',
+  pullRequest: 7,
+  botLogin: 'github-actions[bot]',
+};
+const artifactLink = 'https://github.com/o/r/actions/runs/1/artifacts/3';
+
+async function cropsFile(): Promise<{ crops: string; directory: string }> {
   const directory = await mkdtemp(path.join(tmpdir(), 'observed-image-'));
   const crops = path.join(directory, 'observed-bundle-screenshots.png');
-  const fetch = vi.fn(() =>
-    Promise.resolve(Response.json({ message: 'Not Found' }, { status: 404 })),
-  );
 
   await writeFile(crops, 'png');
-  vi.stubGlobal('fetch', fetch);
 
-  const deliver = (trusted: boolean, commenting: boolean) =>
-    deliveredScreenshots({
-      trusted,
-      commenting,
-      path: crops,
-      link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
-      token: 'ghs_workflow',
-      server: 'https://github.com',
-      repositoryId: '42',
-    });
+  return { crops, directory };
+}
 
-  expect(await deliver(false, true)).toBeNull();
-  expect(await deliver(true, false)).toEqual({
-    image: null,
-    link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
+const screenshotsFor = (
+  crops: string,
+  options: {
+    trusted?: boolean;
+    commenting?: boolean;
+    fork?: boolean;
+    userToken?: string;
+  } = {},
+) =>
+  deliveredScreenshots({
+    trusted: options.trusted ?? true,
+    commenting: options.commenting ?? true,
+    fork: options.fork ?? false,
+    path: crops,
+    link: artifactLink,
+    target,
+    server: 'https://github.com',
+    ref: imageRef(new Date('2026-10-04T12:00:00Z'), {
+      run: '9',
+      attempt: '1',
+      artifact: 'observed-bundle',
+    }),
+    cutoff: imageCutoff(new Date('2026-10-04T12:00:00Z'), '7'),
+    userToken: options.userToken ?? '',
+    repositoryId: '42',
+  });
+
+// The comment loads the crops from a commit that the workflow token stores
+// under refs/observed/crops/, by SHA. Refs from before the artifact
+// retention are deleted, so stored images do not grow without bound.
+test('the workflow token stores the crops in a dated ref outside refs/heads, the comment loads them by commit, and expired refs are pruned', async () => {
+  const { crops, directory } = await cropsFile();
+  const sha = (letter: string) => letter.repeat(40);
+  const calls: string[] = [];
+  const posted: unknown[] = [];
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init: RequestInit) => {
+      const route = `${init.method ?? 'GET'} ${url.replace('https://api.github.com/repos/o/r/git', '')}`;
+
+      calls.push(route);
+
+      if (init.method === 'POST') {
+        posted.push(JSON.parse(typeof init.body === 'string' ? init.body : ''));
+      }
+
+      const answers: Record<string, Response> = {
+        'POST /blobs': Response.json({ sha: sha('a') }, { status: 201 }),
+        'POST /trees': Response.json({ sha: sha('b') }, { status: 201 }),
+        'POST /commits': Response.json({ sha: sha('c') }, { status: 201 }),
+        'POST /refs': Response.json({}, { status: 201 }),
+        'GET /matching-refs/observed/crops/': Response.json([
+          { ref: 'refs/observed/crops/2026-09-20/1-1-observed-bundle' },
+          { ref: 'refs/observed/crops/2026-09-27/2-1-observed-bundle' },
+          { ref: 'refs/observed/crops/2026-10-04/9-1-observed-bundle' },
+        ]),
+      };
+
+      return Promise.resolve(
+        answers[route] ?? new Response(null, { status: 204 }),
+      );
+    }),
+  );
+
+  expect(await screenshotsFor(crops)).toEqual({
+    image: `https://github.com/o/r/raw/${sha('c')}/observed-bundle-screenshots.png`,
+    link: artifactLink,
     note: null,
   });
+  expect(posted).toContainEqual({
+    ref: 'refs/observed/crops/2026-10-04/9-1-observed-bundle',
+    sha: sha('c'),
+  });
+  expect(calls.filter((call) => call.startsWith('DELETE'))).toEqual([
+    'DELETE /refs/observed/crops/2026-09-20/1-1-observed-bundle',
+  ]);
+
+  await rm(directory, { recursive: true, force: true });
+});
+
+// A read-only token gets 403 (run 37165079462 on
+// esau-morais/observed-trial-express), and the user-attachments endpoint
+// answers 404 to GITHUB_TOKEN and App installation tokens (cli/cli#14309).
+// A refusal must keep the link and say why, and nothing is stored unless a
+// trusted result is commented on, or for a fork.
+test('a refused store keeps the crops link and says why, falls back to a user token, and stores nothing for untrusted, uncommented or fork runs', async () => {
+  const { crops, directory } = await cropsFile();
+  const fetch = vi.fn((url: string | URL) =>
+    Promise.resolve(
+      String(url).startsWith('https://uploads.github.com/')
+        ? Response.json({ message: 'Not Found' }, { status: 404 })
+        : Response.json(
+            { message: 'Resource not accessible by integration' },
+            { status: 403 },
+          ),
+    ),
+  );
+
+  vi.stubGlobal('fetch', fetch);
+
+  expect(await screenshotsFor(crops, { trusted: false })).toBeNull();
+  expect(await screenshotsFor(crops, { commenting: false })).toEqual({
+    image: null,
+    link: artifactLink,
+    note: null,
+  });
+  expect((await screenshotsFor(crops, { fork: true }))?.note).toContain(
+    'forks',
+  );
   expect(fetch).not.toHaveBeenCalled();
 
-  expect(await deliver(true, true)).toEqual({
+  expect(await screenshotsFor(crops)).toEqual({
     image: null,
-    link: 'https://github.com/o/r/actions/runs/1/artifacts/3',
-    note: 'The comment does not show the screenshot crops. GitHub refused the image upload with HTTP 404. It accepts only a user token with write access to this repository.',
+    link: artifactLink,
+    note: "The comment links the screenshot crops because the workflow token cannot write to this repository. Add contents: write to the workflow's permissions to show them.",
   });
   expect(fetch).toHaveBeenCalledTimes(1);
+
+  expect(await screenshotsFor(crops, { userToken: 'gho_user' })).toEqual({
+    image: null,
+    link: artifactLink,
+    note: 'The comment links the screenshot crops. GitHub refused the image upload with HTTP 404. It accepts only a user token with write access to this repository.',
+  });
+  expect(fetch).toHaveBeenCalledTimes(3);
 
   await expect(
     uploadImage({
@@ -404,7 +510,7 @@ test('a refused image upload keeps the crops link and says why, and nothing is u
       bytes: new Uint8Array([1]),
     }),
   ).rejects.toBeInstanceOf(DeliveryError);
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(3);
 
   await rm(directory, { recursive: true, force: true });
 });

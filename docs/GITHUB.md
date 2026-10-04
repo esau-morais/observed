@@ -13,9 +13,9 @@ Details of the GitHub Action. The
 | `timeout` | `120000` | Milliseconds allowed for each capture |
 | `artifact-name` | `observed-bundle` | Name of the uploaded bundle. The report page adds `.html`. Give each call its own name when a workflow runs the action more than once, such as in a matrix |
 | `retention-days` | `7` | Days GitHub keeps the artifacts |
-| `github-token` | `${{ github.token }}` | Token that titles the check and posts the comment |
+| `github-token` | `${{ github.token }}` | Token that titles the check, posts the comment and stores the screenshot crops it shows |
 | `comment` | `always` | `always` posts one comment and edits it on later runs. `off` posts none; the check and job summary still carry the result. A comment posted before the switch stays until you delete it |
-| `image-upload-token` | empty | A user's token that shows the screenshot crops in the comment instead of linking them. See [Screenshots in the comment](#screenshots-in-the-comment) |
+| `image-upload-token` | empty | A user's token that uploads the screenshot crops when `github-token` cannot store them. See [Screenshots in the comment](#screenshots-in-the-comment) |
 | `github-app-client-id`, `github-app-private-key` | empty | Sign the comment with your own GitHub App |
 | `slack-bot-token`, `slack-channel`, `slack-images` | empty, empty, `false` | Post failures to Slack |
 | `job-outcome` | empty | Deprecated. It has no effect and prints a warning |
@@ -31,7 +31,7 @@ journeys.
 
 | Permission | Why |
 | --- | --- |
-| `contents: read` | Check out the base and the candidate |
+| `contents: write` | Check out the base and the candidate, and store the screenshot crops the comment shows. With `contents: read` the comment links the crops instead |
 | `checks: write` | Put the result in the title of this job's own check |
 | `pull-requests: write` | Post one comment and edit it on later runs |
 
@@ -135,21 +135,37 @@ annotation with the reason.
 
 ## Screenshots in the comment
 
-When screenshots changed, the action uploads the crops as their own artifact
-and the comment links them. GitHub opens the PNG in the browser for signed-in
-users who can read the repository. Signed-out visitors get a 404, even on a
-public repository.
+When screenshots changed, the action uploads before, after and changed-pixel
+crops as their own artifact, and the comment links them. To show the image in
+the comment as well, `github-token` commits the PNG to a ref under
+`refs/observed/crops/`, outside `refs/heads`, so no branch appears. The comment
+loads it from `https://github.com/<owner>/<repo>/raw/<commit>/<file>`. GitHub
+serves that address without a proxy, so on a public repository signed-out
+visitors see the image too (checked on esau-morais/observed-trial-express#15,
+2026-10-04).
 
+Each run stores one small commit under the day it ran. Later runs delete refs
+older than `retention-days`, so an image lasts about as long as the artifact
+it stands in for, and Git drops the unreferenced commits.
+
+This needs `contents: write`, which also lets the token push. The job runs
+the pull request's code during the capture, and the action passes the token
+only to steps before and after it. Keep `contents: read` if you'd rather not
+grant it; the comment then links the crops.
+
+The action stores no image for a pull request from a fork: GitHub gives it a
+read-only token, and its pixels come from code the repository didn't accept.
+
+If `github-token` cannot store the crops, `image-upload-token` is a fallback.
 GitHub has no documented API that adds an image to a comment. `gh` 2.99.0 and
 later upload one for `--attach` through an endpoint that accepts only a user's
-OAuth or personal access token with write access to the repository. It answers
-404 to `github-token` and to GitHub App installation tokens
+OAuth or personal access token with write access to the repository, and
+answers 404 to `github-token` and to GitHub App installation tokens
 ([cli/cli#14309](https://github.com/cli/cli/issues/14309); the 404 for
-`github-token` was reproduced 2026-10-03). Set `image-upload-token` to such a
-token from a repository secret to show the crops in the comment. The image is
-uploaded as that user, only when the comment is posted, and shows page
-content. If the upload fails, the comment keeps the link, and the run
-details and the job summary say why. The upload never changes the verdict.
+`github-token` was reproduced 2026-10-03). The image is uploaded as that user.
+
+Whatever fails, the comment keeps the link, and the run details and the job
+summary say why. Storing an image never changes the verdict.
 
 ## Require the check
 

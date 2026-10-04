@@ -79,7 +79,7 @@ const comments = Schema.Array(
 async function request<A>(
   target: Target,
   schema: Schema.Codec<A>,
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<A> {
@@ -291,4 +291,89 @@ export async function uploadImage(image: {
   }
 
   return decoded.value.url;
+}
+
+const shaSchema = Schema.Struct({
+  sha: Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)),
+});
+
+// Each run's crops get their own ref outside refs/heads, so no branch shows
+// up, named by day so old ones can be pruned without reading each commit.
+export const imageRefPrefix = 'refs/observed/crops/';
+
+function refPath(ref: string): string {
+  return ref.slice('refs/'.length).split('/').map(encodeURIComponent).join('/');
+}
+
+// A file in any commit of the repository opens at /raw/<sha>/<path>, and
+// GitHub leaves github.com image URLs in comments unproxied, so the reader's
+// browser loads the commit's file. With the workflow token and contents:
+// write this rendered for signed-out visitors on the public
+// esau-morais/observed-trial-express#15, and a read-only token got HTTP 403,
+// checked 2026-10-04.
+export async function commitImage(
+  target: Target,
+  image: { server: string; ref: string; name: string; bytes: Uint8Array },
+): Promise<string> {
+  const repository = `/repos/${target.repository}/git`;
+  const blob = await request(target, shaSchema, 'POST', `${repository}/blobs`, {
+    content: Buffer.from(image.bytes).toString('base64'),
+    encoding: 'base64',
+  });
+  const tree = await request(target, shaSchema, 'POST', `${repository}/trees`, {
+    tree: [{ path: image.name, mode: '100644', type: 'blob', sha: blob.sha }],
+  });
+  const commit = await request(
+    target,
+    shaSchema,
+    'POST',
+    `${repository}/commits`,
+    { message: 'Observed screenshot crops', tree: tree.sha },
+  );
+
+  await request(target, Schema.Unknown, 'POST', `${repository}/refs`, {
+    ref: image.ref,
+    sha: commit.sha,
+  });
+
+  return `${image.server}/${target.repository}/raw/${commit.sha}/${encodeURIComponent(image.name)}`;
+}
+
+const matchingRefs = Schema.Array(Schema.Struct({ ref: Schema.String }));
+
+const prunedPerRun = 50;
+
+// Deletes crop refs from days before the cutoff, a few per run, so stored
+// images last as long as the artifacts they stand in for.
+export async function pruneImages(
+  target: Target,
+  cutoff: string,
+): Promise<number> {
+  const listed = await request(
+    target,
+    matchingRefs,
+    'GET',
+    `/repos/${target.repository}/git/matching-refs/${refPath(imageRefPrefix)}`,
+  );
+  const expired = listed
+    .map(({ ref }) => ref)
+    .filter((ref) => {
+      const day = /^refs\/observed\/crops\/(\d{4}-\d{2}-\d{2})\//.exec(
+        ref,
+      )?.[1];
+
+      return day !== undefined && day < cutoff;
+    })
+    .slice(0, prunedPerRun);
+
+  for (const ref of expired) {
+    await request(
+      target,
+      Schema.Unknown,
+      'DELETE',
+      `/repos/${target.repository}/git/refs/${refPath(ref)}`,
+    );
+  }
+
+  return expired.length;
 }

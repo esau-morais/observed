@@ -26,13 +26,13 @@ inputs:
     description: Days GitHub keeps the artifact.
     default: '7'
   github-token:
-    description: Token that titles this job's check with the result and posts the pull request comment. The workflow needs checks write and pull-requests write permissions.
+    description: Token that titles this job's check with the result, posts the pull request comment, and stores the screenshot crops the comment shows. The workflow needs checks write and pull-requests write permissions, and contents write for the crops.
     default: ${{ github.token }}
   comment:
     description: always posts or updates one comment on the pull request. off posts none; the job's check and summary still carry the result, and Slack, which keeps its message ID in the comment, posts a new message for each failing run.
     default: always
   image-upload-token:
-    description: 'Optional. A personal access token or OAuth token of a user with write access to the repository. With it, the comment shows the screenshot crops instead of linking them; nothing is uploaded when no comment is posted. GitHub refuses this upload for github-token and GitHub App installation tokens. The image shows page content and is uploaded as that user. Pass it from a repository secret.'
+    description: 'Optional fallback. A personal access token or OAuth token of a user with write access to the repository. When github-token cannot store the screenshot crops, they are uploaded as this user so the comment still shows them; nothing is uploaded when no comment is posted or for a pull request from a fork. GitHub refuses this upload for github-token and GitHub App installation tokens. Pass it from a repository secret.'
     default: ''
   github-app-client-id:
     description: Optional. Client ID of a GitHub App with Pull requests write access. With github-app-private-key, the App signs the pull request comment instead of github-actions.
@@ -229,6 +229,7 @@ runs:
         OBSERVED_CROPS_PATH: ${{ steps.crops.outputs.path }}
         OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}
         OBSERVED_IMAGE_TOKEN: ${{ inputs.image-upload-token }}
+        OBSERVED_RETENTION_DAYS: ${{ inputs.retention-days }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
       run: bun "$OBSERVED_SCRIPT" deliver "$OBSERVED_BUNDLE/result.json" "$OBSERVED_EXIT" "$OBSERVED_ARTIFACT" "$OBSERVED_PAGE_URL"
 

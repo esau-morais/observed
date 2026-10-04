@@ -22,6 +22,10 @@ import { renderReportPage } from '../src/report-page';
 import {
   checkName,
   commentMarker,
+  commitImage,
+  imageRefPrefix,
+  pruneImages,
+  type Target,
   defaultArtifact,
   DeliveryError,
   findComment,
@@ -654,14 +658,14 @@ export type Screenshots = {
 const cropsAlt = 'Before, after and changed pixels, left to right';
 
 // The crops come from the first journey whose screenshots changed. Its line
-// carries the link when no image is shown; other changed journeys are
-// counted.
+// carries the link, which still works where a reader cannot load the image;
+// other changed journeys are counted.
 function screenshotSection(
   result: Comparison,
   screenshots: Screenshots | null,
 ): string | null {
   const image = httpsUrl(screenshots?.image);
-  const file = image === null ? httpsUrl(screenshots?.link) : null;
+  const file = httpsUrl(screenshots?.link);
   const changed = result.journeys.flatMap((journey) => {
     const change =
       journey.comparison.kind === 'available'
@@ -1498,18 +1502,22 @@ function commentMode(value: string): {
       };
 }
 
-// An earlier step uploaded the crops as a workflow artifact. A user token
-// also uploads them for the comment to show; any failure keeps the link and
-// says why.
-// Uploads only for a trusted result that will be commented on, so the
-// token's user never publishes images nobody shows.
+// An earlier step uploaded the crops as a workflow artifact. For the comment
+// to show them, the workflow token commits them to a ref outside refs/heads,
+// or a user token uploads them; any failure keeps the link and says why.
+// Nothing is stored unless a trusted result will be commented on, and never
+// for a fork, whose pixels the repository did not choose to keep.
 export async function deliveredScreenshots(options: {
   trusted: boolean;
   commenting: boolean;
+  fork: boolean;
   path: string;
   link: string;
-  token: string;
+  target: Target;
   server: string;
+  ref: string;
+  cutoff: string;
+  userToken: string;
   repositoryId: string;
 }): Promise<Screenshots | null> {
   if (!options.trusted || options.path === '') {
@@ -1518,35 +1526,103 @@ export async function deliveredScreenshots(options: {
 
   const link = options.link === '' ? null : options.link;
 
-  if (options.token === '' || !options.commenting) {
+  if (!options.commenting) {
     return { image: null, link, note: null };
   }
 
-  try {
-    return {
-      image: await uploadImage({
-        server: options.server,
-        token: options.token,
-        repositoryId: options.repositoryId,
-        name: path.basename(options.path),
-        bytes: await readFile(options.path),
-      }),
-      link,
-      note: null,
-    };
-  } catch (error) {
-    if (!(error instanceof DeliveryError)) {
-      process.stderr.write(
-        `Observed: the image upload failed: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}\n`,
-      );
-    }
-
+  if (options.fork) {
     return {
       image: null,
       link,
-      note: `The comment does not show the screenshot crops. ${error instanceof DeliveryError ? `${error.message}.` : 'An unexpected error; the job log has details.'}`,
+      note: 'The comment links the screenshot crops: Observed stores no images from pull requests from forks.',
     };
   }
+
+  const bytes = await readFile(options.path);
+  const name = path.basename(options.path);
+  let refused: unknown;
+
+  try {
+    const image = await commitImage(options.target, {
+      server: options.server,
+      ref: options.ref,
+      name,
+      bytes,
+    });
+
+    await pruneImages(options.target, options.cutoff).catch((error: unknown) =>
+      process.stderr.write(
+        `Observed: old screenshot refs were not pruned: ${describeError(error)}\n`,
+      ),
+    );
+
+    return { image, link, note: null };
+  } catch (error) {
+    refused = error;
+  }
+
+  if (options.userToken !== '') {
+    try {
+      return {
+        image: await uploadImage({
+          server: options.server,
+          token: options.userToken,
+          repositoryId: options.repositoryId,
+          name,
+          bytes,
+        }),
+        link,
+        note: null,
+      };
+    } catch (error) {
+      refused = error;
+    }
+  }
+
+  if (!(refused instanceof DeliveryError)) {
+    process.stderr.write(
+      `Observed: the screenshot crops were not stored: ${describeError(refused)}\n`,
+    );
+  }
+
+  return {
+    image: null,
+    link,
+    note: imageRefusal(refused, options.userToken !== ''),
+  };
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error
+    ? `${error.name}: ${error.message}`
+    : String(error);
+}
+
+function imageRefusal(error: unknown, uploaded: boolean): string {
+  if (!(error instanceof DeliveryError)) {
+    return 'The comment links the screenshot crops. Storing them failed unexpectedly; the job log has details.';
+  }
+
+  return !uploaded && error.status === 403
+    ? "The comment links the screenshot crops because the workflow token cannot write to this repository. Add contents: write to the workflow's permissions to show them."
+    : `The comment links the screenshot crops. ${error.message}.`;
+}
+
+// One ref per run attempt and comment, under the day it was stored.
+export function imageRef(
+  now: Date,
+  run: { run: string; attempt: string; artifact: string },
+): string {
+  const artifact = run.artifact.replace(/[^A-Za-z0-9_-]+/g, '-');
+
+  return `${imageRefPrefix}${now.toISOString().slice(0, 10)}/${run.run}-${run.attempt}-${artifact}`;
+}
+
+// Refs stored before this day are older than the artifacts they stand in for.
+export function imageCutoff(now: Date, retentionDays: string): string {
+  const days = /^\d+$/.test(retentionDays) ? Number(retentionDays) : 90;
+
+  return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
 }
 
 function link(label: string, url: string | null): string | null {
@@ -1841,16 +1917,25 @@ if (import.meta.main) {
       process.exit(0);
     }
 
+    const now = new Date();
     const screenshots = await deliveredScreenshots({
       trusted:
         Option.isSome(decoded) &&
         context.exitCode ===
           conclusionExitCodes[decoded.value.result.conclusion.kind],
       commenting,
+      fork: source === 'fork',
       path: environment('OBSERVED_CROPS_PATH'),
       link: environment('OBSERVED_CROPS_URL'),
-      token: source === 'fork' ? '' : environment('OBSERVED_IMAGE_TOKEN'),
+      target: workflow,
       server: environment('GITHUB_SERVER_URL'),
+      ref: imageRef(now, {
+        run: environment('GITHUB_RUN_ID'),
+        attempt: environment('GITHUB_RUN_ATTEMPT'),
+        artifact,
+      }),
+      cutoff: imageCutoff(now, environment('OBSERVED_RETENTION_DAYS')),
+      userToken: source === 'fork' ? '' : environment('OBSERVED_IMAGE_TOKEN'),
       repositoryId: environment('GITHUB_REPOSITORY_ID'),
     });
 

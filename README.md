@@ -224,7 +224,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write       # check out, and store the screenshot crops the comment shows
   checks: write         # title this job's check with the verdict
   pull-requests: write  # post and update one comment
 
