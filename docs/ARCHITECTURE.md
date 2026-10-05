@@ -396,7 +396,7 @@ flowchart TD
     P --> C["Capture and compare"]
     C --> U{"Usable evidence?"}
     U -->|No| B["Stop: unknown"]
-    U -->|Yes| A{"Agent changed the recipe?"}
+    U -->|Yes| A{"Recipe changed since the pin?"}
     A -->|Yes| H["Stop: needs a person"]
     A -->|No| F{"Passed?"}
     F -->|Yes| W{"Unchanged since a failure?"}
@@ -421,26 +421,29 @@ The loop pins the base before it starts the agent. A hook pins it on the first
 `SessionStart` in a worktree. A pin resolves the revision to a commit SHA and
 lives in Observed's state directory outside the repository. Nothing re-pins
 while a pin exists, including `SessionStart` on resume, clear or compaction.
-Only a person resets it, with `observed pin --reset`, which pins the base
-again and records the recipe hashes again. The default base is the merge base
+A person resets it with `observed pin --reset`, which pins the base again
+and records the recipe hashes again. An agent with a shell can run it too, so
+`loop.json` records each reset, and the pull request's job, which ignores the
+pin, still judges the change. The default base is the merge base
 of `HEAD` with the remote's default branch, and `--base` sets another.
 Revision arguments that start with `-` are rejected.
 
 The base's expectations judge every check that the base defines, as
-[PRODUCT.md](PRODUCT.md#altered-checks) describes. Recipe differences in
-`result.json` already cover imported test files. After gate 5 they cover
+[PRODUCT.md](PRODUCT.md#altered-checks) describes. `result.json` already
+marks each check whose imported test file changed. After gate 5 they cover
 every field of `observed.json` (see [Decisions](ROADMAP.md#decisions)).
 
 The loop and the hooks also record the hash of `observed.json` and of each
-imported test file when they pin the base. A later run whose files differ
-from those hashes means the agent changed the recipe, and the loop stops with
-"needs a person". That includes a check the agent adds, because only a person
-accepts a new check. The comparison is a stop rule and sets no verdict. A
-recipe difference that the person's changes already held before the loop
-started does not stop it, and the pull request's job judges that difference
-as usual. In a hook session the person and the agent share one worktree, so
-the hooks cannot tell their edits apart. A recipe edit the person makes there
-also stops with "needs a person" until the person resets the pin.
+imported test file when they pin the base. A later run whose files differ from
+those hashes means the recipe changed since the pin, which in the loop's own
+worktree only the agent can do, and the loop stops with "needs a person". That
+includes a check the agent adds, because only a person accepts a new check.
+The comparison is a stop rule and sets no verdict. A recipe difference that
+the person's changes already held before the loop started does not stop it,
+and the pull request's job judges that difference as usual. In a hook session
+the person and the agent share one worktree, so the hooks cannot tell their
+edits apart. A recipe edit the person makes there also stops with "needs a
+person" until the person resets the pin.
 
 A stub behind an unchanged `start`, such as a changed package script or
 fixture, is a source change, not a recipe difference. The change scope lists
@@ -462,17 +465,18 @@ Running the command is the person's authorization for that loop.
    - `claude -p --output-format json --permission-mode dontAsk
      --allowedTools <list>`, on stdin. The list lets print mode edit files
      and run the named commands without a prompt, and `dontAsk` denies the
-     rest. Without a mode, the run can start in `auto`, which drops a bare
-     `Bash` entry ([headless](https://code.claude.com/docs/en/headless),
+     rest. Without a mode, the run can start in `auto`, where a classifier
+     approves actions the list does not name and a bare `Bash` entry is
+     dropped ([headless](https://code.claude.com/docs/en/headless),
      checked 2026-10-05).
    - `codex exec --json -s workspace-write`, on stdin.
    - `opencode run --file`. The help of opencode 2.0.22 lists no stdin input.
 4. When the agent exits, go back to step 2. The loop records the agent's exit
    status and last message and never reads them as a verdict.
 
-The loop sets `OBSERVED_LOOP` in the agent's environment. A Stop hook that
-the person installed in the project's settings sees it and does nothing,
-because `claude -p` runs project hooks unless `--bare` is set.
+`claude -p` runs the hooks in the project and user settings unless `--bare`
+is set. So the loop sets `OBSERVED_LOOP` in the agent's environment, and a
+Stop hook the person installed sees it and does nothing.
 
 When the agent runs in a sandbox, the loop keeps the report and state
 directories outside its writable roots. Codex's `workspace-write` can write to
@@ -496,7 +500,7 @@ from `observe`'s on purpose: a run that checked nothing, `not-checked` or
 | --- | --- | --- |
 | Cancelled | SIGINT or SIGTERM, such as when the person's intent changed. The loop stops the agent's process group and the capture, and keeps the worktree and reports | 1 |
 | Unknown | A capture, a revision or a prerequisite is unavailable, such as an app that does not start or a missing credential, or the run checked nothing | 1 |
-| Needs a person | The agent changed `observed.json` or an imported test file | 4 |
+| Needs a person | `observed.json` or an imported test file changed since the pin | 4 |
 | Flaky | A run passes after a failure with an unchanged snapshot hash, or the confirming rerun fails | 1 |
 | Passed locally | `conclusion.kind` is `no-regression` with at least one check, and a rerun without an edit agrees | 0 |
 | Agent failed | The agent exited nonzero or passed its time limit, and the rerun still fails | 2 |

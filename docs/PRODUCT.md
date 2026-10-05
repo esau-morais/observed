@@ -256,8 +256,9 @@ the protected one.
 | Imported test whose file changed | By the candidate's file, labeled as changed by this change. A failure is not called a regression, and a pass carries the label |
 
 `observed loop` and its hooks, planned for Phase 4, stop with "needs a person"
-when the agent changes `observed.json` or an imported test file. Differences
-that the person's changes held before the loop started follow this table.
+when `observed.json` or an imported test file changes after the base is
+pinned. In a hook session that includes the person's edits. Differences that
+the person's changes held before the pin follow this table.
 
 Observed parses both files before it compares them, so key order,
 whitespace, `check` versus a one-item `checks`, and a journey field left at
