@@ -2,110 +2,157 @@ import { readFile } from 'node:fs/promises';
 
 const wordLimit = 150;
 const headingLimit = 2;
-const fence = /^ {0,3}(```|~~~)[\s\S]*?^ {0,3}\1/gm;
-const image = /!\[[^\]]*\]\([^)\s]+(\s+"[^"]*")?\)|<img\s[^>]*\bsrc=/i;
-const tableDelimiter =
-  /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*$/;
-const fileLine =
-  /^[ \t]*([-*+]|\d+[.)])[ \t]+`?[\w./-]+\.[a-z][a-z0-9]{0,4}`?(?=[\s:(,—-]|$)/gim;
 const processSections = ['review', 'process', 'rounds'];
 
-function opensWithVisual(body: string) {
-  const first = body
-    .split(/\n\s*\n/)
-    .map((block) => block.trim())
-    .find((block) => block !== '');
+// Bun.markdown parses GitHub Flavored Markdown; its callbacks return strings,
+// so each top-level block is wrapped in private-use markers to find the first.
+const open = '\uE000';
+const split = '\uE001';
+const close = '\uE002';
+const imageMark = '\uE003';
+const blockMark = new RegExp(`${open}\\w+${split}|[${open}-${imageMark}]`, 'g');
 
-  if (first === undefined) {
-    return false;
-  }
+const source = String.raw`\ssrc(set)?\s*=\s*("[^"\s]+"|'[^'\s]+'|[^\s"'>]+)`;
+const htmlImage = new RegExp(String.raw`<(img|video)\b[^>]*?${source}`, 'i');
+const htmlVisual = new RegExp(
+  String.raw`^\s*(<(a|p|div|picture)\b[^>]*>\s*)*<(img|video|source)\b[^>]*?${source}`,
+  'i',
+);
+const fileExtensions = new Set(
+  'ts tsx js jsx mjs cjs json jsonc md mdx yml yaml toml css scss html sh lock graphql gql properties txt svg png gif py go rs sql env'.split(
+    ' ',
+  ),
+);
+const fileNames = new Set([
+  'Dockerfile',
+  'Makefile',
+  'LICENSE',
+  'README',
+  'CHANGELOG',
+]);
 
-  const unwrapped = first.replace(/^(\[|<(a|p|div)\b[^>]*>\s*)/i, '');
-  const second = first.split('\n')[1];
+function narratesFile(item: string) {
+  const token = /^[\s`"'*_[]*([^\s`"'*_:,()\]]+)/.exec(item)?.[1] ?? '';
+  const name = token.split('/').at(-1) ?? '';
+  const extension = /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase();
 
   return (
-    /^(```|~~~)mermaid\b/i.test(first) ||
-    /^<(picture|video)\b/i.test(unwrapped) ||
-    new RegExp(`^(${image.source})`, 'i').test(unwrapped) ||
-    (second !== undefined && tableDelimiter.test(second) && image.test(first))
+    fileNames.has(name) ||
+    /^\.[\w-]+$/.test(name) ||
+    (extension !== undefined && fileExtensions.has(extension))
   );
 }
 
-function headings(text: string) {
-  const lines = text.split(/\r?\n/);
+function parse(body: string) {
+  const headings: string[] = [];
+  const items: string[] = [];
+  const block = (kind: string, content: string) =>
+    `${open}${kind}${split}${content}${close}`;
+  const text = (content: string) =>
+    content
+      .replace(blockMark, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .trim();
 
-  return lines.flatMap((line, index) => {
-    const atx = /^ {0,3}#{1,6}(?:[ \t]+(.*))?$/.exec(line);
+  const output = Bun.markdown.render(body, {
+    heading: (children) => {
+      headings.push(text(children));
 
-    if (atx !== null) {
-      return [atx[1] ?? ''];
-    }
+      return block('heading', children);
+    },
+    paragraph: (children) => block('paragraph', children),
+    blockquote: (children) => block('blockquote', children),
+    list: (children) => block('list', children),
+    listItem: (children) => {
+      items.push(text(children));
 
-    const previous = lines[index - 1]?.trim() ?? '';
-    const setext =
-      /^ {0,3}(=+|-+)[ \t]*$/.test(line) &&
-      previous !== '' &&
-      !/^([-*+>|#]|\d+[.)])/.test(previous);
-
-    return setext ? [previous] : [];
+      return ` ${children} `;
+    },
+    table: (children) => block('table', children),
+    th: (children) => ` ${children} `,
+    td: (children) => ` ${children} `,
+    hr: () => block('hr', ''),
+    code: (_children, meta) =>
+      block(meta?.language === 'mermaid' ? 'mermaid' : 'code', ''),
+    html: (children) => block('html', children),
+    image: (_children, meta) => (meta.src.trim() === '' ? '' : imageMark),
+    codespan: (children) => children.replace(/\s+/g, '_'),
+    link: (children) => children,
   });
+
+  const first = new RegExp(`^\\s*${open}(\\w+)${split}([^${close}]*)`).exec(
+    output,
+  );
+
+  return {
+    first: { kind: first?.[1] ?? '', content: first?.[2] ?? '' },
+    headings,
+    items,
+    words: text(output)
+      .split(/\s+/)
+      .filter((word) => /[a-z0-9]/i.test(word)).length,
+  };
 }
 
-function proseWords(text: string) {
-  return text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(new RegExp(image.source, 'gi'), ' ')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/`[^`]*`/g, 'x')
-    .split(/\r?\n/)
-    .filter((line) => !tableDelimiter.test(line))
-    .join('\n')
-    .replace(/\|/g, ' ')
-    .split(/\s+/)
-    .filter((word) => /[a-z0-9]/i.test(word)).length;
+function opensWithVisual(first: { kind: string; content: string }) {
+  switch (first.kind) {
+    case 'mermaid':
+      return true;
+    case 'paragraph':
+      return (
+        first.content.trimStart().startsWith(imageMark) ||
+        htmlVisual.test(first.content)
+      );
+    case 'table':
+      return first.content.includes(imageMark) || htmlImage.test(first.content);
+    case 'html':
+      return htmlVisual.test(first.content);
+    default:
+      return false;
+  }
 }
 
 export function checkPrBody(body: string, options: { visual: boolean }) {
   const problems: string[] = [];
+  const parsed = parse(body);
 
-  if (options.visual && !opensWithVisual(body)) {
+  if (options.visual && !opensWithVisual(parsed.first)) {
     problems.push(
       'open with a visual: a screenshot, a before | after image, the rendered Observed comment, a GIF, or a ```mermaid diagram of the flow or decision',
     );
   }
 
-  const text = body.replace(fence, ' ');
-  const words = proseWords(text);
-
-  if (words > wordLimit) {
+  if (parsed.words > wordLimit) {
     problems.push(
-      `prose is ${words} words; cut to ${wordLimit}. say what changed for people and the evidence, nothing else`,
+      `prose is ${parsed.words} words; cut to ${wordLimit}. say what changed for people and the evidence, nothing else`,
     );
   }
 
-  const titles = headings(text);
-
-  if (titles.length > headingLimit) {
+  if (parsed.headings.length > headingLimit) {
     problems.push(
-      `${titles.length} headings; use at most ${headingLimit} (checks, not verified)`,
+      `${parsed.headings.length} headings; use at most ${headingLimit} (checks, not verified)`,
     );
   }
 
-  const files = text.match(fileLine)?.length ?? 0;
+  const files = parsed.items.filter(narratesFile).length;
 
   if (files > 0) {
     problems.push(`${files} lines narrate files; the diff shows those`);
   }
 
   for (const section of processSections) {
-    if (titles.some((title) => new RegExp(`^${section}\\b`, 'i').test(title))) {
+    if (
+      parsed.headings.some((heading) =>
+        new RegExp(`^${section}\\b`, 'i').test(heading),
+      )
+    ) {
       problems.push(
         `drop the "${section}" section; keep declined or open findings, one line each`,
       );
     }
   }
 
-  return { words, problems };
+  return { words: parsed.words, problems };
 }
 
 if (import.meta.main) {
