@@ -58,7 +58,7 @@ before Observed's, pinned by full commit SHA:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: esau-morais/observed@1d21e79bd7180b54a1e1cd9a1607114dce9e6f87 # v0.2.0-alpha.4
+      - uses: esau-morais/observed@b19393c598268adb68c3d90cdf92f0e683c216ee # v0.2.0-alpha.5
 ```
 
 ## Secrets
@@ -67,7 +67,7 @@ A journey that signs in reads its secret from an environment variable, as in
 `{ "env": "LOGIN_PASSWORD" }`. Pass the repository secret to the action step:
 
 ```yaml
-      - uses: esau-morais/observed@1d21e79bd7180b54a1e1cd9a1607114dce9e6f87 # v0.2.0-alpha.4
+      - uses: esau-morais/observed@b19393c598268adb68c3d90cdf92f0e683c216ee # v0.2.0-alpha.5
         env:
           LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
         with:
@@ -196,7 +196,7 @@ update it. The App needs no server or webhook.
 4. Pass both to the action, and keep `checks: write` in `permissions:`.
 
 ```yaml
-      - uses: esau-morais/observed@1d21e79bd7180b54a1e1cd9a1607114dce9e6f87 # v0.2.0-alpha.4
+      - uses: esau-morais/observed@b19393c598268adb68c3d90cdf92f0e683c216ee # v0.2.0-alpha.5
         with:
           project: .
           base: ${{ github.event.pull_request.base.sha }}

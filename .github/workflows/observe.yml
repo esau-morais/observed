@@ -39,7 +39,8 @@ jobs:
   self-observe:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      # Stores the screenshot crops the comment shows.
+      contents: write
       checks: write
       pull-requests: write
     timeout-minutes: 45
@@ -59,7 +60,7 @@ jobs:
             echo "::notice title=Observed::Not observed: the base has no self-observe fixture, so its viewer can't be captured."
             echo "**Not observed.** The base has no \`tests/fixtures/self-observe/captures.tar.gz\`, so its viewer can't be captured. Self-observation starts once the fixture is on the base branch." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: esau-morais/observed@1d21e79bd7180b54a1e1cd9a1607114dce9e6f87 # v0.2.0-alpha.4
+      - uses: esau-morais/observed@b19393c598268adb68c3d90cdf92f0e683c216ee # v0.2.0-alpha.5
         if: steps.base.outputs.ready == 'true'
         with:
           project: .
