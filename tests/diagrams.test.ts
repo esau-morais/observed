@@ -233,7 +233,7 @@ test('delivery rejects stale manifests and changed image bytes before publicatio
         })
       )?.observation.kind,
     ).toBe('unavailable');
-    expect(() =>
+    const decodeWithSvgPath = (svgPath: string) =>
       Schema.decodeUnknownSync(diagramManifestSchema)({
         schemaVersion: 1,
         resultHash: sha256(''),
@@ -244,14 +244,21 @@ test('delivery rejects stale manifests and changed image bytes before publicatio
               ...observation.pairs[0],
               candidate: {
                 kind: 'rendered',
-                svg: { path: '../secret', sha256: sha256('') },
+                conditions: {
+                  configuration: { theme: 'default' },
+                  configurationHash: sha256(json({ theme: 'default' })),
+                  theme: 'default',
+                  fontFamily: 'sans-serif',
+                },
+                svg: { path: svgPath, sha256: sha256('') },
                 png: { path: 'diagrams/0-candidate.png', sha256: sha256('') },
               },
             },
           ],
         },
-      }),
-    ).toThrow();
+      });
+    expect(() => decodeWithSvgPath('../secret')).toThrow();
+    expect(() => decodeWithSvgPath('diagrams/0-candidate.svg')).not.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
   }
