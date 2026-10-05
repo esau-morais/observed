@@ -3,6 +3,8 @@ import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
+import { decodePng } from './png';
+
 const selectSchema = Schema.Union([
   Schema.String,
   Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -17,6 +19,18 @@ const readingSchema = Schema.Union([
     kind: Schema.Literal('png-different'),
     file: Schema.String,
     other: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('png-bands'),
+    file: Schema.String,
+    other: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('visual-agrees'),
+    file: Schema.String,
+    other: Schema.String,
+    result: Schema.String,
+    path: Schema.Array(selectSchema),
   }),
   Schema.Struct({
     kind: Schema.Literal('timeline-state'),
@@ -260,7 +274,116 @@ function covered(
   return reading.measure === 'count' ? inner[0].count : inner[0].count > 0;
 }
 
+async function pixelDifference(root: string, file: string, other: string) {
+  const [base, candidate] = await Promise.all(
+    [file, other].map(async (name) =>
+      decodePng(await readContainedFile(root, name)),
+    ),
+  );
+  if (
+    base === undefined ||
+    candidate === undefined ||
+    base.width !== candidate.width ||
+    base.height !== candidate.height ||
+    base.channels !== candidate.channels
+  ) {
+    throw new Error('Screenshots differ in size or format');
+  }
+
+  const { width, height, channels } = base;
+  const background = base.rows[0]?.subarray(0, channels) ?? [];
+  const isBackground = (row: Uint8Array, x: number) =>
+    background.every((value, index) => row[x * channels + index] === value);
+  const bands: { top: number; bottom: number }[] = [];
+  const box = { left: width, top: height, right: -1, bottom: -1 };
+  let pixels = 0;
+  for (let y = 0; y < height; y += 1) {
+    const before = base.rows[y] ?? new Uint8Array();
+    const after = candidate.rows[y] ?? new Uint8Array();
+    let content = false;
+    for (let x = 0; x < width; x += 1) {
+      content ||= !isBackground(before, x) || !isBackground(after, x);
+      const start = x * channels;
+      for (let index = start; index < start + channels; index += 1) {
+        if (before[index] !== after[index]) {
+          pixels += 1;
+          box.left = Math.min(box.left, x);
+          box.right = Math.max(box.right, x);
+          box.top = Math.min(box.top, y);
+          box.bottom = Math.max(box.bottom, y);
+          break;
+        }
+      }
+    }
+
+    const last = bands.at(-1);
+    if (content && last?.bottom === y - 1) {
+      last.bottom = y;
+    } else if (content) {
+      bands.push({ top: y, bottom: y });
+    }
+  }
+
+  return { width, height, pixels, box, bands };
+}
+
 async function read(root: string, reading: Reading) {
+  if (reading.kind === 'png-bands') {
+    const { pixels, box, bands } = await pixelDifference(
+      root,
+      reading.file,
+      reading.other,
+    );
+
+    return {
+      bands: bands.length,
+      changed:
+        pixels === 0
+          ? []
+          : bands.flatMap(({ top, bottom }, index) =>
+              top <= box.bottom && box.top <= bottom ? [index + 1] : [],
+            ),
+    };
+  }
+
+  if (reading.kind === 'visual-agrees') {
+    const raw = await pixelDifference(root, reading.file, reading.other);
+    const visual = Schema.decodeUnknownSync(
+      Schema.Struct({
+        kind: Schema.Literal('changed'),
+        width: Schema.Number,
+        height: Schema.Number,
+        differingPixels: Schema.Number,
+        regions: Schema.NonEmptyArray(
+          Schema.Struct({
+            x: Schema.Number,
+            y: Schema.Number,
+            width: Schema.Number,
+            height: Schema.Number,
+          }),
+        ),
+      }),
+    )(
+      select(
+        decodeJson(await readContainedText(root, reading.result)),
+        reading.path,
+      ),
+    );
+
+    return (
+      visual.width === raw.width &&
+      visual.height === raw.height &&
+      visual.differingPixels === raw.pixels &&
+      visual.regions.every(
+        (region) =>
+          region.x >= raw.box.left &&
+          region.y >= raw.box.top &&
+          region.x + region.width - 1 <= raw.box.right &&
+          region.y + region.height - 1 <= raw.box.bottom,
+      )
+    );
+  }
+
   if (reading.kind === 'png-different') {
     const images = await Promise.all(
       [reading.file, reading.other].map((file) =>

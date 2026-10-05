@@ -15,6 +15,8 @@ import {
   type Expectation,
 } from '../scripts/gate-corpus/check';
 import { pairs } from '../scripts/gate-corpus/cases';
+import { decodePng } from '../scripts/gate-corpus/png';
+import { decodePng as decodeComparatorPng, encodeRgbPng } from '../src/png';
 import { evidencePairs } from '../scripts/gate-corpus/evidence-cases';
 import { browserPairs } from '../scripts/gate-corpus/browser-cases';
 import { coveragePair } from '../scripts/gate-corpus/coverage-cases';
@@ -780,3 +782,127 @@ test.each([
     expect(await run({ passed, total: passed })).toBe(false);
   },
 );
+
+test('corpus PNG decoder matches the comparator decoder on real screenshots', async () => {
+  for (const name of ['base', 'heading-change', 'duplicate-request']) {
+    const bytes = await readFile(
+      path.join(import.meta.dirname, `fixtures/screenshots/${name}.png`),
+    );
+    const reference = decodeComparatorPng(bytes);
+    if (reference.kind !== 'decoded') {
+      throw new Error(`Comparator cannot decode ${name}`);
+    }
+
+    const decoded = decodePng(bytes);
+    const rgb = reference.image.rgba.filter((_, index) => index % 4 !== 3);
+    expect(decoded.channels).toBe(3);
+    expect(decoded.width).toBe(reference.image.width);
+    expect(Buffer.concat(decoded.rows).equals(Buffer.from(rgb))).toBe(true);
+  }
+});
+
+test('corpus PNG decoder rejects inputs it cannot read exactly', async () => {
+  const bytes = await readFile(
+    path.join(import.meta.dirname, 'fixtures/screenshots/base.png'),
+  );
+  const header = (offset: number, value: number) => {
+    const changed = Buffer.from(bytes);
+    changed[16 + offset] = value;
+
+    return changed;
+  };
+
+  for (const invalid of [
+    Buffer.from('not a png'),
+    bytes.subarray(0, bytes.length - 20),
+    header(8, 16),
+    header(9, 3),
+    header(12, 1),
+  ]) {
+    expect(() => decodePng(invalid)).toThrow();
+  }
+});
+
+test('intentional copy expectations inspect raw screenshots independently', async () => {
+  const root = await fixture();
+  const copy = pairs.find(({ expectation }) => expectation.gate === 6);
+  const [first, ...rest] = (copy?.expectation.assertions ?? []).filter(
+    ({ actual }) =>
+      actual.kind === 'png-bands' ||
+      actual.kind === 'visual-agrees' ||
+      (actual.kind === 'text' && actual.file.endsWith('snapshot.json')),
+  );
+  if (first === undefined || rest.length !== 4) {
+    throw new Error('Missing screenshot inspection assertions');
+  }
+
+  const expectation: Expectation = {
+    id: 'intentional-copy',
+    gate: 6,
+    reason: 'Raw screenshot inspection',
+    exitCode: 0,
+    assertions: [first, ...rest],
+  };
+  const width = 20;
+  const lines = [2, 6, 10, 14];
+  const image = (changed: number[], size = width) => {
+    const rgb = new Uint8Array(size * 20 * 3).fill(255);
+    for (const [index, y] of lines.entries()) {
+      const x = changed.includes(index + 1) ? 6 : 3;
+      rgb.fill(0, (y * size + x) * 3, (y * size + x + 4) * 3);
+    }
+
+    return encodeRgbPng(size, 20, rgb);
+  };
+
+  const visual = {
+    kind: 'changed',
+    width,
+    height: 20,
+    differingPixels: 6,
+    regions: [{ x: 3, y: 6, width: 7, height: 1 }],
+  };
+  const write = async (
+    candidate: Uint8Array = image([2]),
+    reported: object = visual,
+    copyText = 'Load your saved item list.',
+  ) => {
+    const files: [string, string | Uint8Array][] = [
+      ['journey-1/base/screenshot.png', image([])],
+      ['journey-1/candidate/screenshot.png', candidate],
+      ['journey-1/base/snapshot.json', 'paragraph "Load the saved items."'],
+      ['journey-1/candidate/snapshot.json', `paragraph "${copyText}"`],
+      [
+        'result.json',
+        JSON.stringify({ journeys: [{ comparison: { visual: reported } }] }),
+      ],
+    ];
+    for (const [file, contents] of files) {
+      await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+      await writeFile(path.join(root, file), contents);
+    }
+
+    return (await checkRun(root, expectation, 0)).passed;
+  };
+
+  expect(await write()).toBe(true);
+  for (const [label, candidate, reported, copyText] of [
+    ['identical', image([])],
+    ['second band', image([2, 3])],
+    ['size', image([2], width + 1)],
+    ['truncated', image([2]).subarray(0, 40)],
+    ['count', undefined, { ...visual, differingPixels: 7 }],
+    [
+      'region',
+      undefined,
+      { ...visual, regions: [{ x: 3, y: 10, width: 7, height: 1 }] },
+    ],
+    ['identical kind', undefined, { kind: 'identical', width, height: 20 }],
+    ['unavailable', undefined, { kind: 'unavailable', reason: 'No image' }],
+    ['size-differs', undefined, { kind: 'size-differs' }],
+    ['below-threshold', undefined, { ...visual, kind: 'below-threshold' }],
+    ['old copy', undefined, undefined, 'Load the saved items.'],
+  ] as const) {
+    expect.soft(await write(candidate, reported, copyText), label).toBe(false);
+  }
+});

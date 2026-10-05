@@ -20,6 +20,11 @@ const textCheck = {
   expectedText: 'Items loaded',
 } as const;
 
+const screenshots = {
+  file: 'journey-1/base/screenshot.png',
+  other: 'journey-1/candidate/screenshot.png',
+};
+
 export const project = {
   schemaVersion: 1,
   name: 'Gate corpus',
@@ -561,6 +566,36 @@ export const pairs: readonly Pair[] = [
         actual: resultReading(['journeys', 0, 'comparison', 'visual', 'kind']),
         expected: 'changed',
       },
+      {
+        label: 'raw pixel difference stays on the description line',
+        actual: { kind: 'png-bands', ...screenshots },
+        expected: { bands: 4, changed: [2] },
+      },
+      {
+        label: 'reported visual change agrees with the raw pixels',
+        actual: {
+          kind: 'visual-agrees',
+          ...screenshots,
+          result: 'result.json',
+          path: ['journeys', 0, 'comparison', 'visual'],
+        },
+        expected: true,
+      },
+      ...(
+        [
+          ['base', 'Load the saved items.', true],
+          ['candidate', 'Load your saved item list.', true],
+          ['candidate', 'Load the saved items.', false],
+        ] as const
+      ).map(([side, includes, expected]) => ({
+        label: `${side} raw snapshot ${expected ? 'has' : 'lacks'} "${includes}"`,
+        actual: {
+          kind: 'text',
+          file: `journey-1/${side}/snapshot.json`,
+          includes,
+        } as const,
+        expected,
+      })),
     ],
   ),
   pair(
