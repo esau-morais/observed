@@ -94,6 +94,11 @@ function generatedPair(fault: 'error' | 'data', generated: boolean): Pair {
   }
 
   if (generated) {
+    const connection: Selectors = [
+      'changeMap',
+      'connections',
+      { key: 'kind', equals: 'ran-in' },
+    ];
     assertions.push(
       assert(
         'proposal targets',
@@ -115,8 +120,28 @@ function generatedPair(fault: 'error' | 'data', generated: boolean): Pair {
         ['journeys', 1, 'checks', 'length'],
         3,
       ),
-      assert('changed line ran', [...scope, 'lines', 'ran'], [[2, 2]]),
-      assert('no changed line missed', [...scope, 'lines', 'notRan'], []),
+      assert(
+        'coverage connection names changed file',
+        [...connection, 'from'],
+        `file:${file}`,
+      ),
+      assert(
+        'coverage connection names generated journey',
+        [...connection, 'to'],
+        'journey:2',
+      ),
+      assert('changed line ran', [...connection, 'ran'], 1),
+      assert('no changed line missed', [...connection, 'notRan'], 0),
+      assert(
+        'changed line position',
+        [
+          'changeMap',
+          'blocks',
+          { key: 'id', equals: `file:${file}` },
+          'changedLines',
+        ],
+        [[2, 2]],
+      ),
     );
     for (const id of [
       'generated-browser-errors',
@@ -135,6 +160,17 @@ function generatedPair(fault: 'error' | 'data', generated: boolean): Pair {
     }
 
     for (const side of ['base', 'candidate'] as const) {
+      for (const [field, expected] of [
+        ['targets', [file]],
+        ['reason', 'The saved summary journey does not use this action.'],
+      ] as const) {
+        assertions.push({
+          label: `${side} raw proposal ${field}`,
+          actual: json(`journey-2/${side}/recipe.json`, ['generated', field]),
+          expected,
+        });
+      }
+
       const errors = fault === 'error' && side === 'candidate' ? 1 : 0;
       assertions.push({
         label: `${side} browser error count`,
