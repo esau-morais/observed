@@ -420,18 +420,18 @@ merges, not report wording.
 The loop pins the base before it starts the agent. A hook pins it on the first
 `SessionStart` in a worktree. A pin resolves the revision to a commit SHA and
 lives in Observed's state directory outside the repository. Nothing re-pins
-while a pin exists, including `SessionStart` on resume, clear or compaction.
-A person resets it with `observed pin --reset`, which pins the base again
-and records the recipe hashes again. An agent with a shell can run it too, so
+while a pin exists, including `SessionStart` on resume, clear or compaction. A
+person resets it with `observed pin --reset`, which pins the base again and
+records the recipe hashes again. An agent with a shell can run it too, so
 `loop.json` records each reset, and the pull request's job, which ignores the
-pin, still judges the change. The default base is the merge base
-of `HEAD` with the remote's default branch, and `--base` sets another.
-Revision arguments that start with `-` are rejected.
+pin, still judges the change. The default base is the merge base of `HEAD`
+with the remote's default branch, and `--base` sets another. Revision
+arguments that start with `-` are rejected.
 
 The base's expectations judge every check that the base defines, as
-[PRODUCT.md](PRODUCT.md#altered-checks) describes. `result.json` already
-marks each check whose imported test file changed. After gate 5 they cover
-every field of `observed.json` (see [Decisions](ROADMAP.md#decisions)).
+[PRODUCT.md](PRODUCT.md#altered-checks) describes. `result.json` already marks
+each check whose imported test file changed. After gate 5, recipe differences
+cover every field of `observed.json` (see [Decisions](ROADMAP.md#decisions)).
 
 The loop and the hooks also record the hash of `observed.json` and of each
 imported test file when they pin the base. A later run whose files differ from
