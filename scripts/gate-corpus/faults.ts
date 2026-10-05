@@ -1,5 +1,11 @@
 import { Effect, Schema } from 'effect';
-import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
 import { checkRun } from './check';
 import { pairs } from './cases';
@@ -157,6 +163,10 @@ await Effect.runPromise(
         path.join(tool, 'node_modules'),
         path.join(copy, 'node_modules'),
       );
+      await appendFile(
+        path.join(copy, '.git/info/exclude'),
+        '\n/node_modules\n',
+      );
       const filename = path.join(copy, fault.file);
       const before = await readFile(filename, 'utf8');
       if (before.split(fault.from).length !== 2) {
@@ -196,6 +206,30 @@ await Effect.runPromise(
           pair.expectation,
           exit,
         );
+        const [firstRaw, ...otherRaw] = pair.expectation.assertions.flatMap(
+          (assertion) =>
+            assertion.raw === undefined
+              ? []
+              : [{ ...assertion, actual: assertion.raw }],
+        );
+        if (firstRaw === undefined) {
+          throw new Error('Request fault needs independent raw readings');
+        }
+
+        const raw = await checkRun(
+          path.join(pairDirectory, 'run/report'),
+          {
+            ...pair.expectation,
+            exitCode: 0,
+            assertions: [firstRaw, ...otherRaw],
+          },
+          0,
+        );
+        await writeFile(path.join(directory, 'raw-checked.json'), json(raw));
+        if (!raw.passed) {
+          throw new Error(`Raw producer readings failed: ${fault.id}`);
+        }
+
         if (execution.exitCode !== (result.passed ? 0 : 1)) {
           throw new Error(`Corpus did not finish normally: ${fault.id}`);
         }
