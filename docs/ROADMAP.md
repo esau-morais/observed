@@ -12,7 +12,7 @@ contracts, and this file owns sequence, status and decisions.
 | 2. Repeatable use | Executed recipes, isolated runs, one CI trigger, export. Fresh-checkout runs need no recurring setup help, and stale or failed captures never pass | Complete. An agent set up an unfamiliar app from the README. No person has |
 | 3. Extensions | Several checks and journeys, React renders, browser timing, accessibility, browser errors, API operations, Playwright import. The plan was one extension chosen from pilot demand | Shipped in #26 to #33, before any pilot |
 | 3a. MVP | Change scope drawn as a change map and a repository map, protected expectations, generated journeys, agent descriptions, replay, the writing rules, and the independent gate corpus, in the [order below](#phase-3a-order). Every [MVP release gate](#mvp-release-gates) holds | Next. The writing rules and protected expectations are built |
-| 4. Bounded repair | Patch agent driven by the evidence handoff, isolated patches, protected checks, budgets, independent reruns, and an agent command in CI for generated journeys. Repair stops correctly and improves on handing the evidence to the user's agent | Starts once gates 1 to 8 hold |
+| 4. Verification harness | `observed mcp`, Stop hooks and `observed loop` around the user's own agent, in the [order below](#phase-4-order). Observed runs the change, judges it by the base's expectations, reruns it and decides when a loop stops. The agent owns the model loop. Each stop condition holds on the gate corpus, and the loop improves on handing the evidence to the user's agent | Starts once gates 1 to 8 hold |
 | Later | Database, jobs, traces, more frameworks, proof adapters, each tied to a recurring workflow | Not started |
 
 Phase 3a comes first because Observed runs saved journeys on base and
@@ -42,6 +42,25 @@ needs items 1, 2 and 5, and gate 10 needs items 1 to 5. Generated journeys
 need items 1 and 2, not item 4, so presentation work does not hold back gates
 3, 5 and 7. Each item adds the gate corpus pairs for the gates it serves.
 
+### Phase 4 order
+
+1. `observed loop` with a local agent. It owns the worktree, the report
+   directory and the budget, and the scripted pairs drive it
+2. Stop hooks for Claude Code and Codex, with the loop's stop table
+3. `observed mcp`, so agents call `observe`, `check` and `evidence` during a
+   task
+4. The loop in CI with a configured agent command. The agent pushes a
+   commit, and the pull request's job judges it. Generated journeys run there
+   as their own mode
+
+Each item adds gate corpus pairs driven by a scripted agent command, so the
+pairs need no model: an agent that fixes the seeded fault, one that cannot,
+one that edits the check, one that points `start` at a stub server, one that
+edits an imported test, one that writes `result.json` by hand, one with a
+flaky check, one that changes nothing, and a cancelled run. Each
+must end in the stop that
+[ARCHITECTURE.md](ARCHITECTURE.md#verification-harness-phase-4) defines.
+
 ## MVP release gates
 
 No release drops the alpha label until every gate holds. Each gate is a base
@@ -55,7 +74,7 @@ producer output, without importing the comparator.
 | 2. Seeded fault | One fault per shipped evidence kind, inside a saved journey | Regression, values equal to the raw producer output, exit 2 | Local request and text pairs pass against raw output. Other kinds still need pairs |
 | 3. Change outside saved journeys | Two faults in captured source that no saved journey exercises: one that raises an error, one that returns wrong data | Without an agent, the scope lists the file as not observed. With one, a generated journey runs the changed lines. A baseline check reports the error. The wrong data is listed as a difference and sets no verdict | Probe at `ad28490` failed: "No regression". New corpus pair pending |
 | 4. Missing evidence | Failed base capture, deleted artifact, stale revision, older schema, unsupported collector | Unavailable or unknown, never a pass, exit 1 | Five copied-capture probes pass. Unknown collector kind, stale revision identity and a real startup failure still need pairs |
-| 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey | The result names each altered check and judges it by the base's expectation, with the proposed version beside it | Three local pairs pass: relaxed check, removed check, rewritten journey. Remaining cases in the corpus table |
+| 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey, or changes how the app is set up or started | The result names each altered check and judges it by the base's expectation, with the proposed version beside it. A changed journey, `source`, `setup` or `start` makes every check in its scope unknown, with both versions shown | Three local pairs pass: relaxed check, removed check, rewritten journey. Remaining cases in the corpus table |
 | 6. Intentional change | A visual or copy change with passing checks | An observation, not a regression | Local intentional-copy pair passes; result reports visual change with passing checks |
 | 7. No captured change | A change to docs or to files outside `source.paths` | Says no captured file changed, lists the outside files, and claims nothing about the change | Local outside-source pair passes its data checks. Rendered wording assertion pending |
 | 8. Observed's own faults | Known faults seeded into copies of the comparator and collector | Unit tests or the gate corpus fail on each fault | Probe at `ad28490` failed for the one fault tried. With "no regression" ranked above "unavailable", all 360 unit tests passed |
@@ -127,6 +146,11 @@ release, like `observed-trial-express` for GitHub.
 | 2026-10-05 | A comparison journey with recorded steps on both sides opens with a scene drawn from its evidence, after Kit Langton's PR explainers. The viewer has it first; the GIF for the comment and Slack follows | [Karpathy's scale](https://x.com/karpathy/status/2105819303471976479), which the maintainer adopted on 2026-10-03, puts explainer videos above text and diagrams. A scene built from result.json needs no model and claims nothing the evidence does not hold |
 | 2026-10-05 | The scene ships to the comment and Slack as a GIF that agent-browser screenshots frame by frame and `src/gif.ts` encodes. Remotion and HyperFrames stay out | Remotion bills each organization that renders in CI. HyperFrames adds 141 MB, Node 22 and FFmpeg for formats GitHub cannot show inline from a URL. See [scene export](ARCHITECTURE.md#scene-export) |
 | 2026-10-05 | Narration waits. When built, it is optional, uses a stock or user-supplied voice, never a clone of someone else, and labels an agent-written script as interpretation | A GIF carries no sound, and a video in a comment needs a user's upload. Captions already carry every fact |
+| 2026-10-05 | Observed is a verification harness, not an agent harness. It runs the change, records it, judges it by the base revision's expectations, reruns it and decides when a loop stops. Claude Code, Codex, opencode or another agent owns the prompts, tool calls and edits. This rules out a model loop inside Observed, a model provider call from the loop or the hooks, prompts beyond the deterministic handoff, and any result that rests on the agent's word | The maintainer agreed with the direction on 2026-10-05, pending research, and this row and the three below record that research. Playwright MCP, Chrome DevTools MCP and agent-browser already show agents the running app, and Stop-hook plugins and Aider's `--auto-test` already keep an agent going. Storybook's MCP server runs story tests for the agent to fix and rerun, with the tests in the agent's tree ([Storybook MCP](https://storybook.js.org/docs/ai/mcp/overview)). [Harbor](https://harborframework.com/docs/tasks/verifier), from the Terminal-Bench team, runs a task's tests only after the agent finishes, in the agent's sandbox or a separate one. None of these judges runtime evidence by expectations the agent cannot edit, with a rerun the tool owns. [SWE-bench](https://github.com/SWE-bench/SWE-bench/blob/main/swebench/harness/run_evaluation.py) grades this way, after the agent finishes |
+| 2026-10-05 | The MCP server offers tools only, over stdio, on protocol revisions 2025-11-25 and 2025-06-18, built on Effect's `McpServer`. Resources, prompts and the Tasks extension wait for client support | opencode documents only tools, Codex documents neither resources nor prompts, and the MCP client matrix does not list Tasks. A probe served a tool from the pinned `effect` under Bun. See [ARCHITECTURE.md](ARCHITECTURE.md#mcp-server) |
+| 2026-10-05 | The loop and hooks judge by a base commit pinned at start, count the attempts themselves, and rerun after every agent exit. A local pass never replaces the pull request's job | Claude Code resets its Stop-hook cap whenever the agent calls a tool, and a capped `claude -p` run still reported success. Codex 0.160.0 blocked 81 times without a limit. An agent with a shell can edit hook settings and `observed.json`. See [ARCHITECTURE.md](ARCHITECTURE.md#local-results-and-the-ci-verdict) |
+| 2026-10-05 | Phase 4 stays after gates 1 to 8, and starts with the loop. The MCP server comes after the hooks | A loop drives a candidate toward its checks, so it is only as sound as they are. Without the loop, an MCP tool gives an agent little that `observe --json` in its shell does not |
+| 2026-10-05 | Recipe differences cover every field of `observed.json`, not only journeys. A changed field outside the journeys, such as `source`, `setup` or `start`, makes every check unknown, as an altered journey does. Gate 5 includes it | Both captures use the working tree's `observed.json`, so a change could point `start` at a stub server and the pull request job would pass |
 
 The maintainer delegated the 2026-09-29 rows, every 2026-10-03 row after
 the first, and the 2026-10-05 rows. Reverse any of them here. Two things stay with the maintainer. One

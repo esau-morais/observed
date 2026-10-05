@@ -252,7 +252,12 @@ the protected one.
 | Journey altered | Every check in that journey is unknown, with both versions of each changed field shown. The fields are path, ready, steps, collectors, viewport, browser arguments, allowed origins, and maximum age |
 | Journey removed | Every check in that journey is unknown, because neither capture ran it |
 | No usable `observed.json` on the base | Every check counts as added, and the result gives the reason |
+| A field outside the journeys altered, such as `source`, `setup` or `start` | Every check is unknown, with both versions of each changed field shown. Planned with gate 5 |
 | Imported test whose file changed | By the candidate's file, labeled as changed by this change. A failure is not called a regression, and a pass carries the label |
+
+`observed loop` and its hooks, planned for Phase 4, stop with "needs a person"
+when the agent changes `observed.json` or an imported test file. Differences
+that the person's changes held before the loop started follow this table.
 
 Observed parses both files before it compares them, so key order,
 whitespace, `check` versus a one-item `checks`, and a journey field left at
@@ -288,7 +293,7 @@ asks the result to claim nothing about the change.
 
 | Loop | What changes | First release | Later |
 | --- | --- | --- | --- |
-| Self-correction | The application's code, after a failed check | The evidence handoff prompt for the user's own agent | [Bounded repair](ARCHITECTURE.md#bounded-repair-later): patch, new run, same protected checks |
+| Self-correction | The application's code, after a failed check | The evidence handoff prompt for the user's own agent | [Verification harness](ARCHITECTURE.md#verification-harness-phase-4): the user's agent edits, Observed reruns under the same protected checks |
 | Self-improvement | The journeys, after a change that is not observed | Generated journeys, run locally through the agent's guide | The same loop in CI through a configured agent command |
 
 Neither loop may edit the expectation that judges it. A repair that changes a
