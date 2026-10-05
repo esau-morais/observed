@@ -16,8 +16,9 @@ gate needs three projects, at least one not built with React.
 
 ### Before the session
 
-- The participant picks a web application they can run locally. It can be
-  their own or a public repository, as long as no Observed maintainer wrote it.
+- The participant picks a web application they can run locally and did not
+  write, such as a public repository or a colleague's project. No Observed
+  maintainer may have written it either.
 - Their machine runs Linux x64 or macOS, with Git, the project's own toolchain
   and their coding agent installed. Bun, the Observed CLI and its browser are
   part of the session, because the README covers them.
@@ -68,6 +69,7 @@ Copy one per project.
 | Machine: operating system and architecture | |
 | Agent and model | |
 | Project URL and commit; React or not | |
+| The participant and the maintainers did not write it: confirmed by | |
 | Start: the time they open the README | |
 | Observed installed, browser included | |
 | `observed.json` accepted, and who wrote it | |
@@ -92,28 +94,6 @@ prevented. Gate 9 holds when three projects, at least one not built with React,
 reach a first report without help. Record the date, the projects and the
 median time to first report in the gate's row in the roadmap, and link the
 sheets.
-
-### Agent dry run
-
-On 2026-10-05 a coding agent with no Observed context followed the
-participant's path with 0.2.0-alpha.7 on Ubuntu 24.04, on
-[mdn/todo-react](https://github.com/mdn/todo-react) at `fb6d245` and
-[mdn/todo-vue](https://github.com/mdn/todo-vue) at `160ae30`. Both reached a
-first report from `observed skill` alone, in 2.5 and 1.5 minutes after the
-agent started. Chrome was already installed, so these times leave out the
-browser download.
-
-Both first captures failed because Ubuntu 24.04 blocks Chrome's sandbox, and
-the failure said only that a `bun` process exited with code 1. Each agent found
-the reason in a transcript and the fix in `observed skill`. Since
-[#113](https://github.com/esau-morais/observed/pull/113) the failure quotes
-the browser's error and names the setting. The other stalls belonged to
-the projects: both Vite configurations set `base` to a public URL, which the
-agents overrode on the command line, and `observed schema` printed about 186 KB
-for an agent that only needed the step and check shapes.
-
-An agent run says nothing about how people set Observed up. It only removes the
-stalls an agent hits before a person meets them.
 
 ## Gate 10: reading the result
 
@@ -151,19 +131,28 @@ done
 
 Each pair's `summary.json` must show `"passed": true`. Then compare every
 report with the key. This prints the result, each changed file's relation and
-the checks behind it, and each check's verdict:
+the checks behind it, how many changed lines ran, and each check's verdict,
+proposed version and detail:
 
 ```bash
-jq -r '.conclusion.kind,
-  (.changeScope.files[] | [.path, .relation, (.checks | join(","))] | join(" ") | rtrimstr(" ")),
-  (.journeys[].checks[] | "\(.id) \(.verdict)")' \
+jq -r -f scripts/gate-corpus/reader-key.jq \
   evidence/readers/relaxed-check/relaxed-check/run/report/result.json
 ```
 
-The output must match the "Data" lines of that report's key below. If any line
-differs, Observed's output has changed since the key was written. Stop and
-rewrite that key from the new `result.json` and raw captures before anyone
-reads.
+The output must match the "Data" block of that report's key below, line for
+line. Report C's amounts come from the raw text capture instead. This must
+print `$120.00`, then `$12.00`:
+
+```bash
+for side in base candidate; do
+  jq -r .data.text \
+    "evidence/readers/outside-data-generated/outside-data-generated/run/captures/journey-2/$side/text-1.json"
+done
+```
+
+If anything differs, Observed's output has changed since the key was written.
+Stop and rewrite that key from the new `result.json`, the raw captures and the
+fixture's diff before anyone reads.
 
 Open each report with `bun run view <pair directory>/<pair>/run/report` and
 show the participant only the browser tab.
@@ -204,6 +193,7 @@ no-regression
 public/gate-3-error.js not-observed
 public/gate-3-error.js.map not-observed
 summary passed
+  Matched 1 element(s); text: "One invoice is ready".
 ```
 
 - Checked: no changed file. The one check, "One invoice is ready", passed on
@@ -225,10 +215,15 @@ Data:
 regression
 public/gate-3-error.js checked generated-browser-errors
 public/gate-3-error.js.map not-observed
+public/gate-3-error.js ran 1 of 1 changed lines
 summary passed
+  Matched 1 element(s); text: "One invoice is ready".
 generated-browser-errors regression
+  No new browser errors passed on base and failed on candidate. Base: 0; candidate: 1. No new page or console errors, including navigation and readiness, compared with base.
 generated-accessibility passed
+  No serious or higher violations on the candidate.
 generated-server-errors passed
+  No new errors compared with base.
 ```
 
 - Checked: `public/gate-3-error.js`, by "No new browser errors" in the generated
@@ -250,10 +245,15 @@ Data:
 no-regression
 public/gate-3-data.js exercised
 public/gate-3-data.js.map not-observed
+public/gate-3-data.js ran 1 of 1 changed lines
 summary passed
+  Matched 1 element(s); text: "One invoice is ready".
 generated-browser-errors passed
+  No new errors compared with base.
 generated-accessibility passed
+  No serious or higher violations on the candidate.
 generated-server-errors passed
+  No new errors compared with base.
 ```
 
 - Checked: no changed file.
@@ -277,8 +277,12 @@ Data:
 regression
 app.ts exercised
 observed.json outside-captured-source
+app.ts ran 1 of 1 changed lines
 one-request regression
+  Each Load items click sends one request passed on base and failed on candidate. Base: 1; candidate: 2. Exactly 1 GET /api/items request(s) with status 200.
+  proposed passed: Exactly 2 GET /api/items request(s) with status 200.
 loaded-text passed
+  Matched 1 element(s); text: "Items loaded".
 ```
 
 - Checked: no changed file is linked to a check. `app.ts` ran, 1 of 1 changed
@@ -302,8 +306,11 @@ Data:
 regression
 app.ts exercised
 observed.json outside-captured-source
+app.ts ran 1 of 1 changed lines
 loaded-text passed
+  Matched 1 element(s); text: "Items loaded".
 one-request regression
+  Each Load items click sends one request passed on base and failed on candidate. Base: 1; candidate: 2. Exactly 1 GET /api/items request(s) with status 200.
 ```
 
 - Checked: no changed file is linked to a check. `app.ts` ran, 1 of 1 changed
@@ -325,8 +332,13 @@ Data:
 unavailable
 app.ts exercised
 observed.json outside-captured-source
+app.ts ran 1 of 1 changed lines
 one-request unknown
+  This change alters the journey's steps, so the captures cannot apply the base's checks.
+  proposed passed: Exactly 1 GET /api/items request(s) with status 200.
 loaded-text unknown
+  This change alters the journey's steps, so the captures cannot apply the base's checks.
+  proposed passed: Exactly one #result element with text "Items loaded".
 ```
 
 - Checked: nothing. Both checks are unknown, because the journey changed and
