@@ -31,8 +31,8 @@ The runner saves each fixture's commits, command output, exit code, raw captures
 exported report, and checker result. `summary.json` lists completed pair results.
 Setup or Git errors stop the run with a nonzero exit before the summary is
 written. A failed assertion or unreadable artifact makes the checker exit 1. Capture directories
-are retained, including failed runs. The missing-evidence runner modifies only
-copies of a completed pair.
+are retained, including failed runs. The missing-evidence runner commits its expectations in the output directory
+before modifying copies of a completed pair.
 
 The checker tests run in `bun run test` and CI. Browser pairs currently run
 locally through `bun run gates`; CI execution of the full corpus is pending.
@@ -68,7 +68,7 @@ after 15 minutes, with a 10-second termination grace period.
 | 1 | `correct-change` | Exit 0, passing checks, HAR count 1 on each side, exercised `app.ts` | Check changed-line mapping against raw coverage |
 | 2 | `request-fault`, `text-fault` | Exit 2, regression, exact HAR counts or raw element text on both sides | Accessibility, browser errors, performance, React, API operations, imported Playwright; observation-only kinds need separate expectations |
 | 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
-| 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window` | Exit 1, unavailable conclusion, unknown base evidence, exact failure reasons, candidate HAR | Unknown collector kind; stale revision identity; a real base startup failure. The current failed-base pair changes capture metadata. The stale pair asserts both age and interval errors; it does not isolate age detection |
+| 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity`, `startup-failure` | Exit 1, unavailable comparison, unknown missing evidence, exact failure reasons, candidate HAR; real startup log and process exit; preserved selection hash rejects an older revision | The identity pair covers saved-report revalidation, not GitHub event freshness. The age pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text, removed-journey pair, and a pair that changes `source`, `setup` or `start` |
 | 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
 | 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR; saved report says no captured file changed, lists README.md, and limits checks to their scopes | Wording assertions cover the Markdown report; other delivery surfaces are not checked by this pair |
@@ -115,6 +115,9 @@ make the file's relation checked through a stack frame; that relation alone
 does not establish execution coverage.
 
 ## Missing evidence
+
+Run the startup pair with `bun run gates evidence/startup-01 startup-failure`;
+the other seven probes run through `gates:missing`.
 
 The startup pair requires a real base process to exit before readiness. Its
 base checks are unknown and the comparison is unavailable with exit 1. Candidate

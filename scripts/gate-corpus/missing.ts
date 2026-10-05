@@ -131,10 +131,52 @@ await Effect.runPromise(
 
     const source = path.resolve(sourceArgument);
     const output = path.resolve(outputArgument);
+    const selected = decode(
+      await readFile(path.join(source, 'selection.json'), 'utf8'),
+    );
+    const older = decode(
+      await readFile(path.join(source, 'journey-1/base/capture.json'), 'utf8'),
+    );
+    const expectations = faults.map((fault): Expectation => {
+      const expected = expectation(fault);
+      if (fault !== 'stale-revision-identity') {
+        return expected;
+      }
+
+      return {
+        ...expected,
+        assertions: [
+          ...expected.assertions,
+          {
+            label: 'selected candidate manifest hash stays pinned',
+            actual: {
+              kind: 'json',
+              file: 'selection.json',
+              path: ['journeys', 0, 'candidate', 'manifestHash'],
+            },
+            expected: select(selected, [
+              'journeys',
+              0,
+              'candidate',
+              'manifestHash',
+            ]),
+          },
+          {
+            label: 'substituted capture belongs to the older revision',
+            actual: {
+              kind: 'json',
+              file: 'journey-1/candidate/capture.json',
+              path: ['source', 'revision', 'commit'],
+            },
+            expected: select(older, ['source', 'revision', 'commit']),
+          },
+        ],
+      };
+    });
     await mkdir(output);
     await writeFile(
       path.join(output, 'expectations.json'),
-      json(faults.map(expectation)),
+      json(expectations),
       { flag: 'wx' },
     );
     for (const args of [
@@ -184,12 +226,16 @@ await Effect.runPromise(
     );
     const results = [];
 
-    for (const fault of faults) {
+    for (const [index, fault] of faults.entries()) {
       const directory = path.join(output, fault);
       const base = path.join(directory, 'base');
       const candidate = path.join(directory, 'candidate');
       const report = path.join(directory, 'report');
-      const expected = expectation(fault);
+      const expected = expectations[index];
+      if (expected === undefined) {
+        throw new Error(`Missing expectation: ${fault}`);
+      }
+
       await mkdir(directory);
       await writeFile(path.join(directory, 'expected.json'), json(expected), {
         flag: 'wx',
