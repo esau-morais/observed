@@ -1,5 +1,5 @@
 import { BunServices } from '@effect/platform-bun';
-import { Effect, Schema } from 'effect';
+import { Cause, Effect, Exit, Option, Schema } from 'effect';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,7 +7,7 @@ import { expect, test } from 'vitest';
 import { agentBrowserFailure } from '../src/capture/agent-browser';
 import { captureApplication } from '../src/capture/coordinator';
 import { captureSchema } from '../src/capture/model';
-import { ProcessFailure } from '../src/capture/process';
+import { ProcessFailure, processOutput } from '../src/capture/process';
 import { loadProject } from '../src/project';
 
 async function captureSetup(
@@ -110,13 +110,13 @@ test('a capture that times out during setup names the step', async () => {
   }
 });
 
-const failure = (stdout: string) =>
+const failure = (stdout: string, stderr = '') =>
   new ProcessFailure({
     command: process.execPath,
     exitCode: 1,
     message: 'unused',
     stdout,
-    stderr: '',
+    stderr,
   });
 
 // agent-browser 0.38.1 stdout when Chrome cannot start its sandbox (Ubuntu 24.04).
@@ -133,15 +133,41 @@ const sandboxStdout = `${JSON.stringify({
 
 test('a browser that cannot start its sandbox names the browserArguments fix', () => {
   expect(agentBrowserFailure('open', failure(sandboxStdout)).message).toBe(
-    'agent-browser open exited with code 1: Chrome found no usable sandbox. Set capture.browserArguments to ["--no-sandbox"]; see transcript.jsonl',
+    'agent-browser open exited with code 1: Chrome found no usable sandbox. capture.browserArguments ["--no-sandbox"] turns the sandbox off; see transcript.jsonl',
   );
 });
 
 test('another agent-browser failure quotes the first line of its error', () => {
-  const stdout = `${JSON.stringify({ success: false, error: '\nElement not found: #save\nmore' })}\n`;
+  const stdout = `${JSON.stringify({ success: false, error: '\n\u001b[31mElement not found: #save\u001b[0m\nmore' })}\n`;
 
   expect(agentBrowserFailure('click', failure(stdout)).message).toBe(
     'agent-browser click exited with code 1: Element not found: #save; see transcript.jsonl',
+  );
+});
+
+test('a failed batch quotes the error of the command that failed', () => {
+  const stdout = `${JSON.stringify([
+    { command: ['open', 'about:blank'], error: null, success: true },
+    {
+      command: ['fill', '#password'],
+      error: 'Element not found: #password',
+      success: false,
+    },
+  ])}\n`;
+
+  expect(agentBrowserFailure('batch', failure(stdout)).message).toBe(
+    'agent-browser batch exited with code 1: Element not found: #password; see transcript.jsonl',
+  );
+});
+
+test('a launcher failure on stderr is quoted', () => {
+  expect(
+    agentBrowserFailure(
+      'open',
+      failure('', 'Error: No binary found for linux-x64\n'),
+    ).message,
+  ).toBe(
+    'agent-browser open exited with code 1: Error: No binary found for linux-x64; see transcript.jsonl',
   );
 });
 
@@ -151,4 +177,49 @@ test('an agent-browser failure without a JSON error points to the transcript', (
   ).toBe(
     'agent-browser open exited with code 1; see transcript.jsonl for original output',
   );
+});
+
+test('a failed agent-browser command keeps concealed values out of its message, stdout and transcript', async () => {
+  const directory = await mkdtemp(
+    path.join(tmpdir(), 'observed-agent-browser-'),
+  );
+  const transcript = path.join(directory, 'transcript.jsonl');
+  const secret = 'fill-secret-4471';
+  const output = JSON.stringify({
+    success: false,
+    error: `Could not type ${secret}`,
+  });
+
+  try {
+    const exit = await Effect.runPromiseExit(
+      processOutput({
+        command: process.execPath,
+        args: [
+          '-e',
+          `console.log(${JSON.stringify(output)}); process.exit(1);`,
+        ],
+        cwd: directory,
+        transcript,
+        concealed: [secret],
+      }).pipe(Effect.provide(BunServices.layer)),
+    );
+    const error = Exit.isFailure(exit)
+      ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+      : undefined;
+
+    if (!(error instanceof ProcessFailure)) {
+      throw new Error('The failing command did not end in a ProcessFailure');
+    }
+
+    const message = agentBrowserFailure('fill', error).message;
+
+    expect(message).toMatch(
+      /^agent-browser fill exited with code 1: Could not type /,
+    );
+    expect(message).not.toContain(secret);
+    expect(error.stdout).not.toContain(secret);
+    expect(await readFile(transcript, 'utf8')).not.toContain(secret);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -1,5 +1,6 @@
 import { DateTime, Effect, Exit, FileSystem, Option, Schema } from 'effect';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { agentBrowserPath } from '../installation';
 import { observationsSchema, type Conditions } from './model';
 import { ProcessFailure, processOutput } from './process';
@@ -23,29 +24,50 @@ export { BrowserFailure };
 
 export const producer = { name: 'agent-browser', version: '0.38.1' } as const;
 
-const commandFailure = Schema.fromJsonString(
-  Schema.Struct({ success: Schema.Literal(false), error: Schema.String }),
+const commandResult = Schema.Struct({
+  success: Schema.Boolean,
+  error: Schema.NullOr(Schema.String),
+});
+
+const singleResult = Schema.decodeUnknownOption(
+  Schema.fromJsonString(commandResult),
+);
+
+const batchResults = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Array(commandResult)),
 );
 
 const failureLineLength = 400;
 
-// agent-browser --json reports a failed command on stdout, not stderr.
+// agent-browser --json reports a failed command on stdout, and a batch as one
+// result per command. Its launcher writes its own failures to stderr.
+function reportedError(failure: ProcessFailure) {
+  const stdout = failure.stdout.trim();
+  const results = Option.match(singleResult(stdout), {
+    onSome: (result) => [result],
+    onNone: () => Option.getOrElse(batchResults(stdout), () => []),
+  });
+
+  return (
+    results.find((result) => !result.success && result.error !== null)?.error ??
+    failure.stderr
+  );
+}
+
 export function agentBrowserFailure(
   subcommand: string,
   failure: ProcessFailure,
 ): ProcessFailure {
-  const error = Option.getOrUndefined(
-    Schema.decodeUnknownOption(commandFailure)(failure.stdout.trim()),
-  )?.error;
+  const error = stripVTControlCharacters(reportedError(failure));
   const firstLine = error
-    ?.split('\n')
+    .split('\n')
     .map((line) => line.trim())
     .find((line) => line !== '');
   const exited = `agent-browser ${subcommand} exited with code ${failure.exitCode}`;
   let message = `${exited}; see transcript.jsonl for original output`;
 
-  if (error?.includes('No usable sandbox') === true) {
-    message = `${exited}: Chrome found no usable sandbox. Set capture.browserArguments to ["--no-sandbox"]; see transcript.jsonl`;
+  if (error.includes('No usable sandbox')) {
+    message = `${exited}: Chrome found no usable sandbox. capture.browserArguments ["--no-sandbox"] turns the sandbox off; see transcript.jsonl`;
   } else if (firstLine !== undefined) {
     const quoted =
       firstLine.length > failureLineLength
