@@ -24,10 +24,7 @@ import {
 } from './scene-model';
 import { colors } from './tokens.stylex';
 
-// The scene's grammar, boxes with live state lines, a clock, edges that light
-// when they carry an action, a typed caption and a closing code frame, follows
-// Kit Langton's motion-graphic PR explainers.
-export const credit = {
+const credit = {
   name: 'Kit Langton',
   href: 'https://x.com/kitlangton/status/2106623770492588224',
 };
@@ -96,7 +93,7 @@ function column(entities: readonly Entity[]): Entity[] {
   );
 }
 
-export function wideLayout(scene: Scene): Layout {
+function wideLayout(scene: Scene): Layout {
   const boxes = new Map<string, Box>();
   const side = column(scene.entities);
   const boxHeight = 56;
@@ -131,7 +128,7 @@ export function wideLayout(scene: Scene): Layout {
   };
 }
 
-export function narrowLayout(scene: Scene): Layout {
+function narrowLayout(scene: Scene): Layout {
   const boxes = new Map<string, Box>();
   const side = column(scene.entities);
   let y = 410;
@@ -151,7 +148,7 @@ export function narrowLayout(scene: Scene): Layout {
   return {
     kind: 'narrow',
     width: 360,
-    height: y + 140,
+    height: y + 156,
     boxes,
     page: { x: 90, y: 222, w: 180, h: 124 },
     clock: { x: 20, y: 94 },
@@ -223,7 +220,7 @@ const phaseLabels = {
   source: 'the source',
 } satisfies Record<Beat['phase'], string>;
 
-export function phaseText(scene: Scene, beat: Beat): string {
+function phaseText(scene: Scene, beat: Beat): string {
   return beat.phase === 'source'
     ? phaseLabels.source
     : `${phaseLabels[beat.phase]} · ${beat.phase} ${shortRevision(scene.revisions[beat.phase])}`;
@@ -260,19 +257,6 @@ const edgeKinds = {
   checked: ['checkedBy', 'checkedByPulse'],
 } as const satisfies Record<Edge['kind'], readonly [string, string]>;
 
-function Spinner({ x, y, turn }: { x: number; y: number; turn: number }) {
-  return (
-    <path
-      d={`M ${x + 4} ${y - 4} A 4 4 0 1 1 ${x} ${y}`}
-      transform={`rotate(${turn * 720} ${x} ${y - 4})`}
-      fill="none"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      {...stylex.props(styles.spinner)}
-    />
-  );
-}
-
 function EntityBox({
   entity,
   box,
@@ -287,9 +271,8 @@ function EntityBox({
   progress: number;
 }) {
   const changed = previous?.line !== state.line || previous.tone !== state.tone;
-  const spinner = state.busy ? 14 : 0;
   const titleChars = Math.floor((box.w - 28) / (13 * advance));
-  const lineChars = Math.floor((box.w - 28 - spinner) / (12 * advance));
+  const lineChars = Math.floor((box.w - 28) / (12 * advance));
 
   return (
     <g>
@@ -312,11 +295,8 @@ function EntityBox({
       >
         {fit(entity.title, titleChars)}
       </text>
-      {state.busy ? (
-        <Spinner x={box.x + 14} y={box.y + box.h / 2 + 15} turn={progress} />
-      ) : null}
       <text
-        x={box.x + 14 + spinner}
+        x={box.x + 14}
         y={box.y + box.h / 2 + 15}
         opacity={changed ? progress : 1}
         {...stylex.props(styles.stateLine, styles[lineTones[state.tone]])}
@@ -438,7 +418,7 @@ function EdgeLine({
         d={pathOf(curve)}
         fill="none"
         strokeWidth={lit ? 1.75 : 1.25}
-        opacity={lit ? 1 : 0.4}
+        opacity={lit ? 1 : 0.7}
         {...stylex.props(styles[line])}
       />
       {lit && motion && progress < 1 ? (
@@ -523,6 +503,12 @@ function CodeFrame({
   const chars = Math.floor((code.w - gutter - 24) / (size * advance));
   const place = scene.source?.place ?? '';
   const words = scene.source?.words ?? '';
+  // Red marks only a stack frame of a failing check; other anchors are
+  // associations, drawn neutral.
+  const failing =
+    (scene.check?.verdict === 'regression' ||
+      scene.check?.verdict === 'failed') &&
+    scene.source?.anchor.basis === 'stack-frame';
 
   return (
     <g opacity={fade}>
@@ -577,7 +563,9 @@ function CodeFrame({
                   width={code.w - 2}
                   height={row}
                   {...stylex.props(
-                    line.anchor ? styles.anchorBand : styles.changeBand,
+                    line.anchor && failing
+                      ? styles.anchorBand
+                      : styles.changeBand,
                   )}
                 />
               )}
@@ -587,7 +575,9 @@ function CodeFrame({
                   y={y - row + 7}
                   width={3}
                   height={row}
-                  {...stylex.props(styles.anchorBar)}
+                  {...stylex.props(
+                    failing ? styles.anchorBar : styles.anchorBarNeutral,
+                  )}
                 />
               ) : null}
               <text
@@ -595,7 +585,7 @@ function CodeFrame({
                 y={y}
                 textAnchor="end"
                 fontSize={size}
-                {...stylex.props(styles.code, styles.lineQuiet)}
+                {...stylex.props(styles.code, !line.anchor && styles.lineQuiet)}
               >
                 {line.number ?? ''}
               </text>
@@ -624,7 +614,10 @@ function CodeFrame({
                   x={code.x + gutter + (line.text.length + 2) * size * advance}
                   y={y}
                   fontSize={size}
-                  {...stylex.props(styles.code, styles.annotation)}
+                  {...stylex.props(
+                    styles.code,
+                    failing ? styles.annotation : styles.clockValue,
+                  )}
                 >
                   {annotation}
                 </text>
@@ -666,7 +659,7 @@ function Emphasized({
   );
 }
 
-export function SceneStage({
+function SceneStage({
   scene,
   layout,
   index,
@@ -840,11 +833,11 @@ export function SceneStage({
                 {...stylex.props(styles.small)}
               >
                 <tspan {...stylex.props(styles.clockValue)}>
-                  {check.measure.label.toLowerCase()}
+                  {check.measure.label}
                 </tspan>
                 <tspan {...stylex.props(styles.lineQuiet)}>
                   {' '}
-                  · what the check counts
+                  · what the check measures
                 </tspan>
               </text>
             </g>
@@ -877,6 +870,11 @@ export function SceneStage({
           ? 'drawn from recorded evidence · not a screen recording'
           : 'drawn from evidence · not a recording'}
       </text>
+      {layout.kind === 'narrow' ? (
+        <text x={20} y={layout.footer + 16} {...stylex.props(styles.footnote)}>
+          after {credit.name}
+        </text>
+      ) : null}
       {layout.kind === 'wide' ? (
         <text
           x={layout.width - 56}
@@ -921,7 +919,7 @@ function useNarrow(target: RefObject<HTMLElement | null>): boolean {
 
     const observer = new ResizeObserver(([entry]) => {
       if (entry !== undefined) {
-        setNarrow(entry.contentRect.width < 600);
+        setNarrow(entry.contentRect.width < 840);
       }
     });
 
@@ -1031,9 +1029,19 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
   const go = (index: number) => {
     const target = Math.min(Math.max(index, 0), last);
 
+    if (target === head.index && !playing) {
+      return;
+    }
+
     setPlaying(false);
     setHead({ index: target, time: reduced ? transition : 0 });
     setAnnounce(scene.beats[target]?.caption ?? '');
+  };
+
+  const restart = () => {
+    setAnnounce('');
+    setHead({ index: 0, time: reduced ? transition : 0 });
+    setPlaying(true);
   };
 
   const toggle = () => {
@@ -1084,7 +1092,7 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
         aria-roledescription="scene"
         aria-label={`${scene.title}: space plays or pauses, arrow keys step`}
         onKeyDown={keys}
-        {...stylex.props(styles.figure)}
+        {...stylex.props(styles.figure, narrow && styles.narrowFigure)}
       >
         <SceneStage
           scene={scene}
@@ -1098,7 +1106,7 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
       <div {...stylex.props(styles.controls)}>
         <button
           type="button"
-          onClick={() => go(0)}
+          onClick={restart}
           {...stylex.props(styles.control)}
         >
           Restart
@@ -1106,16 +1114,15 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
         <button
           type="button"
           aria-label="Previous step"
-          disabled={head.index === 0}
+          aria-disabled={head.index === 0}
           onClick={() => go(head.index - 1)}
-          {...stylex.props(styles.control)}
+          {...stylex.props(styles.control, head.index === 0 && styles.inactive)}
         >
           ◂ Previous
         </button>
         <button
           type="button"
           onClick={toggle}
-          aria-pressed={playing}
           {...stylex.props(styles.control, styles.primary)}
         >
           {playing ? 'Pause' : 'Play'}
@@ -1123,9 +1130,12 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
         <button
           type="button"
           aria-label="Next step"
-          disabled={head.index === last}
+          aria-disabled={head.index === last}
           onClick={() => go(head.index + 1)}
-          {...stylex.props(styles.control)}
+          {...stylex.props(
+            styles.control,
+            head.index === last && styles.inactive,
+          )}
         >
           Next ▸
         </button>
@@ -1229,7 +1239,6 @@ const styles = stylex.create({
   lineChecked: { fill: colors.checked },
   lineRegression: { fill: colors.regression },
   lineUnknown: { fill: colors.unknown },
-  spinner: { stroke: colors.textSecondary },
   dot: { fill: colors.borderControl },
   frame: { stroke: colors.borderControl },
   drives: { stroke: colors.linkImports },
@@ -1247,6 +1256,7 @@ const styles = stylex.create({
   changeBand: { fill: colors.surfaceMuted },
   anchorBand: { fill: colors.regressionFill },
   anchorBar: { fill: colors.regression },
+  anchorBarNeutral: { fill: colors.text },
   annotation: { fill: colors.regression },
   controls: {
     alignItems: 'center',
@@ -1264,12 +1274,11 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderWidth: 1,
     color: colors.text,
-    cursor: { default: 'pointer', ':disabled': 'default' },
+    cursor: 'pointer',
     fontFamily: fonts.sans,
     fontSize: '0.875rem',
     fontWeight: 500,
     minHeight: geometry.target,
-    opacity: { default: 1, ':disabled': 0.5 },
     outlineColor: {
       default: 'transparent',
       ':focus-visible': colors.focus,
@@ -1281,6 +1290,8 @@ const styles = stylex.create({
     paddingInline: 14,
   },
   primary: { minWidth: 84 },
+  inactive: { cursor: 'default', opacity: 0.5 },
+  narrowFigure: { marginInline: 'auto', maxWidth: 520, width: '100%' },
   position: {
     color: colors.textMuted,
     fontFamily: fonts.mono,

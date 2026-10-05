@@ -1,5 +1,5 @@
 import * as stylex from '@stylexjs/stylex';
-import { createContext, use, type ReactNode } from 'react';
+import { createContext, use, useMemo, type ReactNode } from 'react';
 import type {
   ChangeScope,
   CheckVerdict,
@@ -1393,7 +1393,8 @@ function JourneyView({
   const level = multiple ? 3 : 2;
   const tone = conclusionTones[journey.conclusion.kind];
   const titleId = `journey-${index + 1}-title`;
-  const scene = sceneOf(journey, use(ChangeScopeContext));
+  const scope = use(ChangeScopeContext);
+  const scene = useMemo(() => sceneOf(journey, scope), [journey, scope]);
   const journeyLead =
     journey.conclusion.kind === 'no-regression'
       ? withoutPlainPasses(

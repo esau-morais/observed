@@ -57,14 +57,13 @@ test('the red moment restates the recorded check and error, on the step that rea
   expect(
     candidate.find((beat) => beat.clock?.step === readAt)?.states.get('errors')
       ?.line,
-  ).toMatch(/^TypeError: Cannot read/);
+  ).toMatch(/^! TypeError: Cannot read/);
   expect(result?.states.get('check')).toEqual({
-    line: '✕ regression · 0 → 1',
+    line: '! regression · 0 → 1',
     tone: 'regression',
-    busy: false,
   });
   expect(result?.caption).toBe(
-    'No browser errors: browser errors 0 before, 1 after. Limit: none allowed.',
+    'No browser errors: regression. Browser errors: 0 before, 1 after. Limit: none allowed.',
   );
   expect(
     scene?.beats
@@ -72,6 +71,46 @@ test('the red moment restates the recorded check and error, on the step that rea
       .flatMap((beat) => [...beat.states.values()].map((state) => state.tone)),
   ).not.toContain('regression');
   expect(scene?.beats.at(-1)?.phase).toBe('source');
+});
+
+// Fails if a passing check outranks one the run could not judge, so the
+// scene would end green while the verdict is unknown.
+test('an unknown check, not a passing one, ends the scene', async () => {
+  const journey = await errorsJourney();
+  const [only] = journey.checks;
+
+  if (only === undefined) {
+    throw new Error('The fixture has a check');
+  }
+
+  const scene = sceneOf({
+    ...journey,
+    checks: [
+      {
+        ...only,
+        id: 'one-request',
+        name: 'One request',
+        verdict: 'passed',
+        measure: { label: 'Requests', base: '1', candidate: '1', limit: '1' },
+      },
+      {
+        id: only.id,
+        name: only.name,
+        scope: only.scope,
+        expectation: only.expectation,
+        detail: 'Not judged',
+        verdict: 'unknown',
+      },
+    ],
+  });
+
+  expect(scene?.check?.verdict).toBe('unknown');
+  expect(
+    scene?.beats
+      .filter((beat) => beat.phase === 'candidate')
+      .at(-1)
+      ?.states.get('check')?.tone,
+  ).toBe('unknown');
 });
 
 test('a side without recorded steps draws no scene', async () => {

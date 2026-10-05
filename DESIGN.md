@@ -290,7 +290,16 @@ check must not imply a pass.
 
 Inside the side panel, a code diff, screenshot, replay, request list, timing comparison, or state transition can each be the primary view. Pick the view that explains this change; do not force every case into a component tree or network graph.
 
-A comparison journey with recorded steps on both sides opens with a before-and-after scene, above its sections. It replicates [Kit Langton's PR explainers](https://x.com/kitlangton/status/2106623770492588224) and credits him: boxes with a state line each, a step clock, edges that light when they carry a request or an error, the failing check as the red moment, and a closing code frame at the source anchor. Every state line and caption restates a recorded value, so the scene needs no model; an agent-written caption would be interpretation and would use the inference color and label. The clock shows recorded time while playback holds each step long enough to read. Captions fade in instead of typing, phase chips stay neutral, and red comes only from a failed or regressed check or a recorded error. The scene plays once when it scrolls into view, pauses offscreen, and offers Play, Pause, Previous, Next and Restart, with Space and the arrow keys on the focused scene. Under reduced motion it does not autoplay and steps without transitions. A text version lists every step.
+A comparison journey with recorded steps on both sides opens with a before-and-after scene above its sections. It replicates [Kit Langton's PR explainers](https://x.com/kitlangton/status/2106623770492588224), adapted to these tokens, and credits Kit Langton beside it.
+
+- Boxes for the browser driver, the page, each requested route, browser errors and the deciding check, each with a state line. The page shows the captured screenshot once the steps end.
+- A step clock with recorded time. Playback holds each step long enough to read.
+- Edges that light on the step that used them: the driver to the page on every step, the page to a route when it sent a request, the page to the errors box when an error was read, and the checked box to the check when the side ends.
+- The failing check as the red moment, then a closing code frame at the source anchor.
+
+Every state line and caption restates a recorded value, so the scene needs no model. An agent-written caption would be interpretation, in the inference color with its label. Captions fade in instead of typing. Phase chips stay neutral. Red comes only from a failed or regressed check or a recorded browser error; a failed step reads as unknown.
+
+The scene plays once when it scrolls into view and pauses offscreen. It offers Play, Pause, Previous, Next and Restart, and Space and the arrow keys work on the focused scene. Under reduced motion it does not autoplay and steps without transitions. A text version lists every step.
 
 On the map, use the evidence colors for relation chips and one color per connection type, each with a distinct line pattern so the type survives without color. Dim unrelated blocks on hover rather than hiding them. Every block is reachable by keyboard in reading order, and every connection through the selected block's panel and the Files view. Enter opens a directory, and Escape closes the panel, then a fold, then goes up. Agent descriptions use the inference color and an "Agent description" label.
 

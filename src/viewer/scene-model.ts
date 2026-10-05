@@ -10,7 +10,7 @@ import { describeAction, errorSourceLabels } from '../interaction-text';
 import { shortSource } from '../provenance-text';
 import { describeStatus } from '../request-text';
 import { diffLines, lines } from '../source-diff';
-import { anchorWords, fromRepositoryRoot } from '../result-text';
+import { anchorWords, fromRepositoryRoot, toneSymbols } from '../result-text';
 
 type Step = EvidenceValue<'timeline'>['steps'][number];
 type BrowserError = EvidenceValue<'browser-errors'>['entries'][number];
@@ -30,8 +30,6 @@ export type Entity = { id: string; kind: EntityKind; title: string };
 export type EntityState = {
   line: string;
   tone: Tone;
-  // A step is running in this entity; the scene draws a spinner.
-  busy: boolean;
 };
 
 export type Edge = {
@@ -73,10 +71,14 @@ export type Scene = {
 type Recorded = {
   side: Extract<Side, { execution: 'complete' }>;
   steps: readonly Step[];
-  errors: readonly BrowserError[] | null;
+  errors: {
+    entries: readonly BrowserError[];
+    incomplete: string | null;
+  } | null;
 };
 
-const maxRequestBoxes = 3;
+// The side column holds four boxes at most, so it clears the caption.
+const sideBoxes = 4;
 
 const holds = { open: 1800, step: 1500, result: 2600, source: 5000 };
 
@@ -86,7 +88,7 @@ function recordedSide(side: Side): Recorded | null {
   }
 
   let steps: readonly Step[] | null = null;
-  let errors: readonly BrowserError[] | null = null;
+  let errors: Recorded['errors'] = null;
 
   for (const view of side.evidence) {
     if (view.status !== 'recorded') {
@@ -96,7 +98,13 @@ function recordedSide(side: Side): Recorded | null {
     if (view.kind === 'timeline') {
       steps = view.value.steps;
     } else if (view.kind === 'browser-errors') {
-      errors = view.value.entries;
+      errors = {
+        entries: view.value.entries,
+        incomplete:
+          view.value.coverage.kind === 'incomplete'
+            ? view.value.coverage.reason
+            : null,
+      };
     }
   }
 
@@ -115,15 +123,25 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-// The check the scene turns on: the first one that failed, otherwise the
-// first with a measure on both sides.
+const focusRank = {
+  regression: 0,
+  failed: 0,
+  unknown: 1,
+  'not-run': 1,
+  passed: 2,
+} satisfies Record<CheckVerdict['verdict'], number>;
+
+// The check the scene turns on: a failed one, then an unknown one, so the
+// scene never ends on a pass the verdict does not share. Among equals, one
+// with a measure.
 function focusCheck(journey: Journey): CheckVerdict | null {
   return (
-    journey.checks.find(
-      (check) => check.verdict === 'regression' || check.verdict === 'failed',
-    ) ??
-    journey.checks.find((check) => check.measure !== undefined) ??
-    null
+    [...journey.checks].sort(
+      (a, b) =>
+        2 * (focusRank[a.verdict] - focusRank[b.verdict]) +
+        (a.measure === undefined ? 1 : 0) -
+        (b.measure === undefined ? 1 : 0),
+    )[0] ?? null
   );
 }
 
@@ -165,15 +183,18 @@ function stepLine(step: Step): string {
   return step.target === null ? action : `${action} ${step.target}`;
 }
 
-// Milliseconds from the first step's start to the end of this one.
-function elapsed(steps: readonly Step[], step: Step): number {
-  const [first] = steps;
+// Milliseconds from the first step's start to the end of the last step that
+// ran up to this one, so a step that did not run holds the clock.
+function elapsed(steps: readonly Step[], index: number): number {
+  const ran = steps
+    .slice(0, index + 1)
+    .flatMap((step) => (step.outcome === 'not-run' ? [] : [step]));
+  const [first] = ran;
+  const last = ran.at(-1);
 
-  return first === undefined ||
-    first.outcome === 'not-run' ||
-    step.outcome === 'not-run'
+  return first === undefined || last === undefined
     ? 0
-    : Date.parse(step.finishedAt) - Date.parse(first.startedAt);
+    : Date.parse(last.finishedAt) - Date.parse(first.startedAt);
 }
 
 function requestLine(requests: readonly Request[]): string {
@@ -191,11 +212,18 @@ function sideCheck(side: Side, check: CheckVerdict) {
   return side.checks.find((entry) => entry.id === check.id) ?? null;
 }
 
+// A failed step is not a check, so it reads as unknown, never as red.
 const stepTones = {
   completed: 'active',
-  failed: 'regression',
+  failed: 'unknown',
   'not-run': 'unknown',
 } satisfies Record<Step['outcome'], Tone>;
+
+const stepMarks = {
+  completed: '▸ ',
+  failed: `${toneSymbols.unknown} failed · `,
+  'not-run': `${toneSymbols.unknown} not run · `,
+} satisfies Record<Step['outcome'], string>;
 
 const outcomeTones = {
   passed: 'checked',
@@ -213,18 +241,18 @@ const verdictTones = {
 } satisfies Record<CheckVerdict['verdict'], Tone>;
 
 const verdictWords = {
-  regression: '✕ regression',
-  failed: '✕ failed',
-  unknown: '? unknown',
-  'not-run': '? not run',
-  passed: '✓ passed',
+  regression: `${toneSymbols.regression} regression`,
+  failed: `${toneSymbols.regression} failed`,
+  unknown: `${toneSymbols.unknown} unknown`,
+  'not-run': `${toneSymbols.unknown} not run`,
+  passed: `${toneSymbols.checked} passed`,
 } satisfies Record<CheckVerdict['verdict'], string>;
 
 const outcomeWords = {
-  passed: '✓ passed',
-  failed: '✕ failed',
-  unknown: '? unknown',
-  'not-run': '? not run',
+  passed: `${toneSymbols.checked} passed`,
+  failed: `${toneSymbols.regression} failed`,
+  unknown: `${toneSymbols.unknown} unknown`,
+  'not-run': `${toneSymbols.unknown} not run`,
 } satisfies Record<Side['checks'][number]['outcome'], string>;
 
 // The check box and caption once a side's steps end: the base's own outcome,
@@ -242,18 +270,19 @@ function checkResult(
     const value =
       measure === undefined || base === null
         ? ''
-        : ` ${measure.label.toLowerCase()} ${base},`;
+        : ` ${measure.label}: ${base}.`;
 
     return {
       state: {
         line: [
-          own === null ? '? not recorded' : outcomeWords[own.outcome],
+          own === null
+            ? `${toneSymbols.unknown} not recorded`
+            : outcomeWords[own.outcome],
           ...(base === null ? [] : [base]),
         ].join(' · '),
         tone: own === null ? 'unknown' : outcomeTones[own.outcome],
-        busy: false,
       },
-      caption: `${check.name} on the base:${value} ${outcome}.`,
+      caption: `${check.name} on the base: ${outcome}.${value}`,
       emphasis: null,
     };
   }
@@ -267,7 +296,6 @@ function checkResult(
         : [`${measure.base ?? '?'} → ${measure.candidate ?? '?'}`]),
     ].join(' · '),
     tone,
-    busy: false,
   };
 
   if (measure === undefined) {
@@ -282,7 +310,7 @@ function checkResult(
 
   return {
     state,
-    caption: `${check.name}: ${measure.label.toLowerCase()} ${measure.base ?? 'unknown'} before, ${after}. Limit: ${measure.limit ?? check.expectation}.`,
+    caption: `${check.name}: ${check.verdict}. ${measure.label}: ${measure.base ?? 'unknown'} before, ${after}. Limit: ${measure.limit ?? check.expectation}.`,
     emphasis: { text: after, tone },
   };
 }
@@ -362,11 +390,14 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
       ),
     ]),
   ];
-  const shownRoutes = routes.slice(0, maxRequestBoxes);
-  const hiddenRoutes = routes.length - shownRoutes.length;
   const withErrors =
     kind === 'browser-errors' ||
-    (base.errors?.length ?? 0) + (candidate.errors?.length ?? 0) > 0;
+    (base.errors?.entries.length ?? 0) +
+      (candidate.errors?.entries.length ?? 0) >
+      0;
+  const room = sideBoxes - Number(withErrors);
+  const shownRoutes = routes.slice(0, routes.length > room ? room - 1 : room);
+  const hiddenRoutes = routes.length - shownRoutes.length;
   const entities: Entity[] = [
     {
       id: 'journey',
@@ -441,7 +472,9 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
     const requestsUpTo = (index: number) =>
       requests.filter((request) => stepOf(steps, request) <= index);
     const errorsUpTo = (index: number) =>
-      (errors ?? []).filter((error) => (error.step ?? -1) <= index);
+      (errors?.entries ?? []).filter((error) => (error.step ?? -1) <= index);
+    const errorText = (error: BrowserError) =>
+      `${errorSourceLabels[error.source]}${error.step === null ? ' read before the first step' : ` read after step ${error.step + 1}`}: ${firstLine(error.text)}`;
     // A route's box is active on the step that sent its request.
     const showRequests = (index: number) => {
       const seen = requestsUpTo(index);
@@ -455,7 +488,6 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
         set(`request:${name}`, {
           line: requestLine(matching),
           tone: sent.has(name) ? 'active' : 'quiet',
-          busy: false,
         });
       }
 
@@ -469,14 +501,16 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
           tone: others.some((request) => sent.has(route(request)))
             ? 'active'
             : 'quiet',
-          busy: false,
         });
       }
     };
 
     const showErrors = (index: number) => {
       if (errors === null) {
-        set('errors', { line: 'not recorded', tone: 'unknown', busy: false });
+        set('errors', {
+          line: `${toneSymbols.unknown} not recorded`,
+          tone: 'unknown',
+        });
 
         return;
       }
@@ -484,22 +518,29 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
       const seen = errorsUpTo(index);
       const [latest] = seen.slice(-1);
 
+      if (latest === undefined && errors.incomplete !== null) {
+        set('errors', {
+          line: `${toneSymbols.unknown} incomplete: ${errors.incomplete}`,
+          tone: 'unknown',
+        });
+
+        return;
+      }
+
       set('errors', {
         line:
           latest === undefined
             ? 'none'
-            : `${seen.length > 1 ? `${seen.length} · ` : ''}${firstLine(latest.text)}`,
+            : `${toneSymbols.regression} ${seen.length > 1 ? `${seen.length} · ` : ''}${firstLine(latest.text)}`,
         tone: latest === undefined ? 'quiet' : 'regression',
-        busy: false,
       });
     };
 
     set('journey', {
       line: `${plural(steps.length, 'step')} from ${side.recipe.path}`,
       tone: 'quiet',
-      busy: false,
     });
-    set('page', { line: side.recipe.path, tone: 'quiet', busy: false });
+    set('page', { line: side.recipe.path, tone: 'quiet' });
     showRequests(-1);
     showErrors(-1);
 
@@ -507,16 +548,20 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
       set('check', {
         line: check.measure?.limit ?? check.expectation,
         tone: 'quiet',
-        busy: false,
       });
     }
+
+    const early = errorsUpTo(-1);
 
     beats.push({
       phase,
       clock: { step: 0, steps: steps.length, elapsed: 0 },
       states: snapshot(),
-      lit: [],
-      caption: `${label}: ${phase} ${revisions[phase]}, ${plural(steps.length, 'recorded step')}.`,
+      lit: early.length === 0 ? [] : [edgeId({ from: 'page', to: 'errors' })],
+      caption: [
+        `${label}: ${phase} ${revisions[phase]}, ${plural(steps.length, 'recorded step')}.`,
+        ...early.map((error) => `${errorText(error)}.`),
+      ].join(' '),
       emphasis: null,
       screenshot: null,
       hold: holds.open,
@@ -528,20 +573,25 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
       const errorsBefore = errorsUpTo(step.index - 1).length;
       const newErrors = errorsUpTo(step.index).slice(errorsBefore);
       const lit = [
-        'journey→page',
+        edgeId({ from: 'journey', to: 'page' }),
         ...newRequests.map((request) => {
           const name = route(request);
 
-          return `page→request:${shownRoutes.includes(name) ? name : 'more'}`;
+          return edgeId({
+            from: 'page',
+            to: `request:${shownRoutes.includes(name) ? name : 'more'}`,
+          });
         }),
-        ...(newErrors.length > 0 ? ['page→errors'] : []),
+        ...(newErrors.length > 0
+          ? [edgeId({ from: 'page', to: 'errors' })]
+          : []),
       ];
       const parts = [`Step ${step.index + 1}: ${stepLine(step)}`];
 
       if (step.outcome === 'failed') {
-        parts.push('the step failed');
+        parts.push('The step failed');
       } else if (step.outcome === 'not-run') {
-        parts.push('not run');
+        parts.push('Not run');
       }
 
       for (const request of newRequests) {
@@ -551,15 +601,12 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
       }
 
       for (const error of newErrors) {
-        parts.push(
-          `${errorSourceLabels[error.source]}: ${firstLine(error.text)}`,
-        );
+        parts.push(errorText(error));
       }
 
       set('journey', {
-        line: stepLine(step),
+        line: `${stepMarks[step.outcome]}${stepLine(step)}`,
         tone: stepTones[step.outcome],
-        busy: step.outcome === 'completed',
       });
       showRequests(step.index);
       showErrors(step.index);
@@ -568,7 +615,7 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
         clock: {
           step: step.index + 1,
           steps: steps.length,
-          elapsed: elapsed(steps, step),
+          elapsed: elapsed(steps, step.index),
         },
         states: snapshot(),
         lit: [...new Set(lit)],
@@ -584,7 +631,7 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
       check === null
         ? {
             state: null,
-            caption: `${label}: ${plural(steps.length, 'step')} recorded, no check configured.`,
+            caption: `${label}: ${plural(steps.length, 'step')} recorded. The journey has no check.`,
             emphasis: null,
           }
         : checkResult(check, phase, sideCheck(side, check));
@@ -600,12 +647,10 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
           ? 'no steps'
           : `${plural(steps.filter((step) => step.outcome === 'completed').length, 'step')} completed`,
       tone: 'quiet',
-      busy: false,
     });
     set('page', {
       line: `${side.recipe.path} after the steps`,
       tone: 'quiet',
-      busy: false,
     });
     beats.push({
       phase,
@@ -615,10 +660,10 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
           : {
               step: steps.length,
               steps: steps.length,
-              elapsed: elapsed(steps, last),
+              elapsed: elapsed(steps, last.index),
             },
       states: snapshot(),
-      lit: check === null ? [] : [`${checkedEntity}→check`],
+      lit: check === null ? [] : [edgeId({ from: checkedEntity, to: 'check' })],
       caption: result.caption,
       emphasis: result.emphasis,
       screenshot: side.screenshot,
@@ -656,7 +701,7 @@ export function sceneOf(journey: Journey, scope?: ChangeScope): Scene | null {
   };
 }
 
-export function edgeId(edge: Edge): string {
+export function edgeId(edge: Pick<Edge, 'from' | 'to'>): string {
   return `${edge.from}→${edge.to}`;
 }
 
