@@ -768,6 +768,41 @@ function screenshotFindings({ journey }: Input): Finding[] {
     : [];
 }
 
+function textFindings({ journey, base }: Input): Finding[] {
+  const before = recorded(base, 'text');
+  const after = recorded(journey.candidate, 'text');
+  if (before === null || after === null) {
+    return [];
+  }
+
+  return after.elements.flatMap((element): Finding[] => {
+    const previous = before.elements.find(
+      (item) => item.selector === element.selector,
+    );
+    if (
+      previous === undefined ||
+      previous.value === null ||
+      element.value === null ||
+      previous.count !== 1 ||
+      element.count !== 1 ||
+      previous.value === element.value
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id: findingId('text', element.selector),
+        evidence: 'text',
+        checks: [],
+        subject: `${element.selector} text changed: ${JSON.stringify(previous.value)} → ${JSON.stringify(element.value)}`,
+        comparison: 'changed',
+        location: unanchored('Element text identifies no source location'),
+      },
+    ];
+  });
+}
+
 // Findings are computed with the result, so delivery only renders them. The
 // base side is used only when the comparison is available.
 export function journeyFindings(
@@ -793,5 +828,6 @@ export function journeyFindings(
     ...playwrightFindings(input),
     ...checkFindings(input),
     ...screenshotFindings(input),
+    ...textFindings(input),
   ];
 }

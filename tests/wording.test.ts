@@ -20,6 +20,7 @@ import type { Journey as ProjectJourney } from '../src/project';
 import { recipePlan } from '../src/recipe-diff';
 import { parseManifest } from '../src/schema';
 import { statusWords } from '../src/status-words';
+import { savedCheckSchema } from '../src/checks';
 import { agentText } from '../src/viewer/agent-text';
 import todomvc from './fixtures/todomvc/manifest.json' with { type: 'json' };
 
@@ -173,7 +174,10 @@ async function recipeResults(): Promise<Comparison[]> {
   const fixtureResult = await errorsResult();
   const { base, candidate } = await fixtureJourney();
   const { recipe } = candidate;
-  const [check] = recipe.checks;
+  const checks = Schema.decodeUnknownSync(Schema.Array(savedCheckSchema))(
+    recipe.checks,
+  );
+  const [check] = checks;
   const scope = fixtureResult.changeScope;
   const visual = { kind: 'identical', width: 1280, height: 800 } as const;
 
@@ -186,7 +190,7 @@ async function recipeResults(): Promise<Comparison[]> {
     path: recipe.path,
     ready: recipe.ready,
     steps: recipe.steps,
-    checks: recipe.checks,
+    checks,
     collectors: recipe.collectors,
     viewport: recipe.viewport,
     browserArguments: recipe.browserArguments,

@@ -516,7 +516,9 @@ const schema = Command.make(
         generated ? generatedJourneysSchema : projectSchema,
       ).schema,
     ),
-).pipe(Command.withDescription('Print the JSON Schema for observed.json'));
+).pipe(
+  Command.withDescription('Print the project or generated journey JSON Schema'),
+);
 
 // Exit code when bare observed stops at a setup step it cannot take alone.
 const setupNeeded = 3;

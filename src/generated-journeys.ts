@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import {
   generatedOriginSchema,
+  journeyCollectors,
   recipeSchema,
   stepSchema,
 } from './capture/recipe';
@@ -79,7 +80,6 @@ export const parseGeneratedJourneys = Effect.fnUntraced(function* (
       Schema.decodeUnknownEffect(recipeSchema)({
         ...journeyRecipe({
           ...journey,
-          checks: generatedBaselineChecks,
           ...(environment?.viewport === undefined
             ? {}
             : { viewport: environment.viewport }),
@@ -92,11 +92,14 @@ export const parseGeneratedJourneys = Effect.fnUntraced(function* (
           ...(environment?.maxAgeMs === undefined
             ? {}
             : { maxAgeMs: environment.maxAgeMs }),
-          collectors:
-            textSelectors === undefined
-              ? []
-              : [{ kind: 'text', selectors: textSelectors }],
         }),
+        checks: generatedBaselineChecks,
+        collectors: journeyCollectors(
+          generatedBaselineChecks,
+          textSelectors === undefined
+            ? []
+            : [{ kind: 'text', selectors: textSelectors }],
+        ),
         generated: { targets, reason },
       }).pipe(
         Effect.mapError(

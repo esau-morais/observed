@@ -19,7 +19,11 @@ import {
 } from '../src/capture/model';
 import { json, sha256 } from '../src/encoding';
 import type { Recipe } from '../src/capture/recipe';
-import { checkKinds, type CheckDefinition } from '../src/checks';
+import {
+  checkKinds,
+  savedCheckSchema,
+  type CheckDefinition,
+} from '../src/checks';
 import { evidenceKinds, type EvidenceValue } from '../src/evidence-kinds';
 import {
   fixtureHash,
@@ -2071,6 +2075,57 @@ async function completeSide(text?: EvidenceValue<'text'>) {
   return side;
 }
 
+test('changed captured text is an observation even when the screenshots are identical', async () => {
+  const contract: Recipe = {
+    ...recipe,
+    collectors: [
+      ...recipe.collectors,
+      { kind: 'text', selectors: ['#output'] },
+    ],
+  };
+  const before = await syntheticBundle({
+    contract,
+    text: { elements: [{ selector: '#output', count: 1, value: '$120.00' }] },
+  });
+  const after = await syntheticBundle({
+    contract,
+    text: { elements: [{ selector: '#output', count: 1, value: '$12.00' }] },
+  });
+  const { journey } = await Effect.runPromise(
+    inspectJourney({
+      baseDirectory: before.directory,
+      candidateDirectory: after.directory,
+      evaluatedAt,
+    }),
+  );
+  expect(journey.findings).toContainEqual(
+    expect.objectContaining({
+      evidence: 'text',
+      subject: '#output text changed: "$120.00" → "$12.00"',
+      comparison: 'changed',
+      checks: [],
+    }),
+  );
+  expect(journey.conclusion.kind).toBe('no-regression');
+  const unavailable = compareJourney({
+    base: {
+      ...journey.base,
+      execution: 'unavailable',
+      capture: null,
+      recipe: null,
+      checks: [],
+      artifacts: [],
+      unresolved: ['Missing capture'],
+    },
+    candidate: journey.candidate,
+    evaluatedAt,
+    visual: pixelsNotInspected,
+  });
+  expect(
+    unavailable.findings.some((finding) => finding.evidence === 'text'),
+  ).toBe(false);
+});
+
 test('a check that compares sides is unknown without a usable, comparable base', async () => {
   const candidate = await completeSide(statusText('Saved'));
   const cases = [
@@ -2757,7 +2812,7 @@ function projectJourney(
     path: recipe.path,
     ready: recipe.ready,
     steps: recipe.steps,
-    checks,
+    checks: Schema.decodeUnknownSync(Schema.Array(savedCheckSchema))(checks),
     viewport: recipe.viewport,
     browserArguments: recipe.browserArguments,
     maxAgeMs: recipe.maxAgeMs,

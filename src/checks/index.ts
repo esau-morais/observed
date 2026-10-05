@@ -10,9 +10,7 @@ import { browserErrors } from './browser-errors';
 import { requestCount } from './request-count';
 import { text } from './text';
 
-export const checkSchema = Schema.Union([
-  baselineBrowserErrors.definition,
-  baselineServerErrors.definition,
+export const savedCheckSchema = Schema.Union([
   requestCount.definition,
   text.definition,
   reactRenders.definition,
@@ -22,6 +20,12 @@ export const checkSchema = Schema.Union([
   apiStatus.definition,
   apiSchema.definition,
   apiReadback.definition,
+]);
+
+export const checkSchema = Schema.Union([
+  savedCheckSchema,
+  baselineBrowserErrors.definition,
+  baselineServerErrors.definition,
 ]);
 
 export type CheckDefinition = typeof checkSchema.Type;

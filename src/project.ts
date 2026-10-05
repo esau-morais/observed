@@ -8,7 +8,7 @@ import {
   recipeSchemaVersion,
   stepSchema,
 } from './capture/recipe';
-import { checkSchema } from './checks';
+import { savedCheckSchema } from './checks';
 import { collectorSchema } from './evidence-kinds';
 
 import { relativePathSchema } from './project-path';
@@ -22,8 +22,8 @@ export const journeySchema = Schema.Struct({
   path: routeSchema,
   ready: Schema.Array(stepSchema),
   steps: Schema.Array(stepSchema),
-  check: Schema.optionalKey(checkSchema),
-  checks: Schema.optionalKey(Schema.Array(checkSchema)),
+  check: Schema.optionalKey(savedCheckSchema),
+  checks: Schema.optionalKey(Schema.Array(savedCheckSchema)),
   collectors: Schema.optionalKey(Schema.Array(collectorSchema)),
   viewport: Schema.optionalKey(recipeSchema.fields.viewport),
   browserArguments: Schema.optionalKey(Schema.Array(text)),

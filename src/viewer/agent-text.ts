@@ -88,8 +88,13 @@ function journeyText(
       ? []
       : [
           'Generated journey · Agent interpretation.',
+          journey.generated.reason,
+          `Targets: ${journey.generated.targets.join(', ')}. Only executed baseline checks set verdicts.`,
           savingProposalText(journey),
         ]),
+    ...journey.findings
+      .filter((finding) => finding.evidence === 'text')
+      .map((finding) => `Observation: ${finding.subject}. No verdict.`),
     ...sides.map(({ label, side }) => identity(label, side)),
     '',
     `${level} Checks`,

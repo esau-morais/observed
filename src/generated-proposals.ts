@@ -39,7 +39,18 @@ export function savingProposalText(journey: Journey): string {
     return 'No saving proposal: coverage has not shown that this journey ran changed lines.';
   }
 
-  return journey.savingProposal.action === 'replace'
-    ? 'Proposal: replace one of the three saved journeys with this journey. No saved journey was changed.'
-    : 'Proposal: save this journey for future changes. No saved journey was changed.';
+  const proposal =
+    journey.savingProposal.action === 'replace'
+      ? 'Proposal: replace one of the three saved journeys with this journey.'
+      : 'Proposal: save this journey for future changes.';
+
+  return `${proposal} Coverage ran changed lines in ${journey.savingProposal.files.join(', ')}. No saved journey was changed.`;
+}
+
+export function generatedCoverage(journey: Journey): string | null {
+  const artifact = journey.candidate.artifacts.find(
+    (item) => item.id === 'evidence-coverage',
+  );
+
+  return artifact?.integrity === 'verified' ? artifact.path : null;
 }

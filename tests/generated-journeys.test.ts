@@ -5,6 +5,7 @@ import { Effect, Schema } from 'effect';
 import { expect, test } from 'vitest';
 import { parseGeneratedJourneys } from '../src/generated-journeys';
 import { recipeSchema } from '../src/capture/recipe';
+import { journeySchema } from '../src/project';
 import {
   generatedBaselineChecks,
   baselineBrowserErrors,
@@ -44,7 +45,7 @@ test.each([
         ...proposal,
         journeys: [{ ...proposal.journeys[0], ...fields }],
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('do not match the contract');
   },
 );
 
@@ -57,7 +58,7 @@ test('enforces the journey budget and protects saved names', async () => {
         name: `Journey ${index}`,
       })),
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow('do not match the contract');
   await expect(
     Effect.runPromise(
       parseGeneratedJourneys(JSON.stringify(proposal), [
@@ -66,6 +67,30 @@ test('enforces the journey budget and protects saved names', async () => {
     ),
   ).rejects.toThrow('cannot replace');
 });
+
+test('rejects credentials before retaining a generated proposal', async () => {
+  await expect(
+    parse({
+      ...proposal,
+      journeys: [{ ...proposal.journeys[0], path: '/?token=private-token' }],
+    }),
+  ).rejects.toThrow('contain credentials');
+});
+
+test.each([generatedBaselineChecks[0], generatedBaselineChecks[2]])(
+  'keeps $kind out of saved configuration',
+  (check) => {
+    expect(() =>
+      Schema.decodeUnknownSync(journeySchema)({
+        name: 'Saved',
+        path: '/',
+        ready: [],
+        steps: [],
+        check,
+      }),
+    ).toThrow();
+  },
+);
 
 test('keeps the fixed checks in the recorded recipe and rejects a relaxed generated recipe', async () => {
   const {
@@ -143,7 +168,7 @@ test('does not pass a baseline check from absent or incomplete evidence', () => 
   ).toBe('unknown');
 });
 
-test('server baseline counts new failures by route and occurrence, without failing changed successful data', () => {
+test('server baseline counts new failures by route and occurrence, ignoring successful responses', () => {
   const side = (routes: [string, number][]) => ({
     evidence: {},
     observations: {
@@ -182,7 +207,7 @@ test('server baseline counts new failures by route and occurrence, without faili
       ],
     ),
   ).toMatchObject({ outcome: 'failed', actual: 1 });
-  expect(evaluate([['/data', 200]], [['/data', 200]])).toMatchObject({
+  expect(evaluate([['/data', 200]], [['/data', 201]])).toMatchObject({
     outcome: 'passed',
     actual: 0,
   });

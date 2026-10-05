@@ -1109,13 +1109,27 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
-    ...result.journeys
-      .filter((journey) => journey.generated !== undefined)
-      .map(
-        (journey) =>
-          `Generated journey · Agent interpretation: ${inlineText(journey.title)}. Only executed baseline checks set verdicts.`,
-      ),
+    ...result.journeys.flatMap((journey) =>
+      journey.generated === undefined
+        ? []
+        : [
+            `Generated journey · Agent interpretation: ${inlineText(journey.title)}. Targets: ${journey.generated.targets.map((target) => fileText(target, fileHref(result, frame.files, target, null))).join(', ')}. Only executed baseline checks set verdicts.`,
+            ...(journey.savingProposal === undefined
+              ? []
+              : [
+                  `Saving proposal basis: changed lines ran in ${journey.savingProposal.files.map((file) => fileText(file, fileHref(result, frame.files, file, null))).join(', ')}.`,
+                ]),
+          ],
+    ),
     ...extra(rows.length === 0 ? null : rows.join('\n')),
+    ...result.journeys.flatMap((journey) =>
+      journey.findings
+        .filter((finding) => finding.evidence === 'text')
+        .map(
+          (finding) =>
+            `Observation · ${inlineText(journey.title)}: ${inlineText(finding.subject)}. No verdict.`,
+        ),
+    ),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),
     ...extra(scoped?.table),

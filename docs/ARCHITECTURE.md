@@ -201,9 +201,9 @@ journeys, and records them in the result with their origin. They carry only
 baseline checks. They cannot add a check with a written expectation, change a
 saved journey, or write to `observed.json`.
 
-Locally the person's agent drives the loop from the guide that
-`observed skill` prints, run, read the scope,
-write journeys for what is not observed, run again, and stop at the budget. In
+Locally the person's agent follows the guide that `observed skill` prints.
+It runs Observed, reads the scope, writes journeys for what is not observed,
+runs again, and stops at the budget. In
 CI the same loop needs a configured agent command, which belongs to
 [Phase 4](ROADMAP.md#status). Observed treats the file as data. A journey
 cannot supply a command.
@@ -216,9 +216,11 @@ saved candidate journey. Each capture uses the run's `--timeout`.
 
 A generated recipe records its targets and reason in an optional `generated`
 field. The run selection also retains its name and origin when source selection
-fails before either capture writes a recipe. Its three check definitions are fixed and validated again when the
-recipe is read. The optional field is an additive extension of recipe schema
-2 and result schema 9. An older reader that lacks the baseline check kinds
+fails before either capture writes a recipe. Its three check definitions are
+fixed and validated again when the recipe is read. The new browser-error and
+server-error baseline kinds are reserved for generated recipes; saved
+configuration retains its existing check kinds. The optional field is an
+additive extension of recipe schema 2 and result schema 9. An older reader that lacks the baseline check kinds
 rejects the recipe rather than treating it as a saved journey.
 
 Browser errors and the generated request window include initial navigation and
@@ -230,6 +232,11 @@ normalize the application's local port. The server check compares counts of
 does not distinguish query values or request bodies, so neither does this
 check. Accessibility uses the existing serious-or-higher baseline comparison.
 Missing or incompatible evidence leaves these checks unknown or not run.
+
+Comparable text evidence lists changed values for selectors that identify one
+element on both sides. These findings carry no check IDs or verdict, even when
+the screenshots are identical. Missing or ambiguous elements remain in the
+raw evidence and do not support a text-difference finding.
 
 The comparator adds a saving proposal only when a recorded coverage connection
 shows changed lines ran in that journey. Three saved journeys make the proposal
