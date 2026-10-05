@@ -60,6 +60,8 @@ import { EvidenceSection } from './sections';
 import { RenderTree, type ComponentSource } from './sections/react';
 import { PerformanceSection } from './sections/performance';
 import { Steps } from './sections/timeline';
+import { SceneView } from './scene';
+import { sceneOf } from './scene-model';
 import { ThemeControl, useTheme } from './theme';
 import { colors } from './tokens.stylex';
 
@@ -1391,6 +1393,7 @@ function JourneyView({
   const level = multiple ? 3 : 2;
   const tone = conclusionTones[journey.conclusion.kind];
   const titleId = `journey-${index + 1}-title`;
+  const scene = sceneOf(journey, use(ChangeScopeContext));
   const journeyLead =
     journey.conclusion.kind === 'no-regression'
       ? withoutPlainPasses(
@@ -1424,6 +1427,7 @@ function JourneyView({
           )}
         </div>
       ) : null}
+      {scene === null ? null : <SceneView scene={scene} level={level} />}
       <div {...stylex.props(styles.disclosures)}>
         {outline.sections.map((section) => (
           <Disclosure

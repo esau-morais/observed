@@ -122,6 +122,7 @@ release, like `observed-trial-express` for GitHub.
 | 2026-10-05 | Discord delivery posts as a bot with a channel ID, like Slack, not through a channel webhook | A webhook cannot reply to a message, so a recovery could not point at the failure it ends. See [Discord's webhook reference](https://docs.discord.com/developers/resources/webhook) |
 | 2026-10-05 | Discord attaches the screenshot crops to the message, and each edit replaces them | Discord keeps only the attachments an edit lists, so an edit never shows an earlier run's image beside the current verdict |
 | 2026-10-05 | GitLab, then Azure DevOps, follow the MVP gates. The GitHub code moves behind a host interface when GitLab starts | No gate needs them. GitLab needs a paid tier for project access tokens on GitLab.com, and Azure's attachment visibility is undocumented, so both need a trial before a design is final |
+| 2026-10-05 | A comparison journey with recorded steps on both sides opens with a scene drawn from its evidence, after Kit Langton's PR explainers. The viewer has it first; the GIF for the comment and Slack follows | The 2026-10-03 brief ranks explainer videos above text and diagrams. A scene built from result.json needs no model and claims nothing the evidence does not hold |
 
 The maintainer delegated the 2026-09-29 rows, every 2026-10-03 row after
 the first, and the 2026-10-05 rows. Reverse any of them here. Two things stay with the maintainer. One
