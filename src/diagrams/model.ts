@@ -62,15 +62,19 @@ export const diagramEnvironmentSchema = Schema.Struct({
     height: Schema.Int.check(Schema.isGreaterThan(0)),
     scale: Schema.Number.check(Schema.isGreaterThan(0)),
   }),
-  fontFamily: Schema.NonEmptyString,
 });
 
 export const diagramConditionsSchema = Schema.Struct({
   environment: diagramEnvironmentSchema,
   browserArguments: Schema.Array(Schema.String),
   rendererHash: digest,
+});
+
+export const diagramRenderConditionsSchema = Schema.Struct({
+  configuration: Schema.JsonObject,
   configurationHash: digest,
   theme: Schema.NonEmptyString,
+  fontFamily: Schema.NonEmptyString,
 });
 
 const artifact = (extension: 'svg' | 'png') =>
@@ -91,6 +95,7 @@ export const diagramSideSchema = Schema.Union([
   }),
   Schema.Struct({
     kind: Schema.Literal('rendered'),
+    conditions: diagramRenderConditionsSchema,
     svg: artifact('svg'),
     png: artifact('png'),
   }),

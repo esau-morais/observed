@@ -2,7 +2,6 @@ import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { devDependencies } from '../../package.json';
 import { gitChanges } from '../capture/changed-files';
-import { diagramConfiguration } from './configuration';
 import { gitEnvironment, processOutput } from '../capture/process';
 
 import { json, sha256 } from '../encoding';
@@ -29,6 +28,9 @@ const renderingSchema = Schema.Struct({
       Schema.Struct({
         kind: Schema.Literal('rendered'),
         svg: Schema.NonEmptyString,
+        configuration: Schema.fromJsonString(Schema.JsonObject),
+        theme: Schema.NonEmptyString,
+        fontFamily: Schema.NonEmptyString,
       }),
       Schema.Struct({
         kind: Schema.Literal('unavailable'),
@@ -151,7 +153,7 @@ const browser = Effect.fnUntraced(function* (options: {
 
   const response = yield* run([
     'eval',
-    `({browser: navigator.userAgent, platform: navigator.platform, locale: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, viewport: {width: innerWidth, height: innerHeight, scale: devicePixelRatio}, fontFamily: getComputedStyle(document.body).fontFamily})`,
+    `({browser: navigator.userAgent, platform: navigator.platform, locale: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, viewport: {width: innerWidth, height: innerHeight, scale: devicePixelRatio}})`,
     '--json',
   ]);
   const environment = yield* Schema.decodeUnknownEffect(
@@ -166,8 +168,6 @@ const browser = Effect.fnUntraced(function* (options: {
     environment: environment.data.result,
     browserArguments: options.browserArguments,
     rendererHash: sha256(script),
-    configurationHash: sha256(json(diagramConfiguration)),
-    theme: diagramConfiguration.theme,
   };
 
   return { run, conditions };
@@ -292,6 +292,12 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
 
               return {
                 kind: 'rendered',
+                conditions: {
+                  configuration: result.configuration,
+                  configurationHash: sha256(json(result.configuration)),
+                  theme: result.theme,
+                  fontFamily: result.fontFamily,
+                },
                 svg: { path: svg, sha256: sha256(result.svg) },
                 png: {
                   path: png,

@@ -34,7 +34,15 @@ async function renderObservedDiagram(source: string) {
       throw new Error('Diagram dimensions must be between 1 and 4096 pixels');
     }
 
-    return { kind: 'rendered', svg: element.outerHTML };
+    const configuration = mermaid.mermaidAPI.getConfig();
+
+    return {
+      kind: 'rendered',
+      svg: element.outerHTML,
+      configuration: JSON.stringify(configuration),
+      theme: configuration.theme,
+      fontFamily: getComputedStyle(element).fontFamily,
+    };
   } catch (error) {
     container.replaceChildren();
 

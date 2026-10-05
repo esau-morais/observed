@@ -184,6 +184,12 @@ test('delivery rejects stale manifests and changed image bytes before publicatio
         base: { kind: 'absent' },
         candidate: {
           kind: 'rendered',
+          conditions: {
+            configuration: { theme: 'default' },
+            configurationHash: sha256(json({ theme: 'default' })),
+            theme: 'default',
+            fontFamily: 'sans-serif',
+          },
           svg: { path: 'diagrams/0-candidate.svg', sha256: sha256('svg') },
           png: { path: 'diagrams/0-candidate.png', sha256: sha256('expected') },
         },

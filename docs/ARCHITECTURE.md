@@ -356,10 +356,10 @@ details stay in the diagram adapter; the comparator and shared result types do n
 artifact has a hash. The adapter reads the captured commit identities, so a
 branch moving during capture cannot select different diagrams. Delivery checks
 both identities and verifies the PNG before publishing it. Rendering conditions
-record the browser, platform, viewport, scale, locale, timezone, font family,
-browser arguments, theme, and hashes of the renderer and configuration. Input
-over 50,000 characters is unavailable. The viewer
-and single-file report do not display diagrams yet; the raw bundle keeps both
+record the browser, platform, viewport, scale, locale, timezone, browser arguments,
+and renderer hash. Each rendered side records its effective Mermaid configuration
+and hash, theme, and computed SVG font family, including frontmatter overrides.
+Input over 50,000 characters is unavailable. The viewer and single-file report do not display diagrams yet; the raw bundle keeps both
 formats. A worktree candidate records "not run" because this adapter reads only
 committed Markdown. A renamed heading makes removed and added pairs; moving an
 unchanged heading preserves its pairs.
