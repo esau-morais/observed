@@ -11,6 +11,7 @@ Details of the GitHub Action. The
 | `base` | required | Revision to compare against. Use `${{ github.event.pull_request.base.sha }}`, which stays fixed when the base branch moves or the job is re-run |
 | `candidate` | `HEAD` | Revision to capture. `HEAD` is the merge commit GitHub checks out for the pull request |
 | `timeout` | `120000` | Milliseconds allowed for each capture |
+| `generated` | empty | JSON file with up to three extra journeys, relative to the workspace, even when `project` is a subdirectory. Saved journeys and checks stay unchanged |
 | `artifact-name` | `observed-bundle` | Name of the uploaded bundle. The report page adds `.html`. Give each call its own name when a workflow runs the action more than once, such as in a matrix |
 | `retention-days` | `7` | Days GitHub keeps the artifacts |
 | `github-token` | `${{ github.token }}` | Token that titles the check, posts the comment and stores the screenshot crops it shows |
@@ -27,6 +28,14 @@ the comment with a stale result. On Linux the action installs packages with
 passwordless `sudo`, which GitHub-hosted runners provide. Each journey is its
 own capture of each revision, so raise `timeout-minutes` when you add
 journeys.
+
+To include journeys supplied for this run, write their JSON file before the
+action and pass `generated: evidence/generated.json`. The action passes it to
+`observe --generated`; it does not generate journeys or call an agent. The
+[generated journey contract](ARCHITECTURE.md#generated-journeys) defines the
+budget, target files, and fixed baseline checks. The CLI validates the file;
+an unreadable or invalid file fails the run. Leave the input empty to run only
+the saved journeys.
 
 ## Permissions
 

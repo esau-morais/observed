@@ -19,6 +19,9 @@ inputs:
   timeout:
     description: Milliseconds allowed for each capture.
     default: '120000'
+  generated:
+    description: Optional generated-journey JSON file, relative to the workspace. Adds up to three journeys without changing saved journeys or checks.
+    default: ''
   artifact-name:
     description: Name of the uploaded evidence bundle. The report page is uploaded as this name plus .html.
     default: observed-bundle
@@ -121,6 +124,7 @@ runs:
         OBSERVED_BASE: ${{ inputs.base }}
         OBSERVED_CANDIDATE: ${{ inputs.candidate }}
         OBSERVED_TIMEOUT: ${{ inputs.timeout }}
+        OBSERVED_GENERATED: ${{ inputs.generated }}
         OBSERVED_CLI: ${{ steps.install.outputs.cli }}
       run: |
         bundle="$(mktemp -d "$RUNNER_TEMP/observed-XXXXXX")"
@@ -128,12 +132,15 @@ runs:
         # Captured application output is untrusted; keep it from issuing workflow commands.
         token="$(openssl rand -hex 16)"
         echo "::stop-commands::$token"
+        generated=()
+        if [ -n "$OBSERVED_GENERATED" ]; then generated=(--generated "$OBSERVED_GENERATED"); fi
         code=0
         bun "$OBSERVED_CLI" observe "$OBSERVED_PROJECT" \
           --base "$OBSERVED_BASE" \
           --candidate "$OBSERVED_CANDIDATE" \
           --timeout "$OBSERVED_TIMEOUT" \
           --output "$bundle/run" \
+          "${generated[@]}" \
           --json > "$bundle/result.json" || code=$?
         echo "::$token::"
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
