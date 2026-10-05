@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { cp, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkRun, type Expectation } from './check';
 import { pairs, project, type Pair } from './cases';
@@ -110,6 +111,13 @@ await Effect.runPromise(
         );
       }
 
+      for (const file of pair.materialize ?? []) {
+        await rename(
+          path.join(fixture, file.from),
+          path.join(fixture, file.to),
+        );
+      }
+
       await writeFile(
         path.join(fixture, 'README.md'),
         'Original documentation.\n',
@@ -191,6 +199,21 @@ await Effect.runPromise(
         'commit',
         '-m',
         'test: pin expectations before capture',
+      );
+      const sha256 = (bytes: Uint8Array) =>
+        createHash('sha256').update(bytes).digest('hex');
+      await writeFile(
+        path.join(directory, 'required-hashes.json'),
+        json({
+          expectation: sha256(
+            await readFile(path.join(directory, 'expected.json')),
+          ),
+          checker: sha256(
+            await readFile(path.join(import.meta.dirname, 'check.ts')),
+          ),
+          tool: sha256(await readFile(path.join(output, 'tool.json'))),
+        }),
+        { flag: 'wx' },
       );
       console.log(
         `Running ${pair.expectation.id}: expected exit ${pair.expectation.exitCode}`,

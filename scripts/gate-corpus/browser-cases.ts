@@ -86,6 +86,7 @@ export const browserPairs: readonly Pair[] = [
   },
   {
     fixture: 'gate-playwright',
+    materialize: [{ from: 'saved.spec.ts.txt', to: 'saved.spec.ts' }],
     baseProject: {
       ...project,
       source: {
@@ -96,16 +97,11 @@ export const browserPairs: readonly Pair[] = [
           'bun.lock',
           'tsconfig.json',
           'playwright.config.ts',
-          'saved.spec.ts.txt',
+          'saved.spec.ts',
         ],
       },
       setup: [
         ['bun', 'install', '--frozen-lockfile'],
-        [
-          'bun',
-          '-e',
-          "await Bun.write('saved.spec.ts', Bun.file('saved.spec.ts.txt'))",
-        ],
         ['bun', 'run', 'typecheck'],
         ['bun', 'run', 'install-browser'],
         ...project.setup,

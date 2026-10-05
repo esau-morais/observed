@@ -114,6 +114,7 @@ type Edit = { file: string; from: string; to: string };
 export type Pair = {
   expectation: Expectation;
   fixture?: string;
+  materialize?: readonly { from: string; to: string }[];
   generated?: string;
   edits: readonly Edit[];
   baseEdits?: readonly Edit[];
