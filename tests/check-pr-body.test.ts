@@ -16,7 +16,7 @@ test('a short body that opens with a screenshot, a mermaid flow or a before | af
     '[![the comment](https://example.test/c.png)](https://example.test/pr/1)',
     '<p align="center"><img width="600" src="https://github.com/user-attachments/assets/x"></p>',
     '![the change][shot]\n\n[shot]: https://example.test/after.png',
-    `<!-- a template comment -->\n\n${screenshot}`,
+    `<!-- a template comment with <h2>review</h2> -->\n\n${screenshot}`,
   ]) {
     expect(
       checkPrBody(

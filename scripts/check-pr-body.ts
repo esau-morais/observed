@@ -76,7 +76,9 @@ function parse(body: string) {
     code: (_children, meta) =>
       block(meta?.language === 'mermaid' ? 'mermaid' : 'code', ''),
     html: (children) => {
-      for (const [, level, label = ''] of children.matchAll(
+      const visible = children.replace(/<!--[\s\S]*?-->/g, '');
+
+      for (const [, level, label = ''] of visible.matchAll(
         /<(h[1-6]|summary)\b[^>]*>([\s\S]*?)<\/\1>/gi,
       )) {
         (level?.toLowerCase() === 'summary' ? labels : headings).push(
@@ -84,9 +86,7 @@ function parse(body: string) {
         );
       }
 
-      return /^\s*(<!--[\s\S]*?-->\s*)+$/.test(children)
-        ? ''
-        : block('html', children);
+      return visible.trim() === '' ? '' : block('html', visible);
     },
     image: (_children, meta) => (meta.src.trim() === '' ? '' : imageMark),
     codespan: (children) => children.replace(/\s+/g, '_'),
