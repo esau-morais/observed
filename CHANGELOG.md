@@ -17,8 +17,10 @@ The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
   `capture.browserArguments ["--no-sandbox"]`. Concealed values stay redacted.
 - **A removed journey in the verification corpus.** A new pair removes one of
   two journeys: its two checks stay unknown while the other journey's two checks
-  pass. The relaxed and removed check pairs now also assert the protected and
-  proposed expectation text against raw request counts.
+  pass. The relaxed and removed check pairs now also check the protected
+  expectation text in `result.json` and the saved report, and the relaxed pair
+  checks its proposed text beside it. The rewritten-journey pair checks both
+  step definitions.
 - **Kits for gates 9 and 10, the two release gates that need people.**
   `docs/GATE-KITS.md` holds the facilitator's script for setting Observed up on
   an unfamiliar project and the reader packet of gate 3 and gate 5 reports, with
