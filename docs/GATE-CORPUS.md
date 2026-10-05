@@ -2,8 +2,9 @@
 
 The corpus runs the public CLI against disposable Git repositories. Each pair
 writes and commits its required result before capture. The checker reads `result.json`,
-HAR entries, agent-browser text output, errors, raw CDP coverage, and the saved
-Markdown report. It imports no Observed code.
+HAR entries, agent-browser text, errors, accessibility audits, timing samples,
+React recordings, application response logs, Playwright reports, raw CDP coverage,
+and the saved Markdown report. It imports no Observed code.
 
 ## Run
 
@@ -29,6 +30,10 @@ bun run gates:check evidence/gates-01/request-fault/run/report \
 
 The runner saves each fixture's commits, command output, exit code, raw captures,
 exported report, and checker result. `summary.json` lists completed pair results.
+Before capture, `required-hashes.json` pins the expectation, checker and tool
+provenance bytes. React and Playwright fixtures install their locked dependencies
+with Bun; Playwright also installs its pinned Chromium. Its test template becomes
+a committed test file before either snapshot, so both sides retain its source hash.
 Setup or Git errors stop the run with a nonzero exit before the summary is
 written. A failed assertion or unreadable artifact makes the checker exit 1. Capture directories
 are retained, including failed runs. The missing-evidence runner commits its expectations in the output directory
@@ -66,7 +71,7 @@ after 15 minutes, with a 10-second termination grace period.
 | Gate | Runnable pairs | What the checker reads | Remaining work |
 | --- | --- | --- | --- |
 | 1 | `correct-change` | Exit 0, passing checks, HAR count 1 on each side, exercised `app.ts` | Check changed-line mapping against raw coverage |
-| 2 | `request-fault`, `text-fault` | Exit 2, regression, exact HAR counts or raw element text on both sides | Accessibility, browser errors, performance, React, API operations, imported Playwright; observation-only kinds need separate expectations |
+| 2 | Eight [fault pairs](#seeded-evidence-kinds) and `observation-change` | Regression and exit 2 for each fault, measurements against raw output; changed observations keep two passing checks and exit 0 | One bounded fault per check-capable kind, not every check option. Corpus CI and independent visual inspection remain pending |
 | 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity`, `startup-failure` | Exit 1, unavailable comparison, unknown missing evidence, exact failure reasons, candidate HAR; real startup log and process exit; preserved selection hash rejects an older revision | The identity pair covers saved-report revalidation, not GitHub event freshness. The age pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text, removed-journey pair, and a pair that changes `source`, `setup` or `start` |
@@ -100,6 +105,31 @@ from `trial/gate-corpus-base` to `trial/gate-corpus-request`. Its base commits t
 expectation before the candidate changes the request count. Do not merge the
 seeded fault. The local fixture needs no credentials, framework, or package
 installation.
+
+## Seeded evidence kinds
+
+The fault pairs and fresh captures of their published trial refs pass. A wrong
+accessibility count, committed before capture, fails the independent checker.
+The React counter in the main browser runs separately from the DevTools recorder.
+The load budget uses three local samples after one warmup; it is not a production
+percentile. API coverage here is the status check, not schema or readback behavior.
+
+| Pair | Raw evidence | Trial |
+| --- | --- | --- |
+| `request-fault` | HAR count 1 → 2 | [#20](https://github.com/esau-morais/observed-trial-express/pull/20) |
+| `text-fault` | Element text `Items loaded` → `Wrong items` | [#39](https://github.com/esau-morais/observed-trial-express/pull/39) |
+| `accessibility-fault` | One new axe `label` violation on `#item-name` | [#32](https://github.com/esau-morais/observed-trial-express/pull/32) |
+| `browser-errors-fault` | Page errors 0 → 1, no console messages | [#33](https://github.com/esau-morais/observed-trial-express/pull/33) |
+| `performance-fault` | Each raw load sample, median and 1000 ms budget | [#35](https://github.com/esau-morais/observed-trial-express/pull/35) |
+| `react-renders-fault` | App updates 1 → 2, corroborated by a layout-effect counter including the mount | [#36](https://github.com/esau-morais/observed-trial-express/pull/36) |
+| `api-status-fault` | Application response log agrees with status 200 → 503 | [#34](https://github.com/esau-morais/observed-trial-express/pull/34) |
+| `playwright-fault` | Raw attempt status passed → failed; unchanged test source in both snapshots | [#38](https://github.com/esau-morais/observed-trial-express/pull/38) |
+| `observation-change` | Different PNG bytes, final tree matching the raw snapshot, raw paint calls 1 → 2 | [#37](https://github.com/esau-morais/observed-trial-express/pull/37) |
+
+The PNG reader checks the signature and byte difference, not decoded pixels or
+visual meaning. Gate 6's independent screenshot inspection remains separate.
+These trial reruns use the CLI on published refs; they are not delivery-workflow
+or PR-comment checks. No rendered product output changed in this corpus addition.
 
 ## Generated journey pairs
 
