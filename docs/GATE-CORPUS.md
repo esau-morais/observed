@@ -70,7 +70,7 @@ after 15 minutes, with a 10-second termination grace period.
 
 | Gate | Runnable pairs | What the checker reads | Remaining work |
 | --- | --- | --- | --- |
-| 1 | `correct-change` | Exit 0, passing checks, HAR count 1 on each side, exercised `app.ts` | Check changed-line mapping against raw coverage |
+| 1 | `correct-change`, `correct-mapped-change` | Exit 0, passing checks, raw HAR and text; fixed shifted source map cross-checked against raw CDP, with one changed line executed and one untouched | Arbitrary bundler maps are not covered; corpus CI remains pending |
 | 2 | Eight [fault pairs](#seeded-evidence-kinds) and `observation-change` | Regression and exit 2 for each fault, measurements against raw output; changed observations keep two passing checks and exit 0 | One bounded fault per check-capable kind, not every check option. Corpus CI and independent visual inspection remain pending |
 | 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity`, `startup-failure` | Exit 1, unavailable comparison, unknown missing evidence, exact failure reasons, candidate HAR; real startup log and process exit; preserved selection hash rejects an older revision | The identity pair covers saved-report revalidation, not GitHub event freshness. The age pair asserts both age and interval errors; it does not isolate age detection |
@@ -106,6 +106,28 @@ from `trial/gate-corpus-base` to `trial/gate-corpus-request`. Its base commits t
 expectation before the candidate changes the request count. Do not merge the
 seeded fault. The local fixture needs no credentials, framework, or package
 installation.
+
+## Changed-line coverage
+
+`correct-mapped-change` changes two return expressions without changing their
+values. Its saved click calls one function once and leaves the other unused.
+The [fixed fixture](../tests/fixtures/gate-coverage/README.md) places those
+expressions at generated lines 4 and 8, mapped to original lines 2 and 6.
+The expectation pins both source maps and the raw CDP function boundaries;
+it imports no collector, source-map decoder or comparator.
+
+At `d6ef56e`, the local pair and a fresh CLI capture of
+[trial #45](https://github.com/esau-morais/observed-trial-express/pull/45)
+pass: two named checks, exit 0, raw HAR count 1 and text `Items loaded` on
+both sides. Raw CDP reports counts 1 and 0; the scope records original line
+2 as run and line 6 as not run, and the change-map connection counts agree.
+A precommitted expectation that the unused function ran fails with checker
+exit 1. Neither a generated line number nor the outer module's execution
+can substitute for the mapped function's execution.
+
+This is a local CLI run of published refs, not GitHub workflow delivery.
+It verifies one authored shifted map, not every bundler. The original
+`correct-change` pair remains a separate smoke check. Corpus CI is pending.
 
 ## Altered expectations
 

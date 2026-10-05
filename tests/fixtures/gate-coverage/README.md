@@ -5,7 +5,9 @@ lines and removes TypeScript annotations. Its version 3 map places generated
 lines 3 through 9 at original lines 1 through 7. The first two mapping lines
 are empty; `AAAA` starts at source 0, line 0, column 0; each `AACA` advances
 the original line by one. This fixed table is authored separately from the
-collector and comparator.
+collector and comparator. The mapping fields and signed VLQ values follow
+[ECMA-426 sections 6 and 9.2](https://tc39.es/ecma426/#sec-mappings-structure),
+checked 2026-10-05.
 
 The candidate replaces both numeric return expressions with equivalent
 `Number` calls and updates the embedded source. The saved click calls
