@@ -3,7 +3,8 @@ import path from 'node:path';
 import { gitChanges } from './capture/changed-files';
 import { captureApplication } from './capture/coordinator';
 import { processOutput } from './capture/process';
-import { json, sha256 } from './encoding';
+import { json } from './encoding';
+import { diagramResultHash, diagramRevisions } from './diagrams/model';
 import { captureDiagrams } from './diagrams/capture';
 import { exportComparison } from './export';
 import { packaged } from './installation';
@@ -212,10 +213,8 @@ export const runProject = Effect.fn('runProject')(function* (options: {
         projectRoot: root,
         toolRoot: options.toolRoot,
         directory: exported.directory,
-        baseRevision: options.baseRevision,
-        candidateRevision: options.candidateRevision,
-        changes,
-        resultHash: sha256(json(exported.result)),
+        revisions: diagramRevisions(exported.result),
+        resultHash: diagramResultHash(exported.result),
         browserArguments: savedRecipes[0]?.browserArguments ?? [],
       }).pipe(
         Effect.catch((error) =>

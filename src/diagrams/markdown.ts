@@ -3,35 +3,41 @@ import type { Nodes } from 'mdast';
 
 type Block = { heading: string; order: number; source: string };
 
-function headingText(node: Nodes): string {
-  if ('value' in node) {
-    return node.value;
-  }
+function* descendants(root: Nodes): Generator<Nodes> {
+  const pending = [root];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (node === undefined) {
+      continue;
+    }
 
-  if ('children' in node) {
-    return node.children.map(headingText).join('');
+    yield node;
+    if ('children' in node) {
+      for (let index = node.children.length - 1; index >= 0; index--) {
+        const child = node.children[index];
+        if (child !== undefined) {
+          pending.push(child);
+        }
+      }
+    }
   }
-
-  return '';
 }
 
 export function mermaidBlocks(markdown: string): Block[] {
   const blocks: Block[] = [];
   const counts = new Map<string, number>();
   let heading = '';
-  const visit = (node: Nodes) => {
+  for (const node of descendants(fromMarkdown(markdown))) {
     if (node.type === 'heading') {
-      heading = headingText(node);
+      heading = [...descendants(node)]
+        .map((child) => ('value' in child ? child.value : ''))
+        .join('');
     } else if (node.type === 'code' && node.lang === 'mermaid') {
       const order = (counts.get(heading) ?? 0) + 1;
       counts.set(heading, order);
       blocks.push({ heading, order, source: node.value });
-    } else if ('children' in node) {
-      node.children.forEach(visit);
     }
-  };
-
-  visit(fromMarkdown(markdown));
+  }
 
   return blocks;
 }

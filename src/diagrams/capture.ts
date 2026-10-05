@@ -1,14 +1,18 @@
 import { Effect, FileSystem, Schema } from 'effect';
 import path from 'node:path';
 import { devDependencies } from '../../package.json';
-import { commitSchema } from '../capture/model';
+import { gitChanges } from '../capture/changed-files';
+import { diagramConfiguration } from './configuration';
 import { gitEnvironment, processOutput } from '../capture/process';
-import type { GitChanges } from '../comparison-model';
+
 import { json, sha256 } from '../encoding';
 import { agentBrowserPath, packaged } from '../installation';
 import { changedMermaidBlocks } from './markdown';
 import {
   diagramManifestSchema,
+  diagramEnvironmentSchema,
+  diagramConditionsSchema,
+  diagramRevisions,
   type DiagramManifest,
   type DiagramSide,
 } from './model';
@@ -145,7 +149,28 @@ const browser = Effect.fnUntraced(function* (options: {
   yield* run(['open', server.url.href]);
   yield* run(['set', 'viewport', '1440', '1000']);
 
-  return run;
+  const response = yield* run([
+    'eval',
+    `({browser: navigator.userAgent, platform: navigator.platform, locale: navigator.language, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, viewport: {width: innerWidth, height: innerHeight, scale: devicePixelRatio}, fontFamily: getComputedStyle(document.body).fontFamily})`,
+    '--json',
+  ]);
+  const environment = yield* Schema.decodeUnknownEffect(
+    Schema.fromJsonString(
+      Schema.Struct({
+        success: Schema.Literal(true),
+        data: Schema.Struct({ result: diagramEnvironmentSchema }),
+      }),
+    ),
+  )(response);
+  const conditions = {
+    environment: environment.data.result,
+    browserArguments: options.browserArguments,
+    rendererHash: sha256(script),
+    configurationHash: sha256(json(diagramConfiguration)),
+    theme: diagramConfiguration.theme,
+  };
+
+  return { run, conditions };
 });
 
 export const captureDiagrams = Effect.fn('captureDiagrams')(
@@ -153,9 +178,7 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
     projectRoot: string;
     toolRoot: string;
     directory: string;
-    baseRevision: string;
-    candidateRevision: string | null;
-    changes: GitChanges;
+    revisions: ReturnType<typeof diagramRevisions>;
     resultHash: string;
     browserArguments: readonly string[];
   }) {
@@ -165,16 +188,19 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
       'diagrams-transcript.jsonl',
     );
     const collect = Effect.gen(function* () {
-      if (options.candidateRevision === null) {
-        return {
-          kind: 'not-run',
-          reason:
-            'Diagram observations need a base and candidate commit; the candidate is a worktree.',
-        } as const;
+      if (options.revisions.kind !== 'commits') {
+        return options.revisions;
       }
 
-      if (options.changes.kind === 'unavailable') {
-        return { kind: 'unavailable', reason: options.changes.reason } as const;
+      const { baseCommit, candidateCommit } = options.revisions;
+      const changes = yield* gitChanges({
+        projectRoot: options.projectRoot,
+        baseRevision: baseCommit,
+        candidateRevision: candidateCommit,
+        transcript,
+      });
+      if (changes.kind === 'unavailable') {
+        return changes;
       }
 
       const git = (args: readonly string[]) =>
@@ -185,25 +211,12 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
           env: gitEnvironment(),
           transcript,
         });
-      const resolve = (ref: string) =>
-        git([
-          'rev-parse',
-          '--verify',
-          '--end-of-options',
-          `${ref}^{commit}`,
-        ]).pipe(
-          Effect.flatMap((value) =>
-            Schema.decodeUnknownEffect(commitSchema)(value.trim()),
-          ),
-        );
-      const baseCommit = yield* resolve(options.baseRevision);
-      const candidateCommit = yield* resolve(options.candidateRevision);
       const pairs = [];
-      for (const file of options.changes.files.filter((file) =>
+      for (const file of changes.files.filter((file) =>
         /\.(?:md|markdown)$/i.test(file.path),
       )) {
         const repositoryFile = path.posix.normalize(
-          path.posix.join(options.changes.projectDirectory, file.path),
+          path.posix.join(changes.projectDirectory, file.path),
         );
         const base =
           file.change === 'added'
@@ -213,8 +226,15 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
           file.change === 'removed'
             ? ''
             : yield* git(['show', `${candidateCommit}:${repositoryFile}`]);
+        const changed = yield* Effect.try({
+          try: () => changedMermaidBlocks(base, candidate),
+          catch: (error) =>
+            new DiagramFailure({
+              message: `Markdown could not be parsed: ${String(error)}`,
+            }),
+        });
         pairs.push(
-          ...changedMermaidBlocks(base, candidate).map((pair) => ({
+          ...changed.map((pair) => ({
             ...pair,
             file: repositoryFile,
           })),
@@ -225,13 +245,16 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
         DiagramManifest['observation'],
         { kind: 'complete' }
       >['pairs'][number][] = [];
+      let conditions: typeof diagramConditionsSchema.Type | null = null;
       if (pairs.length > 0) {
         yield* fs.makeDirectory(path.join(options.directory, 'diagrams'));
-        const run = yield* browser({
+        const browserSession = yield* browser({
           toolRoot: options.toolRoot,
           transcript,
           browserArguments: options.browserArguments,
         });
+        conditions = browserSession.conditions;
+        const { run } = browserSession;
         for (const [index, pair] of pairs.entries()) {
           const render = (side: 'base' | 'candidate') =>
             Effect.gen(function* () {
@@ -301,6 +324,7 @@ export const captureDiagrams = Effect.fn('captureDiagrams')(
         baseCommit,
         candidateCommit,
         producer: diagramProducer,
+        conditions,
         pairs: rendered,
       } as const;
     }).pipe(

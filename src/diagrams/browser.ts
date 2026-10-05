@@ -1,16 +1,8 @@
 import mermaid from 'mermaid';
+import { diagramConfiguration } from './configuration';
 
 async function renderObservedDiagram(source: string) {
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    suppressErrorRendering: true,
-    maxTextSize: 50_000,
-    maxEdges: 500,
-    deterministicIds: true,
-    deterministicIDSeed: 'observed',
-    theme: 'default',
-  });
+  mermaid.initialize(diagramConfiguration);
   const container = document.getElementById('diagram');
   if (container === null) {
     throw new Error('Diagram container is missing');
@@ -18,6 +10,12 @@ async function renderObservedDiagram(source: string) {
 
   container.replaceChildren();
   try {
+    if (source.length > diagramConfiguration.maxTextSize) {
+      throw new Error(
+        `Diagram exceeds Mermaid's ${diagramConfiguration.maxTextSize} character limit`,
+      );
+    }
+
     const { svg } = await mermaid.render('observed-diagram', source);
     container.innerHTML = svg;
     await document.fonts.ready;

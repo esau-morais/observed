@@ -351,9 +351,14 @@ verdict. The comment shows each pair under the scope line, labeled
 for them.
 
 `run/report/diagrams.json` holds these observations beside `result.json`, bound
-to its hash. Diagram schemas and producer details stay in the diagram adapter;
-the comparator and shared result types do not consume them. Each rendered
-artifact has a hash. Delivery verifies the PNG before publishing it. The viewer
+to the hash of its schema-normalized content. Diagram schemas and producer
+details stay in the diagram adapter; the comparator and shared result types do not consume them. Each rendered
+artifact has a hash. The adapter reads the captured commit identities, so a
+branch moving during capture cannot select different diagrams. Delivery checks
+both identities and verifies the PNG before publishing it. Rendering conditions
+record the browser, platform, viewport, scale, locale, timezone, font family,
+browser arguments, theme, and hashes of the renderer and configuration. Input
+over 50,000 characters is unavailable. The viewer
 and single-file report do not display diagrams yet; the raw bundle keeps both
 formats. A worktree candidate records "not run" because this adapter reads only
 committed Markdown. A renamed heading makes removed and added pairs; moving an

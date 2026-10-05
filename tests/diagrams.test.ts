@@ -1,4 +1,4 @@
-import { Effect, Schema } from 'effect';
+import { Schema } from 'effect';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,12 +6,15 @@ import { expect, test } from 'vitest';
 import { changedMermaidBlocks, mermaidBlocks } from '../src/diagrams/markdown';
 import {
   diagramManifestSchema,
+  diagramResultHash,
+  diagramRevisions,
   type DiagramManifest,
 } from '../src/diagrams/model';
 import { deliverDiagrams, diagramSection } from '../scripts/diagram-delivery';
 import { inlineText, summarize } from '../scripts/github-action';
-import { compareCaptures, inspectSide } from '../src/comparison';
+import { compareCaptures } from '../src/comparison';
 import { json, sha256 } from '../src/encoding';
+import { comparisonSchema } from '../src/comparison-model';
 
 const fixture = (side: string) =>
   readFile(
@@ -62,29 +65,44 @@ test('finds nested fences but ignores HTML comments and indented code examples',
   ]);
 });
 
-async function unavailableResult() {
-  const evaluatedAt = '2026-10-05T12:00:00.000Z';
-  const missing = await Effect.runPromise(
-    inspectSide({ directory: null, prefix: 'candidate', evaluatedAt }),
+const baseCommit = '9122c511113761f2bb7664d971b372b7010d25aa';
+const candidateCommit = '99ee1c6aac63b54ff358cd3f9dd7145825cedf4c';
+
+async function comparisonResult() {
+  const fixture = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(
+    await readFile(
+      path.join(import.meta.dirname, 'fixtures/report/errors-result.json'),
+      'utf8',
+    ),
   );
+  const journey = fixture.journeys[0];
+  if (journey === undefined) {
+    throw new Error('Expected a fixture journey');
+  }
 
   return compareCaptures({
-    base: missing,
-    candidate: missing,
-    evaluatedAt,
-    visual: { kind: 'unavailable', reason: 'No captures' },
+    base: journey.base,
+    candidate: journey.candidate,
+    evaluatedAt: fixture.evaluatedAt,
+    visual: {
+      kind: 'unavailable',
+      reason: 'No screenshots in this fixture test',
+    },
   });
 }
 
 test('diagram observations cannot change a verdict or turn unknown, incomplete or not-run input into a pass', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'observed-diagram-test-'));
-  const result = await unavailableResult();
+  const result = await comparisonResult();
   const before = json(result);
   const complete: DiagramManifest['observation'] = {
     kind: 'complete',
-    baseCommit: 'a'.repeat(40),
-    candidateCommit: 'b'.repeat(40),
+    baseCommit,
+    candidateCommit,
     producer: { name: 'mermaid', version: '12.1.0' },
+    conditions: null,
     pairs: [
       {
         file: 'docs/flow.md',
@@ -105,7 +123,11 @@ test('diagram observations cannot change a verdict or turn unknown, incomplete o
     ]) {
       await writeFile(
         path.join(root, 'diagrams.json'),
-        json({ schemaVersion: 1, resultHash: sha256(before), observation }),
+        json({
+          schemaVersion: 1,
+          resultHash: diagramResultHash(result),
+          observation,
+        }),
       );
       const diagrams = await deliverDiagrams({
         directory: root,
@@ -118,13 +140,13 @@ test('diagram observations cannot change a verdict or turn unknown, incomplete o
       expect(section).not.toMatch(/\b(pass(?:ed)?|none)\b/i);
       const summary = summarize({
         output: json({ directory: root, result }),
-        exitCode: 1,
+        exitCode: 2,
         artifact: 'observed',
         page: null,
         surface: { kind: 'comment' },
         diagrams,
       });
-      expect(summary.kind).toBe('unavailable');
+      expect(summary.kind).toBe('regression');
       expect(summary.markdown).toContain(section);
       expect(json(result)).toBe(before);
     }
@@ -146,12 +168,13 @@ test('diagram observations cannot change a verdict or turn unknown, incomplete o
 
 test('delivery rejects stale manifests and changed image bytes before publication', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'observed-diagram-test-'));
-  const result = await unavailableResult();
+  const result = await comparisonResult();
   const observation: DiagramManifest['observation'] = {
     kind: 'complete',
-    baseCommit: 'a'.repeat(40),
-    candidateCommit: 'b'.repeat(40),
+    baseCommit,
+    candidateCommit,
     producer: { name: 'mermaid', version: '12.1.0' },
+    conditions: null,
     pairs: [
       {
         file: 'a.md',
@@ -176,7 +199,11 @@ test('delivery rejects stale manifests and changed image bytes before publicatio
     await writeFile(path.join(root, 'diagrams/0-candidate.png'), 'tampered');
     await writeFile(
       path.join(root, 'diagrams.json'),
-      json({ schemaVersion: 1, resultHash: sha256(json(result)), observation }),
+      json({
+        schemaVersion: 1,
+        resultHash: diagramResultHash(result),
+        observation,
+      }),
     );
     const read = await deliverDiagrams({
       directory: root,
@@ -219,6 +246,122 @@ test('delivery rejects stale manifests and changed image bytes before publicatio
         },
       }),
     ).toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('diagram delivery accepts the saved comparison after the action decodes it', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'observed-diagram-test-'));
+  const result = await comparisonResult();
+  const decoded = Schema.decodeUnknownSync(
+    Schema.fromJsonString(comparisonSchema),
+  )(json(result));
+  const observation: DiagramManifest['observation'] = {
+    kind: 'complete',
+    baseCommit,
+    candidateCommit,
+    producer: { name: 'mermaid', version: '12.1.0' },
+    conditions: null,
+    pairs: [],
+  };
+  try {
+    await writeFile(
+      path.join(root, 'diagrams.json'),
+      json({
+        schemaVersion: 1,
+        resultHash: diagramResultHash(result),
+        observation,
+      }),
+    );
+    const delivery = await deliverDiagrams({
+      directory: root,
+      result: decoded,
+      publish: null,
+      skipReason: 'No publication',
+    });
+    expect(delivery?.observation.kind).toBe('complete');
+    expect(diagramSection(delivery, inlineText)).toBeNull();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('deeply nested Markdown does not abort diagram observation', () => {
+  const quote = '> '.repeat(12_000);
+  const source = ['```mermaid', 'flowchart LR', '  A --> B', '```']
+    .map((line) => quote + line)
+    .join('\n');
+  expect(mermaidBlocks(source)).toEqual([
+    { heading: '', order: 1, source: 'flowchart LR\n  A --> B' },
+  ]);
+});
+
+test('a URL in a parse error cannot create a table cell', () => {
+  const section = diagramSection(
+    {
+      observation: {
+        kind: 'complete',
+        baseCommit,
+        candidateCommit,
+        producer: { name: 'mermaid', version: '12.1.0' },
+        conditions: null,
+        pairs: [
+          {
+            file: 'README.md',
+            heading: 'Flow',
+            order: 1,
+            change: 'added',
+            base: { kind: 'absent' },
+            candidate: {
+              kind: 'unavailable',
+              reason: 'Parse error: https://example.test/a|b',
+            },
+          },
+        ],
+      },
+      images: new Map(),
+      notes: new Map(),
+    },
+    inlineText,
+  );
+  expect(section).toContain('a\\|b');
+});
+
+test('diagram revisions come from captured commits and stale revision pairs cannot be delivered', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'observed-diagram-test-'));
+  const result = await comparisonResult();
+  expect(diagramRevisions(result)).toEqual({
+    kind: 'commits',
+    baseCommit,
+    candidateCommit,
+  });
+  try {
+    await writeFile(
+      path.join(root, 'diagrams.json'),
+      json({
+        schemaVersion: 1,
+        resultHash: diagramResultHash(result),
+        observation: {
+          kind: 'complete',
+          baseCommit,
+          candidateCommit: 'c'.repeat(40),
+          producer: { name: 'mermaid', version: '12.1.0' },
+          conditions: null,
+          pairs: [],
+        },
+      }),
+    );
+    const delivery = await deliverDiagrams({
+      directory: root,
+      result,
+      publish: null,
+      skipReason: 'No publication',
+    });
+    expect(delivery?.observation.kind).toBe('unavailable');
+    expect(diagramSection(delivery, inlineText)).toContain(
+      'commits do not match',
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

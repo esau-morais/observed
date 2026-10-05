@@ -2,10 +2,11 @@ import { Effect, Schema } from 'effect';
 import type { Comparison } from '../src/comparison-model';
 import {
   diagramManifestSchema,
+  diagramResultHash,
+  diagramRevisions,
   type DiagramManifest,
   type DiagramSide,
 } from '../src/diagrams/model';
-import { json, sha256 } from '../src/encoding';
 import { readVerifiedArtifact } from '../src/evidence';
 
 export type DiagramDelivery = {
@@ -50,13 +51,24 @@ export async function deliverDiagrams(options: {
   }
 
   const manifest = decoded.value;
-  if (manifest.resultHash !== sha256(json(options.result))) {
+  if (manifest.resultHash !== diagramResultHash(options.result)) {
     return unavailable(
       'The diagram observations do not belong to this result.',
     );
   }
 
   if (manifest.observation.kind === 'complete') {
+    const revisions = diagramRevisions(options.result);
+    if (
+      revisions.kind !== 'commits' ||
+      revisions.baseCommit !== manifest.observation.baseCommit ||
+      revisions.candidateCommit !== manifest.observation.candidateCommit
+    ) {
+      return unavailable(
+        'The diagram commits do not match the captured revisions.',
+      );
+    }
+
     for (const pair of manifest.observation.pairs) {
       for (const side of [pair.base, pair.candidate]) {
         if (side.kind !== 'rendered') {
@@ -107,20 +119,24 @@ export function diagramSection(
     return `Observation · Diagrams ${observation.kind === 'not-run' ? 'not run' : 'unavailable'}: ${escape(observation.reason)}`;
   }
 
+  const escapeCell = (text: string) =>
+    escape(text).replace(/(\\*)\|/g, (match: string, slashes: string) =>
+      slashes.length % 2 === 0 ? `\\${match}` : match,
+    );
   const sideText = (side: DiagramSide, label: string) => {
     if (side.kind === 'absent') {
       return `Absent · ${label === 'Base' ? 'added' : 'removed'}`;
     }
 
     if (side.kind === 'unavailable') {
-      return `Unavailable: ${escape(side.reason)}`;
+      return `Unavailable: ${escapeCell(side.reason)}`;
     }
 
     const url = images.get(side.png.path);
 
     return url !== undefined && /^https:\/\/[^\s<>()[\]]+$/.test(url)
       ? `![${label} diagram observation](${url})`
-      : escape(
+      : escapeCell(
           notes.get(side.png.path) ??
             'Rendered diagram in the evidence bundle; inline image unavailable.',
         );
