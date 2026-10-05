@@ -103,7 +103,7 @@ explanation.
 
 ### Reports
 
-The packet is six reports from the [gate corpus](GATE-CORPUS.md), shown in this
+The packet is seven reports from the [gate corpus](GATE-CORPUS.md), shown in this
 order under neutral letters, so the pair names do not give answers away:
 
 | Letter | Corpus pair | Gate |
@@ -114,9 +114,7 @@ order under neutral letters, so the pair names do not give answers away:
 | D | `relaxed-check` | 5 |
 | E | `removed-check` | 5 |
 | F | `rewritten-journey` | 5 |
-
-A seventh report, for a change that removes a journey, joins as G once its
-corpus pair exists.
+| G | `removed-journey` | 5 |
 
 Make the reports on the facilitator's machine before the session, from a
 checkout of Observed with dependencies and the browser installed:
@@ -124,7 +122,7 @@ checkout of Observed with dependencies and the browser installed:
 ```bash
 mkdir -p evidence/readers
 for pair in outside-error-saved outside-error-generated outside-data-generated \
-  relaxed-check removed-check rewritten-journey; do
+  relaxed-check removed-check rewritten-journey removed-journey; do
   bun run gates "evidence/readers/$pair" "$pair"
 done
 ```
@@ -162,9 +160,10 @@ show the participant only the browser tab.
 Read this aloud before the first report:
 
 > Each page shows what a tool recorded when it ran two versions of a small web
-> app, before a change and after it. For each page, use the map near the top
-> and tell me which changed files the tool checked and what checked them, then
-> which changed files it did not check. Then tell me whether anything failed.
+> app, before a change and after it. For each page, use the part that shows
+> the changed files, a map near the top or a list further down, and tell me
+> which changed files the tool checked and what checked them, then which
+> changed files it did not check. Then tell me whether anything failed.
 > Take up to three minutes a page and think aloud. I can't explain the page.
 
 Repeat the second sentence for each report if the reader asks what to do.
@@ -172,8 +171,8 @@ Answer nothing else about the page.
 
 ### Answer key
 
-The key was written from `result.json` and the raw captures of corpus runs at
-`f96f475`, before any reader saw the reports. Request counts come from the HAR
+The key was written from `result.json` and the raw captures of corpus runs on
+`86af014`, before any reader saw the reports. Request counts come from the HAR
 files, errors from the browser's error records, text from agent-browser's
 output, and line execution from the coverage records. A reader who follows the
 page and still gives a wrong answer has found a problem in the page.
@@ -192,7 +191,7 @@ Data:
 no-regression
 public/gate-3-error.js not-observed
 public/gate-3-error.js.map not-observed
-summary passed
+Open invoice summary: summary passed
   Matched 1 element(s); text: "One invoice is ready".
 ```
 
@@ -216,13 +215,13 @@ regression
 public/gate-3-error.js checked generated-browser-errors
 public/gate-3-error.js.map not-observed
 public/gate-3-error.js ran 1 of 1 changed lines
-summary passed
+Open invoice summary: summary passed
   Matched 1 element(s); text: "One invoice is ready".
-generated-browser-errors regression
+Open invoice detail (generated): generated-browser-errors regression
   No new browser errors passed on base and failed on candidate. Base: 0; candidate: 1. No new page or console errors, including navigation and readiness, compared with base.
-generated-accessibility passed
+Open invoice detail (generated): generated-accessibility passed
   No serious or higher violations on the candidate.
-generated-server-errors passed
+Open invoice detail (generated): generated-server-errors passed
   No new errors compared with base.
 ```
 
@@ -246,13 +245,13 @@ no-regression
 public/gate-3-data.js exercised
 public/gate-3-data.js.map not-observed
 public/gate-3-data.js ran 1 of 1 changed lines
-summary passed
+Open invoice summary: summary passed
   Matched 1 element(s); text: "One invoice is ready".
-generated-browser-errors passed
+Show invoice amount (generated): generated-browser-errors passed
   No new errors compared with base.
-generated-accessibility passed
+Show invoice amount (generated): generated-accessibility passed
   No serious or higher violations on the candidate.
-generated-server-errors passed
+Show invoice amount (generated): generated-server-errors passed
   No new errors compared with base.
 ```
 
@@ -278,10 +277,10 @@ regression
 app.ts exercised
 observed.json outside-captured-source
 app.ts ran 1 of 1 changed lines
-one-request regression
+Load items: one-request regression
   Each Load items click sends one request passed on base and failed on candidate. Base: 1; candidate: 2. Exactly 1 GET /api/items request(s) with status 200.
   proposed passed: Exactly 2 GET /api/items request(s) with status 200.
-loaded-text passed
+Load items: loaded-text passed
   Matched 1 element(s); text: "Items loaded".
 ```
 
@@ -307,9 +306,9 @@ regression
 app.ts exercised
 observed.json outside-captured-source
 app.ts ran 1 of 1 changed lines
-loaded-text passed
+Load items: loaded-text passed
   Matched 1 element(s); text: "Items loaded".
-one-request regression
+Load items: one-request regression
   Each Load items click sends one request passed on base and failed on candidate. Base: 1; candidate: 2. Exactly 1 GET /api/items request(s) with status 200.
 ```
 
@@ -333,10 +332,10 @@ unavailable
 app.ts exercised
 observed.json outside-captured-source
 app.ts ran 1 of 1 changed lines
-one-request unknown
+Load items: one-request unknown
   This change alters the journey's steps, so the captures cannot apply the base's checks.
   proposed passed: Exactly 1 GET /api/items request(s) with status 200.
-loaded-text unknown
+Load items: loaded-text unknown
   This change alters the journey's steps, so the captures cannot apply the base's checks.
   proposed passed: Exactly one #result element with text "Items loaded".
 ```
@@ -349,6 +348,38 @@ loaded-text unknown
   request.
 - Wrong answers to note: the run passed because the proposed checks passed or
   the request count stayed at 1.
+
+#### G: a removed journey
+
+The change deletes the second of two journeys, "Reload items", from
+`observed.json`. The app does not change.
+
+Data:
+
+```text
+unavailable
+observed.json outside-captured-source
+Load items: one-request passed
+  Observed 1 matching GET /api/items request(s); statuses: 200.
+Load items: loaded-text passed
+  Matched 1 element(s); text: "Items loaded".
+Reload items (removed): one-request unknown
+  This change removes the journey, so no capture ran this check.
+Reload items (removed): loaded-text unknown
+  This change removes the journey, so no capture ran this check.
+```
+
+- Checked: no changed file. The only changed file is `observed.json`, outside
+  the captured source. The remaining journey's two checks passed on both
+  versions, with 1 request before and after.
+- Not checked: `observed.json`. The removed journey's two checks are unknown,
+  because no capture ran them.
+- Failed: nothing failed. The result is unavailable because of the two
+  unknown checks. This page has no map near the top. The changed files are
+  listed further down.
+- Wrong answers to note: the run passed, which the Checks section's "2/2
+  passed" invites, since it counts only the remaining journey; removing the
+  journey removed its checks from the result.
 
 ### Reader sheet
 
@@ -368,6 +399,7 @@ Copy one per reader.
 | D | | | | | | | | |
 | E | | | | | | | | |
 | F | | | | | | | | |
+| G | | | | | | | | |
 
 "Where they looked" names the parts of the page in order, such as the map, a
 file's panel, the Files view, Details or a section below the map.
