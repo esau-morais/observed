@@ -114,9 +114,12 @@ values. Its saved click calls one function once and leaves the other unused.
 The [fixed fixture](../tests/fixtures/gate-coverage/README.md) places those
 expressions at generated lines 4 and 8, mapped to original lines 2 and 6.
 The expectation pins both source maps and the raw CDP function boundaries;
-it imports no collector, source-map decoder or comparator.
+it imports no collector, source-map decoder or comparator. It also requires
+recorded coverage on both sides and for the saved journey in the scope:
+unknown, missing or duplicated coverage fails the pair even when the raw
+files and exercised lines remain.
 
-At `d6ef56e`, the local pair and a fresh CLI capture of
+At `4526510`, the local pair and a fresh CLI capture of
 [trial #45](https://github.com/esau-morais/observed-trial-express/pull/45)
 pass: two named checks, exit 0, raw HAR count 1 and text `Items loaded` on
 both sides. Raw CDP reports counts 1 and 0; the scope records original line
