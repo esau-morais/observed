@@ -573,7 +573,9 @@ test('shifted mapping rejects unavailable mapped coverage despite retained scope
     scope: object[] = [journey],
   ) => ({
     changeScope: { kind: 'recorded', coverage: scope },
-    journeys: [{ base: { evidence: base }, candidate: { evidence: candidate } }],
+    journeys: [
+      { base: { evidence: base }, candidate: { evidence: candidate } },
+    ],
   });
   const replacements = (recorded: object, field: string) => [
     [],
@@ -590,7 +592,9 @@ test('shifted mapping rejects unavailable mapped coverage despite retained scope
 
   expect(await run(result())).toBe(true);
   for (const evidence of replacements(coverage, 'status')) {
-    expect.soft(await run(result(evidence)), JSON.stringify(evidence)).toBe(false);
+    expect
+      .soft(await run(result(evidence)), JSON.stringify(evidence))
+      .toBe(false);
     expect
       .soft(await run(result(undefined, evidence)), JSON.stringify(evidence))
       .toBe(false);
@@ -598,7 +602,10 @@ test('shifted mapping rejects unavailable mapped coverage despite retained scope
 
   for (const scope of replacements(journey, 'kind')) {
     expect
-      .soft(await run(result(undefined, undefined, scope)), JSON.stringify(scope))
+      .soft(
+        await run(result(undefined, undefined, scope)),
+        JSON.stringify(scope),
+      )
       .toBe(false);
   }
 });
