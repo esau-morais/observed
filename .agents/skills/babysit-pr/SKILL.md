@@ -68,25 +68,39 @@ the case of proper nouns, acronyms, code, paths, commands, and quoted output,
 such as AI, GitHub, React, Slack, and Observed. The title and commits keep their
 Conventional Commit form.
 
-Include:
+Open with the visual that shows the change:
 
-- what changed for people using Observed or working on it, and why. Name the
-  behavior, not each file.
-- evidence: a link to each run, trial PR, screenshot, or artifact, with its
-  result in one line. Use a table only to compare several runs, one short line
-  per row.
-- checks CI does not run, such as instruction-change commands, seeded faults,
-  or browser checks, each with its result in one line.
-- what no check covered, open questions, and any review step that could not
-  run, such as unavailable review agents.
-- review findings that were declined, with the reason, or are still open.
+- a before | after screenshot of the viewer, report, or page it changes.
+- the rendered Observed comment from a trial run.
+- a GIF when the change moves or takes several steps.
+- a `mermaid` diagram for docs, decisions, and flows. When the change
+  alters a flow, show the flow before and after.
+
+Upload images as GitHub attachments, for example with `uploadImage` in
+[github-delivery.ts](../../../scripts/github-delivery.ts). A local evidence path
+is not an attachment; name it only as a location in the maintainer's checkout.
+
+Then write at most 150 words of prose, one line each: what changed for people
+using Observed or working on it, and the evidence, with a link to each run,
+trial PR, or artifact and its result. Use at most two headings: `checks`, for
+checks CI does not run, such as instruction-change commands, seeded faults, or
+browser checks, and `not verified`, for what no check covered, open questions,
+and review steps that could not run. A declined or open review finding is one
+line with its reason.
 
 Leave out what the diff, the commit list, or CI already shows: file-by-file
 narration, lists of test cases, output of checks CI runs, fixed review findings,
-review rounds, process notes, and repeated caveats. Local evidence paths are
-not GitHub attachments; name them only as locations in the maintainer's
-checkout. Length follows the change. A version bump takes a few lines; a new
-evidence kind can take several paragraphs.
+review rounds, process notes, and repeated caveats.
+
+Before every `gh pr create` and `gh pr edit --body-file`, write the body to a
+file and run the check until it passes:
+
+```bash
+bun run check:pr-body body.md
+```
+
+Add `--no-visual` only for release and pin PRs, which change nothing a reader
+can see.
 
 ## Handle feedback as one cycle
 

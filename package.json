@@ -54,6 +54,7 @@
     "format": "bun run --bun prettier --write .",
     "test": "bun run --bun vitest run",
     "build": "bun scripts/build.ts",
+    "check:pr-body": "bun scripts/check-pr-body.ts",
     "gates": "bun scripts/gate-corpus/run.ts",
     "gates:check": "bun scripts/gate-corpus/check.ts",
     "gates:missing": "bun scripts/gate-corpus/missing.ts"
