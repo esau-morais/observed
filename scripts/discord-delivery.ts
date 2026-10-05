@@ -51,7 +51,7 @@ const colors = {
 // Mentions are also switched off with allowed_mentions; escaping keeps
 // captured names from rendering as mentions, links or formatting.
 export function discordText(value: string): string {
-  return value.replace(/[\\*_~`|>#\-[\]()<@:]/g, '\\$&');
+  return value.replace(/[\\*_~`|>[\]()<@]/g, '\\$&');
 }
 
 function code(value: string): string {

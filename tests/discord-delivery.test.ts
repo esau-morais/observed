@@ -121,11 +121,11 @@ test('captured names cannot mention anyone or format the Discord message, and ca
 
   expect(payload.allowed_mentions).toEqual({ parse: [] });
   expect(payload.content).toContain(
-    'Order total \\@everyone \\<\\@123\\> \\[x\\]\\(https\\://evil.test\\) \\*\\*',
+    'Order total \\@everyone \\<\\@123\\> \\[x\\]\\(https://evil.test\\) \\*\\*',
   );
   expect(payload.content).toMatch(/^⚠️ /);
   expect(payload.content).toContain(
-    '[o/r\\#7](<https://github.com/o/r/pull/7>)',
+    '[o/r#7](<https://github.com/o/r/pull/7>)',
   );
   expect(text).toContain('1 of 1 check unknown');
   expect(text).not.toContain('Captured');
