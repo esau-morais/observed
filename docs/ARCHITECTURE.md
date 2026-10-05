@@ -315,46 +315,21 @@ Line delivery is planned and not built. On GitHub, every anchored finding become
 
 ### Scene export
 
-When a check failed, the action exports the viewer's before-and-after scene as
-a GIF and stores it like the screenshot crops, under `refs/observed/crops/`
-with a `-scene` suffix. The comment shows it above the check rows, and Slack
-gets it in the failing message's thread when `slack-images` is on. The export
-opens the run's single-file report in agent-browser at `#scene-frame=<step>/<progress>`,
-screenshots each frame at 960 by 540, and encodes them with `src/gif.ts`. The
-GIF plays once and stops on the code frame. A GIF has no sound, and GitHub
-shows video in a comment only through a user's upload.
+When a check failed, the action exports the viewer's before-and-after scene as a GIF and stores it like the screenshot crops, under `refs/observed/crops/` with a `-scene` suffix, and pruned with them. The comment shows it above the check rows, and Slack gets it in the failing message's thread when `slack-images` is on. The export opens the run's single-file report in agent-browser at `#scene-frame=<step>/<progress>`, screenshots each frame at 960 by 540, and encodes them with `src/gif.ts`. The GIF plays once and stops on the code frame, or on the verdict when the evidence points at no source line. A GIF has no sound, and GitHub shows video in a comment only through a user's upload ([attaching files](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files)).
 
 Rendering tools compared on 2026-10-05:
 
 | | Remotion 4.0.532 | HyperFrames 0.8.127 | agent-browser frames and `src/gif.ts` |
 | --- | --- | --- | --- |
-| License | Source-available. Companies above three people need a paid license, and a program that renders is an "automation" billed per render, so each user organization rendering in its CI would need one ([license](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md), [FAQ](https://www.remotion.dev/docs/license/faq)) | Apache-2.0, telemetry on by default ([repository](https://github.com/heygen-com/hyperframes)) | MIT, this repository |
-| On a CI runner | Downloads Chrome Headless Shell, bundles FFmpeg | Node 22, system FFmpeg and Chrome ([CLI](https://hyperframes.heygen.com/packages/cli)) | agent-browser and Chrome, already installed for capture |
+| License | Source-available. Companies above three people need a paid license, and a program that renders is an "automation" billed per render, so each user organization rendering in its CI would need one ([license](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md), [FAQ](https://www.remotion.dev/docs/license/faq)) | Apache-2.0 ([repository](https://github.com/heygen-com/hyperframes)) | MIT, this repository |
+| On a CI runner | Downloads Chrome Headless Shell, bundles FFmpeg | Node.js 22 or later and FFmpeg ([README](https://github.com/heygen-com/hyperframes#readme)), and Chrome | agent-browser and Chrome, already installed for capture |
 | Formats | MP4, WebM, GIF, PNG sequence | MP4, MOV, WebM, GIF, PNG sequence | GIF |
-| Install | 245 packages, 316 MB | 74 packages, 141 MB | none |
-| Reuse of the scene | A composition wrapper and Remotion's bundler for StyleX | Its engine can seek any page that exposes `window.__hf`, an API marked experimental | The report page as built |
+| Install, measured with `bun add` | 245 packages, 316 MB | 74 packages, 141 MB | none |
+| Reuse of the scene | A composition wrapper and Remotion's bundler for StyleX | Its engine seeks a page that exposes `window.__hf` ([engine](https://hyperframes.heygen.com/packages/engine)) | The report page as built |
 
-Runtime dependencies stay limited to agent-browser, so neither tool ships in
-the package. HyperFrames is the one to revisit if MP4 or WebM is needed, for
-example for narration, as an optional pinned step. 41 frames for a
-three-step journey took 5.1 s and made a 444 KB GIF.
+Runtime dependencies stay limited to agent-browser, so neither tool ships in the package. HyperFrames is the one to revisit if MP4 or WebM is needed, for example for narration, as an optional pinned step. For the three-step trial journey on `observed-trial-express`, the export made 41 frames: 5.1 s and 444 KB on a Linux laptop, and 7.6 s and 505 KB in the action's step on an `ubuntu-24.04` runner.
 
-Narration is not built. Kit Langton's explainers are made with
-[psychopomp](https://github.com/kitlangton/psychopomp) and voiced through
-ElevenLabs with a Professional Voice Clone of Kit Langton's own voice and
-bracketed delivery cues (`scenes/pr-walkthrough/narration-v4/README.md` at
-46fd612, read 2026-10-05). Observed would use only a stock voice or one the
-user supplies, never a clone of someone else. A narration track stays
-optional, and the scene stays complete with captions alone. The default
-script would be the same evidence sentences the captions use; a script an
-agent writes is interpretation and carries that label. Providers with stock
-voices and whisper-to-shout control, prices as listed on 2026-10-05:
-ElevenLabs v3 audio tags ($80 per million characters), Azure Neural TTS SSML
-styles including whispering and shouting ($15 to $22), OpenAI
-gpt-4o-mini-tts style instructions, and Gemini TTS style prompts. Kokoro-82M
-runs offline under Apache-2.0 with a 327 MB model, without expressive
-control. Audio needs a video file, which GitHub accepts in a comment only as
-a user's upload.
+Narration is not built. Kit Langton makes the explainers with [psychopomp](https://github.com/kitlangton/psychopomp). At 46fd612, read 2026-10-05, its default walkthrough narration uses Fish Audio, and a study in `scenes/pr-walkthrough/narration-v4/README.md` used an ElevenLabs Professional Voice Clone named `Kit Langton`, directed with bracketed cues. Neither file says which voice the published post used, and the post's replies could not be read. Observed would use only a stock voice or one the user supplies, never a clone of someone else. A narration track stays optional, and the scene stays complete with captions alone. The default script would be the captions' evidence sentences; a script an agent writes is interpretation and carries that label. Stock voices with whisper-to-shout control exist in [ElevenLabs v3 audio tags](https://elevenlabs.io/docs/best-practices/prompting/eleven-v3) and [Azure SSML speaking styles](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-voice). [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) runs offline under Apache-2.0, without that control.
 
 The planned `/observed` trigger runs only for a comment from a user with write access on a pull request from the same repository. Untrusted pull request code must never run where the GitHub App key or Slack token can be read. If one workflow cannot guarantee that, split it: an unprivileged capture uploads the result, and a privileged delivery started by `workflow_run` reads only that upload. Never use `pull_request_target`. If neither design is safe, fall back to a label trigger on `pull_request`.
 

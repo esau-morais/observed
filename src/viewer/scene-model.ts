@@ -845,7 +845,7 @@ export function exportFrames(
       {
         beat: index,
         progress: 1,
-        delay: beat.hold - step * tweens.length,
+        delay: Math.max(step, beat.hold - step * tweens.length),
       },
     ];
   });

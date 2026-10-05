@@ -301,15 +301,11 @@ export function lzw(indices: Uint8Array, minimum: number): Uint8Array {
 type Rect = { x: number; y: number; width: number; height: number };
 
 function changed(
-  previous: Uint8Array | null,
+  previous: Uint8Array,
   current: Uint8Array,
   width: number,
   height: number,
 ): Rect | null {
-  if (previous === null) {
-    return { x: 0, y: 0, width, height };
-  }
-
   let left = width;
   let right = -1;
   let top = height;
@@ -376,11 +372,10 @@ export function encodeGif(frames: readonly GifFrame[]): Uint8Array {
     out.bytes(colors[index] ?? [0, 0, 0]);
   }
 
-  let previous: Uint8Array | null = null;
-  let pending: { indices: Uint8Array; rect: Rect; delay: number } | null = null;
   const write = (frame: { indices: Uint8Array; rect: Rect; delay: number }) => {
     out.bytes([0x21, 0xf9, 4, 0x04]);
-    out.word(Math.max(2, Math.round(frame.delay / 10)));
+    // Hundredths of a second in 16 bits.
+    out.word(Math.min(65_535, Math.max(2, Math.round(frame.delay / 10))));
     out.bytes([0, 0]);
     out.byte(0x2c);
     out.word(frame.rect.x);
@@ -404,31 +399,27 @@ export function encodeGif(frames: readonly GifFrame[]): Uint8Array {
     out.byte(0);
   };
 
-  for (const frame of frames) {
-    const indices = indexed(frame, colors);
-    const rect = changed(previous, indices, width, height);
+  let pending = {
+    indices: indexed(first, colors),
+    rect: { x: 0, y: 0, width, height },
+    delay: first.delay,
+  };
 
-    if (rect === null && pending !== null) {
+  for (const frame of frames.slice(1)) {
+    const indices = indexed(frame, colors);
+    const rect = changed(pending.indices, indices, width, height);
+
+    if (rect === null) {
       // An unchanged frame lengthens the one before it.
       pending.delay += frame.delay;
       continue;
     }
 
-    if (pending !== null) {
-      write(pending);
-    }
-
-    pending = {
-      indices,
-      rect: rect ?? { x: 0, y: 0, width: 1, height: 1 },
-      delay: frame.delay,
-    };
-    previous = indices;
-  }
-
-  if (pending !== null) {
     write(pending);
+    pending = { indices, rect, delay: frame.delay };
   }
+
+  write(pending);
 
   out.byte(0x3b);
 

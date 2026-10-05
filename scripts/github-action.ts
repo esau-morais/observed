@@ -708,27 +708,28 @@ function screenshotSection(
   );
 }
 
-// The scene image, with the verdict it ends on as its alternative text.
+// The scene's alternative text: the verdict it ends on.
+export function sceneAlt(result: Comparison): string | null {
+  const exported = exportedScene(result);
+  const verdict = exported?.scene.beats.findLast(
+    (beat) => beat.phase === 'candidate',
+  );
+
+  return exported === null
+    ? null
+    : `Scene drawn from this run's evidence, after Kit Langton's PR explainers. ${verdict?.caption ?? ''}`
+        .replace(/[[\]]/g, '')
+        .trim();
+}
+
 function sceneSection(
   result: Comparison,
   image: string | null | undefined,
 ): string | null {
   const url = httpsUrl(image);
-  const exported = exportedScene(result);
+  const alt = sceneAlt(result);
 
-  if (url === null || exported === null) {
-    return null;
-  }
-
-  const verdict = exported.scene.beats.findLast(
-    (beat) => beat.phase === 'candidate',
-  );
-  const alt =
-    `Scene drawn from this run's evidence, after Kit Langton's PR explainers. ${verdict?.caption ?? ''}`
-      .replace(/[[\]]/g, '')
-      .trim();
-
-  return `![${alt}](${url})`;
+  return url === null || alt === null ? null : `![${alt}](${url})`;
 }
 
 function screenshotDetails(result: Comparison): string | null {
@@ -1724,6 +1725,7 @@ export async function deliveredScene(options: {
   target: Target;
   server: string;
   ref: string;
+  cutoff: string | null;
   userToken: string;
   repositoryId: string;
 }): Promise<SceneImage | null> {
@@ -1755,15 +1757,25 @@ export async function deliveredScene(options: {
   let refused: unknown;
 
   try {
-    return {
-      image: await commitImage(options.target, {
-        server: options.server,
-        ref: options.ref,
-        name,
-        bytes,
-      }),
-      note: null,
-    };
+    const image = await commitImage(options.target, {
+      server: options.server,
+      ref: options.ref,
+      name,
+      bytes,
+    });
+    const { cutoff } = options;
+
+    // A failing run with unchanged screenshots stores no crops, so the scene
+    // prunes old refs too.
+    if (cutoff !== null) {
+      await pruneImages(options.target, cutoff).catch((error: unknown) =>
+        process.stderr.write(
+          `Observed: old image refs were not pruned: ${describeError(error)}\n`,
+        ),
+      );
+    }
+
+    return { image, note: null };
   } catch (error) {
     refused = error;
   }
@@ -2190,6 +2202,7 @@ if (import.meta.main) {
         attempt: environment('GITHUB_RUN_ATTEMPT'),
         artifact,
       })}-scene`,
+      cutoff: imageCutoff(now, environment('OBSERVED_RETENTION_DAYS')),
       userToken: source === 'fork' ? '' : environment('OBSERVED_IMAGE_TOKEN'),
       repositoryId: environment('GITHUB_REPOSITORY_ID'),
     });
@@ -2403,7 +2416,9 @@ if (import.meta.main) {
                   threadTs: sent.ts,
                   filename: 'observed-scene.gif',
                   title: 'Scene drawn from the run evidence',
-                  altText: 'Scene drawn from the run evidence',
+                  altText:
+                    sceneAlt(trusted.result) ??
+                    'Scene drawn from the run evidence',
                   bytes: await readFile(scenePath),
                 }),
               );
@@ -2532,15 +2547,11 @@ if (import.meta.main) {
       process.exit(0);
     }
 
-    const { result } = decoded.value;
-    const [journey] = result.journeys;
-    const recipe = journey?.candidate.recipe ?? journey?.base.recipe ?? null;
     const drawn = await sceneGif({
       page,
-      result,
+      result: decoded.value.result,
       output,
       toolRoot: path.resolve(import.meta.dirname, '..'),
-      browserArguments: recipe?.browserArguments ?? [],
     });
 
     if (drawn.kind === 'written') {

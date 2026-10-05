@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Comparison } from '../src/comparison-model';
 import { encodeGif, type GifFrame } from '../src/gif';
 import { agentBrowserPath } from '../src/installation';
@@ -15,13 +16,13 @@ const size = { width: 960, height: 540 };
 // The scene the viewer draws, exported as a GIF that plays once: agent-browser
 // opens the single-file report in its frame mode, each frame is a screenshot
 // after the hash names it, and the GIF encoder joins them. The page is this
-// run's own report, so the browser loads nothing from the network.
+// run's single-file report, whose content security policy allows no network
+// request.
 export async function sceneGif(options: {
   page: string;
   result: Comparison;
   output: string;
   toolRoot: string;
-  browserArguments: readonly string[];
 }): Promise<SceneGif> {
   const exported = exportedScene(options.result);
 
@@ -29,25 +30,43 @@ export async function sceneGif(options: {
     return { kind: 'none' };
   }
 
+  const journey = options.result.journeys[exported.journey];
+  const browserArguments =
+    journey?.candidate.recipe?.browserArguments ??
+    journey?.base.recipe?.browserArguments ??
+    [];
+
   const plan = exportFrames(exported.scene);
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'observed-scene-'));
   const session = `observed-scene-${String(process.pid)}`;
+  // An empty config of our own, and a working directory outside the pull
+  // request's checkout, so no agent-browser.json from it applies.
+  const config = path.join(temporary, 'browser-config.json');
+
+  await writeFile(config, '{}\n', { flag: 'wx' });
+
   const run = async (args: readonly string[]) => {
     const child = Bun.spawn(
       [
         process.execPath,
         agentBrowserPath(options.toolRoot),
+        '--config',
+        config,
         '--session',
         session,
         '--headed',
         'false',
         '--no-webmcp',
-        ...(options.browserArguments.length === 0
+        '--idle-timeout',
+        '60s',
+        ...(browserArguments.length === 0
           ? []
-          : ['--args', options.browserArguments.join(',')]),
+          : ['--args', browserArguments.join(',')]),
         ...args,
       ],
       {
+        cwd: temporary,
+        timeout: 60_000,
         env: {
           HOME: process.env.HOME,
           PATH: process.env.PATH,
@@ -61,10 +80,13 @@ export async function sceneGif(options: {
         stderr: 'pipe',
       },
     );
-    const code = await child.exited;
+    const [code, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
 
     if (code !== 0) {
-      const detail = (await new Response(child.stderr).text()).trim();
+      const detail = stderr.trim();
 
       throw new Error(
         `agent-browser ${args[0] ?? ''} exited with ${String(code)}${detail === '' ? '' : `: ${detail.slice(0, 300)}`}`,
@@ -74,7 +96,7 @@ export async function sceneGif(options: {
 
   try {
     const frames: GifFrame[] = [];
-    const url = new URL(`file://${path.resolve(options.page)}`);
+    const url = pathToFileURL(path.resolve(options.page));
 
     url.hash = 'scene-frame=0/1';
     await run(['open', url.href]);

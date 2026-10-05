@@ -166,10 +166,11 @@ runs:
         retention-days: ${{ inputs.retention-days }}
 
     # The report page in its frame mode, one screenshot per frame, joined into
-    # a GIF. Nothing is drawn unless a check failed.
+    # a GIF. Nothing is drawn unless a check failed and a comment or Slack
+    # could show it; a fork's pixels are never stored.
     - name: Draw the scene
       id: scene
-      if: always() && steps.page.outputs.path != ''
+      if: always() && steps.page.outputs.path != '' && !github.event.pull_request.head.repo.fork && (inputs.comment != 'off' || inputs.slack-channel != '')
       continue-on-error: true
       shell: bash
       env:
