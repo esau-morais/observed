@@ -26,9 +26,9 @@
       "tests/fixtures/self-observe"
     ],
     [
-      "sh",
-      "-c",
-      "bun dist/observed.js compare tests/fixtures/self-observe/base tests/fixtures/self-observe/candidate --output self-observe --json > self-observe.json; code=$?; [ $code -eq 2 ] || { cat self-observe.json; echo \"compare exited $code; the fixture must read as a regression (2)\" >&2; exit 1; }"
+      "bun",
+      "--eval",
+      "import { BunServices } from '@effect/platform-bun';\nimport { Effect } from 'effect';\nimport { TestClock } from 'effect/testing';\nimport { exportComparison } from './src/export.ts';\nimport { parseCapture } from './src/capture/model.ts';\nconst fixture = 'tests/fixtures/self-observe';\nconst capture = await Effect.runPromise(parseCapture(await Bun.file(`${fixture}/candidate/capture.json`).text()));\nconst exported = await Effect.runPromise(Effect.gen(function* () {\n  yield* TestClock.setTime(Date.parse(capture.finishedAt));\n  return yield* exportComparison({\n    journeys: [{ baseDirectory: `${fixture}/base`, candidateDirectory: `${fixture}/candidate` }],\n    directory: 'self-observe',\n    viewerDirectory: 'dist/viewer'\n  });\n}).pipe(Effect.provide(TestClock.layer()), Effect.provide(BunServices.layer)));\nif (exported.result.conclusion.kind !== 'regression') throw new Error(`The fixture must read as a regression, got ${exported.result.conclusion.kind}`);"
     ]
   ],
   "start": [

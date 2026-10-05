@@ -19,17 +19,21 @@ than a contributor's.
 A capture older than its journey's `maxAgeMs`, 24 hours by default, reads as
 stale and unavailable. These captures are frozen on purpose, so pull request
 #59 set `"maxAgeMs": 315360000000`, 3650 days, in the request-lab journey. They
-read as stale after 2036-09-25. The previous archive used the default and
-failed self-observe a day after it was made.
+read as stale after 2036-09-25 when compared at the current time. The previous
+archive used the default and failed self-observe a day after it was made.
 
-The root `observed.json` extracts the archive and runs
-`bun dist/observed.js compare` on the captures during `setup`, with the build
-of the revision being observed, and `start` serves the result with
-`observed view`. Each self-observation therefore shows
-that revision's viewer and comparison code. The fixture only supplies the data.
-`setup` fails unless `compare` exits `2`, a regression or a failed check, so a
-fixture that no longer reads that way stops the run instead of producing a
-misleading report. The "Regression" headline check tells the two apart.
+The root `observed.json` extracts the archive and calls that revision's
+`exportComparison` during `setup`. An Effect test clock sets evaluation time
+to the archived candidate's `finishedAt`, `2026-09-28T21:37:52.447Z`.
+The timestamp remains visible in the report, but does not change between
+self-observe runs. This clock applies only to the fixture export process.
+Normal captures and comparisons use the real clock. No evidence, freshness
+budget, check, or screenshot mask changes.
+
+`start` serves the result with `observed view`. Each self-observation shows
+that revision's built viewer and comparison code. Setup fails unless the
+fixture concludes a regression. The export program is inline so the
+candidate's setup also works on a base revision that predates this fix.
 
 Regenerate it when a capture or evidence schema change makes it unreadable, or
 when the evidence the self-observe checks read has changed:
