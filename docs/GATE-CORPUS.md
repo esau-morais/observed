@@ -53,7 +53,10 @@ A green corpus summary does not mean every release gate holds. The table names
 the parts these pairs do not cover.
 Gates 9 and 10 need people and have no automated pass.
 
-At `1bb17d7`, the local gate 7 pair passes its data and report wording checks.
+At `1bb17d7`, the local gate 7 pair and a fresh run of
+[observed-trial-express#28](https://github.com/esau-morais/observed-trial-express/pull/28)
+pass their data and report wording checks. Trial expectations were committed
+before capture; a deliberately wrong wording expectation fails with exit 1.
 Its literal text assertions require the scope sentence, outside-file count and
 path, and the named-check limitation. They reject the claim that checks describe
 unchanged behavior when an outside file changed, plus the phrases "verified
