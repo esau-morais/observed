@@ -356,6 +356,35 @@ test('requires innermost execution even when the result forges an exercised rela
     assertions: [{ label: 'saved line', actual: coverage, expected: false }],
   };
   expect((await checkRun(root, saved, 0)).passed).toBe(true);
+  const counted: Expectation = {
+    ...saved,
+    assertions: [
+      {
+        label: 'exact executions',
+        actual: { ...coverage, measure: 'count' },
+        expected: 0,
+      },
+    ],
+  };
+  expect((await checkRun(root, counted, 0)).passed).toBe(true);
+  expect(
+    (
+      await checkRun(
+        root,
+        {
+          ...counted,
+          assertions: [
+            {
+              label: 'wrong count',
+              actual: { ...coverage, measure: 'count' },
+              expected: 1,
+            },
+          ],
+        },
+        0,
+      )
+    ).passed,
+  ).toBe(false);
   for (const invalid of [
     { kind: 'unknown' },
     { result: [] },
@@ -378,6 +407,7 @@ test('requires innermost execution even when the result forges an exercised rela
   ]) {
     await writeFile(path.join(root, 'coverage.json'), JSON.stringify(invalid));
     expect((await checkRun(root, saved, 0)).passed).toBe(false);
+    expect((await checkRun(root, counted, 0)).passed).toBe(false);
   }
 
   await rm(path.join(root, 'coverage.json'));

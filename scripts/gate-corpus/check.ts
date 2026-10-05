@@ -14,6 +14,17 @@ const positive = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 const readingSchema = Schema.Union([
   Schema.Struct({
+    kind: Schema.Literal('png-different'),
+    file: Schema.String,
+    other: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('timeline-state'),
+    file: Schema.String,
+    side: Schema.Literals(['base', 'candidate']),
+    includes: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
     kind: Schema.Literal('load-budget'),
     file: Schema.String,
     side: Schema.Literals(['base', 'candidate']),
@@ -38,6 +49,7 @@ const readingSchema = Schema.Union([
     line: positive,
     column: natural,
     functionRange: Schema.Struct({ startOffset: natural, endOffset: positive }),
+    measure: Schema.optionalKey(Schema.Literal('count')),
   }),
   Schema.Struct({
     kind: Schema.Literal('json'),
@@ -124,7 +136,7 @@ export function select(
   return current;
 }
 
-async function readContainedText(root: string, filename: string) {
+async function readContainedFile(root: string, filename: string) {
   const directory = await realpath(root);
   const resolved = await realpath(path.resolve(directory, filename));
   const relative = path.relative(directory, resolved);
@@ -133,7 +145,11 @@ async function readContainedText(root: string, filename: string) {
     throw new Error(`Reading outside the run is forbidden: ${filename}`);
   }
 
-  return readFile(resolved, 'utf8');
+  return readFile(resolved);
+}
+
+async function readContainedText(root: string, filename: string) {
+  return (await readContainedFile(root, filename)).toString('utf8');
 }
 
 const harSchema = Schema.Struct({
@@ -241,10 +257,32 @@ function covered(
     throw new Error('Missing or ambiguous innermost coverage range');
   }
 
-  return inner[0].count > 0;
+  return reading.measure === 'count' ? inner[0].count : inner[0].count > 0;
 }
 
 async function read(root: string, reading: Reading) {
+  if (reading.kind === 'png-different') {
+    const images = await Promise.all(
+      [reading.file, reading.other].map((file) =>
+        readContainedFile(root, file),
+      ),
+    );
+    const [before, after] = images;
+    if (
+      before === undefined ||
+      after === undefined ||
+      images.some(
+        (bytes) =>
+          bytes.length < 33 ||
+          bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a',
+      )
+    ) {
+      throw new Error('Expected two PNG artifacts');
+    }
+
+    return !before.equals(after);
+  }
+
   if (reading.kind === 'text') {
     return (await readContainedText(root, reading.file)).includes(
       reading.includes,
@@ -252,6 +290,38 @@ async function read(root: string, reading: Reading) {
   }
 
   const value = decodeJson(await readContainedText(root, reading.file));
+
+  if (reading.kind === 'timeline-state') {
+    const state = Schema.decodeUnknownSync(
+      Schema.Struct({
+        kind: Schema.Literal('recorded'),
+        tree: Schema.NonEmptyString,
+      }),
+    )(
+      select(value, [
+        'journeys',
+        0,
+        reading.side,
+        'evidence',
+        { key: 'kind', equals: 'timeline' },
+        'value',
+        'finalState',
+      ]),
+    );
+    const producer = Schema.decodeUnknownSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          success: Schema.Literal(true),
+          data: Schema.Struct({ snapshot: Schema.NonEmptyString }),
+        }),
+      ),
+    )(await readContainedText(root, `journey-1/${reading.side}/snapshot.json`));
+    if (state.tree !== producer.data.snapshot) {
+      throw new Error('Timeline state disagrees with the raw snapshot');
+    }
+
+    return state.tree.includes(reading.includes);
+  }
 
   if (reading.kind === 'load-budget') {
     return loadBudget(root, value, reading);

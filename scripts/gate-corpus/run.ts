@@ -6,6 +6,7 @@ import { pairs, project, type Pair } from './cases';
 import { generatedPairs } from './generated-cases';
 import { evidencePairs } from './evidence-cases';
 import { browserPairs } from './browser-cases';
+import { observationPair } from './observation-cases';
 import { startupFailurePair } from './missing-cases';
 import { provenance } from './provenance';
 
@@ -58,6 +59,7 @@ await Effect.runPromise(
       ...generatedPairs,
       ...evidencePairs,
       ...browserPairs,
+      observationPair,
       startupFailurePair,
     ];
     const chosen =
