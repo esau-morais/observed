@@ -47,6 +47,18 @@ export function notObservedPaths(result: Comparison): string[] {
     : [];
 }
 
+export type ChatLinks = {
+  name: string;
+  pullRequest: string | null;
+  pullRequestLabel: string;
+  report: string | null;
+  run: string | null;
+};
+
+export function clip(value: string, length: number): string {
+  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
+}
+
 export type ChatState = { channel: string; failing: boolean };
 
 // Edits notify nobody, so only a newly failing result posts a new message,

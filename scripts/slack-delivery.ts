@@ -10,7 +10,12 @@ import {
   leadingChecks,
   type Tone,
 } from '../src/result-text';
-import { checkCount, notObservedPaths } from './chat-delivery';
+import {
+  checkCount,
+  clip,
+  notObservedPaths,
+  type ChatLinks,
+} from './chat-delivery';
 
 export class SlackError extends Schema.TaggedError<SlackError>()('SlackError', {
   message: Schema.String,
@@ -41,10 +46,6 @@ export function slackText(value: string): string {
     .replaceAll('>', '&gt;');
 }
 
-function clip(value: string, length: number): string {
-  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
-}
-
 const httpsUrl = Schema.String.check(Schema.isPattern(/^https:\/\/[^\s<>|]+$/));
 
 function slackLink(label: string, url: string | null): string | null {
@@ -52,14 +53,6 @@ function slackLink(label: string, url: string | null): string | null {
     ? `<${url}|${slackText(label).replaceAll('|', '/')}>`
     : null;
 }
-
-export type SlackLinks = {
-  name: string;
-  pullRequest: string | null;
-  pullRequestLabel: string;
-  report: string | null;
-  run: string | null;
-};
 
 function revision(side: Side | undefined): string {
   if (side?.capture === null || side?.capture === undefined) {
@@ -120,7 +113,7 @@ function location(result: Comparison): string {
     : ` · ${found.words} \`${slackText(found.place)}\``;
 }
 
-export function slackMessage(result: Comparison | null, links: SlackLinks) {
+export function slackMessage(result: Comparison | null, links: ChatLinks) {
   const title = clip(
     result === null
       ? 'No result: treat this run as unavailable'

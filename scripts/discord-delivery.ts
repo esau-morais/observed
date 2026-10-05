@@ -1,6 +1,7 @@
 import { Option, Schema } from 'effect';
 import { scopeLine } from '../src/change-scope-text';
 import type { Comparison, Side } from '../src/comparison-model';
+import { packaged } from '../src/installation';
 import { shortSource } from '../src/provenance-text';
 import {
   anchorLocation,
@@ -13,11 +14,12 @@ import {
 import {
   chatAction,
   checkCount,
+  clip,
   notObservedPaths,
+  type ChatLinks,
   type ChatState,
 } from './chat-delivery';
 import type { Crops } from './screenshot-crops';
-import type { SlackLinks } from './slack-delivery';
 
 export class DiscordError extends Schema.TaggedError<DiscordError>()(
   'DiscordError',
@@ -40,7 +42,7 @@ const icons = {
   neutral: '⚪',
 } satisfies Record<Tone, string>;
 
-// The light-theme foregrounds of DESIGN.md's evidence colors.
+// DESIGN.md's light-theme evidence foregrounds; neutral is textMuted.
 const colors = {
   regression: 0x9d3535,
   unknown: 0x506473,
@@ -56,10 +58,6 @@ export function discordText(value: string): string {
 
 function code(value: string): string {
   return `\`${value.replaceAll('`', 'ˋ')}\``;
-}
-
-function clip(value: string, length: number): string {
-  return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }
 
 const httpsUrl = Schema.String.check(
@@ -125,7 +123,7 @@ export const imageName = 'observed-screenshots.png';
 // verdict line is the content, so it is what a notification shows.
 export function discordMessage(
   result: Comparison | null,
-  links: SlackLinks,
+  links: ChatLinks,
   image: { altText: string } | null,
 ) {
   const title = clip(result === null ? noResult : headline(result), 300);
@@ -154,7 +152,10 @@ export function discordMessage(
   ];
 
   return {
-    content: `${icons[tone]} **${discordText(title)}**${result === null ? '' : location(result)} · ${where}`,
+    content: clip(
+      `${icons[tone]} **${discordText(title)}**${result === null ? '' : location(result)} · ${where}`,
+      2000,
+    ),
     embeds: [
       {
         color: colors[tone],
@@ -306,7 +307,7 @@ async function discordApi(
       method: request.method,
       headers: {
         Authorization: `Bot ${request.token}`,
-        'User-Agent': 'DiscordBot (https://github.com/esau-morais/observed, 0)',
+        'User-Agent': `DiscordBot (https://github.com/esau-morais/observed, ${packaged?.version ?? '0'})`,
         ...(typeof body === 'string'
           ? { 'Content-Type': 'application/json' }
           : {}),
@@ -386,7 +387,7 @@ export async function deliverDiscord(options: {
   previous: DiscordState | null;
   result: Comparison | null;
   failing: boolean;
-  links: SlackLinks;
+  links: ChatLinks;
   // Null when images are off or the result is not trusted.
   crops: (() => Promise<Crops>) | null;
 }): Promise<{ state: DiscordState | null; notes: DiscordNote[] }> {
@@ -421,7 +422,7 @@ export async function deliverDiscord(options: {
   if (crops.kind === 'mismatch') {
     notes.push({
       text: 'Discord: no image, because a screenshot does not match its recorded hash',
-      level: 'warning',
+      level: 'note',
     });
   }
 
@@ -486,6 +487,18 @@ export async function deliverDiscord(options: {
       } catch (retry) {
         notes.push(failure('The Discord message', retry));
       }
+    } else if (error instanceof DiscordError && error.gone) {
+      // Forget the deleted message, so later runs stop editing it.
+      return {
+        state: null,
+        notes: [
+          ...notes,
+          {
+            text: 'Discord: the earlier message is gone, and a result that is not failing posts nothing',
+            level: 'note',
+          },
+        ],
+      };
     } else {
       notes.push(failure('The Discord message', error));
     }

@@ -251,6 +251,22 @@ test('a deleted message is posted again while failing', async () => {
   expect(reposted.notes[0]?.text).toBe('Discord: posted a message');
 });
 
+test('a deleted message is forgotten, not posted again, once the result stops failing', async () => {
+  const calls = discord([refused(404, 10008)]);
+  const delivered = await deliverDiscord({
+    token: 'bot',
+    channel,
+    previous: { channel, message: earlier, failing: true },
+    result: null,
+    failing: false,
+    links,
+    crops: null,
+  });
+
+  expect(calls.map((call) => call.method)).toEqual(['PATCH']);
+  expect(delivered.state).toBeNull();
+});
+
 test('without Attach Files the message goes out without the image and says why', async () => {
   const calls = discord([refused(403, 50013), message(earlier)]);
   const delivered = await deliverDiscord({
