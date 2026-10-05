@@ -75,7 +75,7 @@ after 15 minutes, with a 10-second termination grace period.
 | 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity`, `startup-failure` | Exit 1, unavailable comparison, unknown missing evidence, exact failure reasons, candidate HAR; real startup log and process exit; preserved selection hash rejects an older revision | The identity pair covers saved-report revalidation, not GitHub event freshness. The age pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey`, `removed-journey` | Raw HAR counts, protected/proposed expectation text and saved Markdown, both changed step definitions; removed journey retains two unknown checks alongside two passing checks | A pair that changes `source`, `setup` or `start`; corpus CI |
-| 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
+| 6 | `intentional-copy` | Passing checks, exit 0, unchanged HAR count; [raw screenshots decoded by the checker](#screenshot-inspection) change only on the description line and agree with the reported visual change | Pixel bands assume the fixture's plain background; corpus CI remains pending |
 | 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR; saved report says no captured file changed, lists README.md, and limits checks to their scopes | Wording assertions cover the Markdown report; other delivery surfaces are not checked by this pair |
 | 8 | `passing-above-unavailable`, `unavailable-as-passing`, `regression-as-passed`, `collector-drops-requests` | Each source mutation makes the corpus red; both availability faults fail with missing and failed bases. Unmutated corpus passes on the same commit; raw HAR corroborates the request faults | These four known faults are covered, not arbitrary comparator or collector defects. Checker corruption tests are separate safeguards |
 
@@ -131,6 +131,29 @@ can substitute for the mapped function's execution.
 This is a local CLI run of published refs, not GitHub workflow delivery.
 It verifies one authored shifted map, not every bundler. The original
 `correct-change` pair remains a separate smoke check. Corpus CI is pending.
+
+## Screenshot inspection
+
+`intentional-copy` changes the description copy and keeps both saved checks.
+The checker decodes both raw screenshots with its own
+[PNG reader](../scripts/gate-corpus/png.ts), separate from the comparator's.
+It splits the page into bands of rows that hold any non-background pixel and
+requires the difference to touch only the second of four: the description
+line. The reported visual change must match the decoded size and differing
+pixel count, and each reported region must lie inside the raw difference. The
+raw accessibility snapshots must show the old copy on the base and only the new
+copy on the candidate.
+
+At `2731474`, the local pair and a fresh CLI capture of
+[trial #46](https://github.com/esau-morais/observed-trial-express/pull/46)
+pass. A precommitted expectation that the first band changed fails. On copies
+of the trial report, the previous expectation accepted identical screenshots,
+a truncated screenshot, a forged pixel count, a region moved to the heading and
+a stale snapshot; this one rejects each of them.
+
+This is a local CLI run of published refs, not GitHub workflow delivery. The
+band rule relies on the fixture's plain background and is not a general
+layout check. Corpus CI is pending.
 
 ## Altered expectations
 
