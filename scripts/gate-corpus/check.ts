@@ -292,22 +292,40 @@ async function read(root: string, reading: Reading) {
   const value = decodeJson(await readContainedText(root, reading.file));
 
   if (reading.kind === 'timeline-state') {
-    const state = Schema.decodeUnknownSync(
+    const side = select(value, ['journeys', 0, reading.side]);
+    const timeline = Schema.decodeUnknownSync(
       Schema.Struct({
-        kind: Schema.Literal('recorded'),
-        tree: Schema.NonEmptyString,
+        steps: Schema.Array(
+          Schema.Struct({
+            index: natural,
+            action: Schema.NonEmptyString,
+            outcome: Schema.Literal('completed'),
+          }),
+        ),
+        finalState: Schema.Struct({
+          kind: Schema.Literal('recorded'),
+          tree: Schema.NonEmptyString,
+        }),
       }),
-    )(
-      select(value, [
-        'journeys',
-        0,
-        reading.side,
-        'evidence',
-        { key: 'kind', equals: 'timeline' },
-        'value',
-        'finalState',
-      ]),
-    );
+    )(recordedEvidence(side, 'timeline'));
+    const recipe = Schema.decodeUnknownSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          steps: Schema.Array(Schema.Struct({ kind: Schema.NonEmptyString })),
+        }),
+      ),
+    )(await readContainedText(root, `journey-1/${reading.side}/recipe.json`));
+    if (
+      timeline.steps.length !== recipe.steps.length ||
+      timeline.steps.some(
+        (step, index) =>
+          step.index !== index || step.action !== recipe.steps[index]?.kind,
+      )
+    ) {
+      throw new Error('Timeline steps differ from the protected recipe');
+    }
+
+    const state = timeline.finalState;
     const producer = Schema.decodeUnknownSync(
       Schema.fromJsonString(
         Schema.Struct({
@@ -351,17 +369,24 @@ async function read(root: string, reading: Reading) {
   return requests.length;
 }
 
+function recordedEvidence(side: Schema.Json, kind: string): Schema.Json {
+  Schema.decodeUnknownSync(Schema.Literal('complete'))(
+    select(side, ['execution']),
+  );
+  const evidence = Schema.decodeUnknownSync(
+    Schema.Struct({ status: Schema.Literal('recorded'), value: Schema.Json }),
+  )(select(side, ['evidence', { key: 'kind', equals: kind }]));
+
+  return evidence.value;
+}
+
 async function loadBudget(
   root: string,
   result: Schema.Json,
   reading: Extract<Reading, { kind: 'load-budget' }>,
 ) {
   const side = select(result, ['journeys', 0, reading.side]);
-  const evidence = select(side, [
-    'evidence',
-    { key: 'kind', equals: 'performance' },
-    'value',
-  ]);
+  const evidence = recordedEvidence(side, 'performance');
   const samples = Schema.decodeUnknownSync(Schema.Array(Schema.Json))(
     select(evidence, ['samples']),
   );
@@ -427,19 +452,25 @@ async function loadBudget(
   }
 
   const median = (lower + upper) / 2;
-  const actual = select(side, [
-    'checks',
-    { key: 'id', equals: reading.check },
-    'actual',
-  ]);
+  const check = Schema.decodeUnknownSync(
+    Schema.Struct({
+      outcome: Schema.Literals(['passed', 'failed']),
+      actual: Schema.NonEmptyString,
+    }),
+  )(select(side, ['checks', { key: 'id', equals: reading.check }]));
+  const withinBudget = median <= reading.max;
+  if (check.outcome !== (withinBudget ? 'passed' : 'failed')) {
+    throw new Error('Check outcome disagrees with the raw load budget');
+  }
+
   const format = (value: number) =>
     `${value < 10 ? value.toFixed(1) : Math.round(value)} ms`;
   const summary = `median ${format(median)} over ${measured.length} samples, range ${format(measured[0] ?? median)} to ${format(measured.at(-1) ?? median)}`;
-  if (actual !== summary) {
+  if (check.actual !== summary) {
     throw new Error('Check measurement disagrees with the raw load samples');
   }
 
-  return median <= reading.max;
+  return withinBudget;
 }
 
 export async function checkRun(

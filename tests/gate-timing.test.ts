@@ -40,15 +40,18 @@ test('timing reader rejects unknown, incomplete, not-run and forged measurements
     journeys: [
       {
         base: {
+          execution: 'complete',
           checks: [
             {
               id: 'load',
+              outcome: 'passed',
               actual: 'median 40 ms over 3 samples, range 20 ms to 60 ms',
             },
           ],
           evidence: [
             {
               kind: 'performance',
+              status: 'recorded',
               value: { conditions: { samples: 3, warmup: 1 }, samples },
             },
           ],
@@ -80,6 +83,38 @@ test('timing reader rejects unknown, incomplete, not-run and forged measurements
     }
 
     expect((await check()).passed).toBe(true);
+
+    const base = result.journeys[0]?.base;
+    for (const overrides of [
+      ...['unknown', 'not-run', 'failed'].map((outcome) => ({
+        checks: [
+          {
+            id: 'load',
+            outcome,
+            actual: 'median 40 ms over 3 samples, range 20 ms to 60 ms',
+          },
+        ],
+      })),
+      ...['unknown', 'failed', 'blocked'].map((execution) => ({ execution })),
+      ...['unavailable', 'unknown', 'not-run'].map((status) => ({
+        evidence: [
+          {
+            kind: 'performance',
+            status,
+            value: { conditions: { samples: 3, warmup: 1 }, samples },
+          },
+        ],
+      })),
+    ]) {
+      await write(path.join(root, 'result.json'), {
+        journeys: [{ base: { ...base, ...overrides } }],
+      });
+      expect
+        .soft((await check()).passed, JSON.stringify(overrides))
+        .toBe(false);
+    }
+
+    await write(path.join(root, 'result.json'), result);
 
     await write(filename(3), raw(null, 3));
     expect((await check()).passed).toBe(false);

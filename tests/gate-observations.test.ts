@@ -25,18 +25,31 @@ test('a timeline needs a recorded, matching raw tree, never unknown or not-run s
     ],
   } satisfies Expectation;
   const tree = '- paragraph: Paint 1';
-  const result = (state: unknown) =>
+  const steps = [{ index: 0, action: 'click-role', outcome: 'completed' }];
+  const result = (state: unknown, overrides: object = {}) =>
     JSON.stringify({
       journeys: [
         {
           base: {
-            evidence: [{ kind: 'timeline', value: { finalState: state } }],
+            execution: 'complete',
+            evidence: [
+              {
+                kind: 'timeline',
+                status: 'recorded',
+                value: { steps, finalState: state },
+              },
+            ],
+            ...overrides,
           },
         },
       ],
     });
   try {
     await mkdir(path.join(root, 'journey-1/base'), { recursive: true });
+    await writeFile(
+      path.join(root, 'journey-1/base/recipe.json'),
+      JSON.stringify({ steps: [{ kind: 'click-role' }] }),
+    );
     await writeFile(
       path.join(root, 'journey-1/base/snapshot.json'),
       JSON.stringify({ success: true, data: { snapshot: tree } }),
@@ -46,6 +59,58 @@ test('a timeline needs a recorded, matching raw tree, never unknown or not-run s
       result({ kind: 'recorded', tree }),
     );
     expect((await checkRun(root, expected, 0)).passed).toBe(true);
+    for (const overrides of [
+      { execution: 'unknown' },
+      { execution: 'failed' },
+      ...['unavailable', 'unknown', 'not-run'].map((status) => ({
+        evidence: [
+          {
+            kind: 'timeline',
+            status,
+            value: { steps, finalState: { kind: 'recorded', tree } },
+          },
+        ],
+      })),
+      ...[
+        undefined,
+        [],
+        [
+          {
+            index: 0,
+            action: 'click-role',
+            outcome: 'not-run',
+            reason: 'skipped',
+          },
+        ],
+        [{ index: 0, action: 'click-role', outcome: 'failed' }],
+        [{ index: 1, action: 'click-role', outcome: 'completed' }],
+        [{ index: 0, action: 'network-idle', outcome: 'completed' }],
+        [...steps, ...steps],
+      ].map((recordedSteps) => ({
+        evidence: [
+          {
+            kind: 'timeline',
+            status: 'recorded',
+            value: {
+              steps: recordedSteps,
+              finalState: { kind: 'recorded', tree },
+            },
+          },
+        ],
+      })),
+    ]) {
+      await writeFile(
+        path.join(root, 'result.json'),
+        result({ kind: 'recorded', tree }, overrides),
+      );
+      expect
+        .soft(
+          (await checkRun(root, expected, 0)).passed,
+          JSON.stringify(overrides),
+        )
+        .toBe(false);
+    }
+
     for (const state of [
       { kind: 'unknown' },
       { kind: 'unavailable', reason: 'incomplete' },
