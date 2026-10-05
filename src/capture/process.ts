@@ -39,6 +39,7 @@ export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()(
     command: Schema.String,
     exitCode: Schema.Number,
     message: Schema.String,
+    stdout: Schema.String,
     stderr: Schema.String,
   },
 ) {}
@@ -136,6 +137,7 @@ export const processOutput = Effect.fn('processOutput')(function* (options: {
       return yield* new ProcessFailure({
         command: options.command,
         exitCode,
+        stdout: redactText(stdout, options.concealed),
         stderr: redactText(stderr, options.concealed),
         message: `${options.command} exited with code ${exitCode}; see transcript.jsonl for original output`,
       });
