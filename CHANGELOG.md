@@ -4,6 +4,25 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.9 (2026-10-05)
+
+Tenth alpha of 0.2.0.
+The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
+`result.json` stays at schema version 9.
+
+- **Browser launch failures say why.** When agent-browser fails during a
+  capture, the failure reason quotes its error instead of saying only that a
+  `bun` process exited. When Chrome finds no usable sandbox, as on Ubuntu 23.10
+  and later, the reason names `capture.browserArguments ["--no-sandbox"]`.
+  Concealed values stay redacted.
+- **Altered expectations in the verification corpus.** Runnable pairs now cover
+  a relaxed check, a removed check, a rewritten journey and a removed journey,
+  each judged by the base's expectation.
+- **Kits for the two release gates that need people.** `docs/GATE-KITS.md`
+  holds the facilitator's script for setting Observed up on an unfamiliar
+  project and the reader packet for gate 3 and 5 reports, with an answer key
+  written before anyone reads. Neither gate has been run.
+
 ## 0.2.0-alpha.8 (2026-10-05)
 
 Ninth alpha of 0.2.0.
