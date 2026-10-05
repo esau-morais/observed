@@ -116,6 +116,7 @@ export type Pair = {
   fixture?: string;
   generated?: string;
   edits: readonly Edit[];
+  baseEdits?: readonly Edit[];
   candidateProject?: Project;
 };
 

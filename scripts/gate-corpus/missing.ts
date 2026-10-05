@@ -2,7 +2,7 @@ import { Effect, Schema } from 'effect';
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { checkRun, type Expectation } from './check';
+import { checkRun, select, type Expectation } from './check';
 import { provenance } from './provenance';
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
@@ -15,6 +15,8 @@ const faults = [
   'old-schema',
   'unsupported-evidence-version',
   'stale-capture-and-window',
+  'unknown-collector-kind',
+  'stale-revision-identity',
 ] as const;
 
 type Fault = (typeof faults)[number];
@@ -25,14 +27,23 @@ const reasons = {
   'old-schema': [
     'Baseline unavailable: Capture manifest schema version 3 is unsupported. This Observed reads version 5. Capture this revision again.',
   ],
-  'unsupported-evidence-version': [],
+  'unsupported-evidence-version': 'Evidence schema version 999 is unsupported',
+  'unknown-collector-kind': 'This Observed does not support this evidence kind',
+  'stale-revision-identity': [
+    'Capture manifest unavailable: Artifact could not be read (ENOENT)',
+  ],
   'stale-capture-and-window': [
     'Capture is stale: older than 86400000 ms',
     'Observation window is inverted or outside the capture interval',
   ],
-} satisfies Record<Fault, readonly string[]>;
+} satisfies Record<Fault, string | readonly string[]>;
 
 function expectation(id: Fault): Expectation {
+  const unavailableSide =
+    id === 'stale-revision-identity' ? 'candidate' : 'base';
+  const evidenceKind =
+    id === 'unknown-collector-kind' ? 'future-collector' : 'text';
+
   return {
     id,
     gate: 4,
@@ -45,21 +56,22 @@ function expectation(id: Fault): Expectation {
           kind: 'json',
           file: 'result.json',
           path:
-            id === 'unsupported-evidence-version'
+            id === 'unsupported-evidence-version' ||
+            id === 'unknown-collector-kind'
               ? [
                   'journeys',
                   0,
                   'base',
                   'evidence',
-                  { key: 'kind', equals: 'text' },
+                  {
+                    key: 'kind',
+                    equals: evidenceKind,
+                  },
                   'reason',
                 ]
-              : ['journeys', 0, 'base', 'unresolved'],
+              : ['journeys', 0, unavailableSide, 'unresolved'],
         },
-        expected:
-          id === 'unsupported-evidence-version'
-            ? 'Evidence schema version 999 is unsupported'
-            : reasons[id],
+        expected: reasons[id],
       },
       {
         label: 'unavailable conclusion',
@@ -82,18 +94,21 @@ function expectation(id: Fault): Expectation {
         expected: 1,
       },
       {
-        label: 'missing base evidence is unknown',
+        label: 'missing evidence is unknown',
         actual: {
           kind: 'json',
           file: 'result.json',
           path: [
             'journeys',
             0,
-            'base',
+            id === 'stale-revision-identity' ? 'candidate' : 'base',
             'checks',
             {
               key: 'id',
-              equals: id === 'old-schema' ? 'capture-evidence' : 'loaded-text',
+              equals:
+                id === 'old-schema' || id === 'stale-revision-identity'
+                  ? 'capture-evidence'
+                  : 'loaded-text',
             },
             'outcome',
           ],
@@ -122,6 +137,39 @@ await Effect.runPromise(
       json(faults.map(expectation)),
       { flag: 'wx' },
     );
+    for (const args of [
+      ['init', '-b', 'main', output],
+      ['-C', output, 'add', 'expectations.json'],
+      [
+        '-C',
+        output,
+        '-c',
+        'user.name=Observed gate corpus',
+        '-c',
+        'user.email=gate-corpus@example.invalid',
+        '-c',
+        'commit.gpgsign=false',
+        '-c',
+        'core.hooksPath=/dev/null',
+        'commit',
+        '-m',
+        'test: pin missing-evidence expectations before comparison',
+      ],
+    ]) {
+      const child = Bun.spawn(['git', ...args], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, , stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      if (code !== 0) {
+        throw new Error(`Expectation commit failed: ${stderr}`);
+      }
+    }
+
     await writeFile(
       path.join(output, 'tool.json'),
       json({
@@ -167,15 +215,22 @@ await Effect.runPromise(
         case 'old-schema':
           manifest.schemaVersion = 3;
           break;
+        case 'unknown-collector-kind':
         case 'unsupported-evidence-version': {
           const entries = Schema.decodeUnknownSync(Schema.Array(objectSchema))(
             manifest.evidence,
           );
+          const change =
+            fault === 'unknown-collector-kind'
+              ? { kind: 'future-collector' }
+              : { schemaVersion: 999 };
           manifest.evidence = entries.map((entry) =>
-            entry.kind === 'text' ? { ...entry, schemaVersion: 999 } : entry,
+            entry.kind === 'text' ? { ...entry, ...change } : entry,
           );
           break;
         }
+        case 'stale-revision-identity':
+          break;
         case 'stale-capture-and-window':
           manifest.startedAt = '2020-01-01T00:00:00.000Z';
           manifest.finishedAt = '2020-01-01T00:00:01.000Z';
@@ -183,7 +238,7 @@ await Effect.runPromise(
       }
 
       await writeFile(filename, json(manifest));
-      const args = [
+      let args = [
         process.execPath,
         'run',
         'compare',
@@ -192,6 +247,38 @@ await Effect.runPromise(
         '--output',
         report,
       ];
+      if (fault === 'stale-revision-identity') {
+        await cp(source, report, { recursive: true });
+        const original = decode(
+          await readFile(
+            path.join(report, 'journey-1/candidate/capture.json'),
+            'utf8',
+          ),
+        );
+        const replacement = decode(
+          await readFile(
+            path.join(report, 'journey-1/base/capture.json'),
+            'utf8',
+          ),
+        );
+        if (
+          select(original, ['source', 'revision', 'commit']) ===
+          select(replacement, ['source', 'revision', 'commit'])
+        ) {
+          throw new Error(
+            'Stale-revision probe requires distinct base and candidate captures',
+          );
+        }
+
+        await rm(path.join(report, 'journey-1/candidate'), { recursive: true });
+        await cp(
+          path.join(report, 'journey-1/base'),
+          path.join(report, 'journey-1/candidate'),
+          { recursive: true },
+        );
+        args = [process.execPath, 'scripts/gate-corpus/revalidate.ts', report];
+      }
+
       const child = Bun.spawn(args, {
         cwd: path.resolve(import.meta.dirname, '../..'),
         stdout: 'pipe',

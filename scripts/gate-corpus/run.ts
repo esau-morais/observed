@@ -2,8 +2,9 @@ import { Effect } from 'effect';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkRun, type Expectation } from './check';
-import { pairs, project } from './cases';
+import { pairs, project, type Pair } from './cases';
 import { generatedPairs } from './generated-cases';
+import { startupFailurePair } from './missing-cases';
 import { provenance } from './provenance';
 
 const tool = path.resolve(import.meta.dirname, '../..');
@@ -30,6 +31,18 @@ async function git(cwd: string, ...args: string[]) {
   return result.stdout.trim();
 }
 
+async function applyEdits(fixture: string, edits: Pair['edits']) {
+  for (const edit of edits) {
+    const filename = path.join(fixture, edit.file);
+    const before = await readFile(filename, 'utf8');
+    if (before.split(edit.from).length !== 2) {
+      throw new Error(`Edit must match exactly once: ${filename}`);
+    }
+
+    await writeFile(filename, before.replace(edit.from, edit.to));
+  }
+}
+
 await Effect.runPromise(
   Effect.tryPromise(async () => {
     const [destination, selected] = process.argv.slice(2);
@@ -38,7 +51,7 @@ await Effect.runPromise(
       throw new Error('Usage: bun run gates NEW_OUTPUT_DIRECTORY [PAIR_ID]');
     }
 
-    const available = [...pairs, ...generatedPairs];
+    const available = [...pairs, ...generatedPairs, startupFailurePair];
     const chosen =
       selected === undefined
         ? available
@@ -93,22 +106,12 @@ await Effect.runPromise(
       await git(fixture, 'config', 'core.hooksPath', '/dev/null');
       await git(fixture, 'config', 'user.name', 'Observed gate corpus');
       await git(fixture, 'config', 'user.email', 'gate-corpus@example.invalid');
+      await applyEdits(fixture, pair.baseEdits ?? []);
       await git(fixture, 'add', '.');
       await git(fixture, 'commit', '-m', 'test: establish the protected base');
       const base = await git(fixture, 'rev-parse', 'HEAD');
 
-      for (const edit of pair.edits) {
-        const filename = path.join(fixture, edit.file);
-        const before = await readFile(filename, 'utf8');
-
-        if (before.split(edit.from).length !== 2) {
-          throw new Error(
-            `Edit must match exactly once: ${pair.expectation.id}/${edit.file}`,
-          );
-        }
-
-        await writeFile(filename, before.replace(edit.from, edit.to));
-      }
+      await applyEdits(fixture, pair.edits);
 
       if (pair.candidateProject !== undefined) {
         await writeFile(
