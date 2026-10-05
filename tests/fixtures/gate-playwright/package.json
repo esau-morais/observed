@@ -1,0 +1,16 @@
+{
+  "name": "observed-gate-playwright",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "test:e2e": "bun run --bun playwright test --reporter=line,json",
+    "install-browser": "bun run --bun playwright install chromium",
+    "typecheck": "bun run --bun tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.0",
+    "@types/bun": "1.4.2",
+    "typescript": "5.9.3"
+  }
+}

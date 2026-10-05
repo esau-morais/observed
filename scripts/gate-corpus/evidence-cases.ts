@@ -4,7 +4,7 @@ import type { Expectation, Reading } from './check';
 type Assertion = Expectation['assertions'][number];
 type Selectors = Extract<Reading, { kind: 'json' }>['path'];
 
-const raw = (
+export const raw = (
   side: 'base' | 'candidate',
   file: string,
   path: Selectors,
@@ -14,7 +14,7 @@ const raw = (
   path,
 });
 
-function faultAssertions(id: string): [Assertion, ...Assertion[]] {
+export function faultAssertions(id: string): [Assertion, ...Assertion[]] {
   return [
     {
       label: 'conclusion',
