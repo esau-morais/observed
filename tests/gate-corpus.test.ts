@@ -546,6 +546,63 @@ test('shifted mapping expectations reject forged lines and absent raw execution'
   expect(await result([[2, 2]], [[6, 6]])).toBe(false);
 });
 
+test('shifted mapping rejects unavailable mapped coverage despite retained scope claims', async () => {
+  const root = await fixture();
+  const labels = [
+    'scope recorded',
+    'saved journey coverage recorded',
+    'base coverage recorded',
+    'candidate coverage recorded',
+  ];
+  const [first, ...rest] = coveragePair.expectation.assertions.filter(
+    ({ label }) => labels.includes(label),
+  );
+  if (first === undefined || rest.length !== labels.length - 1) {
+    throw new Error('Missing scope availability assertions');
+  }
+
+  const expectation: Expectation = {
+    ...coveragePair.expectation,
+    assertions: [first, ...rest],
+  };
+  const coverage = { kind: 'coverage', status: 'recorded' };
+  const journey = { journey: 'Load items', kind: 'recorded' };
+  const result = (
+    base: object[] = [coverage],
+    candidate: object[] = [coverage],
+    scope: object[] = [journey],
+  ) => ({
+    changeScope: { kind: 'recorded', coverage: scope },
+    journeys: [{ base: { evidence: base }, candidate: { evidence: candidate } }],
+  });
+  const replacements = (recorded: object, field: string) => [
+    [],
+    [recorded, recorded],
+    ...['unknown', 'incomplete', 'not-run', 'none'].map((state) => [
+      { ...recorded, [field]: state },
+    ]),
+  ];
+  const run = async (value: unknown) => {
+    await writeFile(path.join(root, 'result.json'), JSON.stringify(value));
+
+    return (await checkRun(root, expectation, 0)).passed;
+  };
+
+  expect(await run(result())).toBe(true);
+  for (const evidence of replacements(coverage, 'status')) {
+    expect.soft(await run(result(evidence)), JSON.stringify(evidence)).toBe(false);
+    expect
+      .soft(await run(result(undefined, evidence)), JSON.stringify(evidence))
+      .toBe(false);
+  }
+
+  for (const scope of replacements(journey, 'kind')) {
+    expect
+      .soft(await run(result(undefined, undefined, scope)), JSON.stringify(scope))
+      .toBe(false);
+  }
+});
+
 test('fault expectations reject retained measurements on unknown or not-run sides', async () => {
   const root = await fixture();
   const checks = [

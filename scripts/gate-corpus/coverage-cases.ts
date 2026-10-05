@@ -60,6 +60,16 @@ export const coveragePair: Pair = {
       ),
       ...measuredAssertions(),
       assert('scope recorded', ['changeScope', 'kind'], 'recorded'),
+      assert(
+        'saved journey coverage recorded',
+        [
+          'changeScope',
+          'coverage',
+          { key: 'journey', equals: 'Load items' },
+          'kind',
+        ],
+        'recorded',
+      ),
       assert('changed source relation', [...scope, 'relation'], 'exercised'),
       assert('relation comes from coverage', [...scope, 'basis'], 'coverage'),
       assert('executed original line', [...scope, 'lines', 'ran'], [[2, 2]]),
@@ -94,6 +104,18 @@ export const coveragePair: Pair = {
         const directory = `journey-1/${side}`;
 
         return [
+          assert(
+            `${side} coverage recorded`,
+            [
+              'journeys',
+              0,
+              side,
+              'evidence',
+              { key: 'kind', equals: 'coverage' },
+              'status',
+            ],
+            'recorded',
+          ),
           {
             label: `${side} raw request count`,
             actual: resultReading([
