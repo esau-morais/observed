@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { fonts, geometry, media } from './constants.stylex';
@@ -26,13 +27,10 @@ import { colors } from './tokens.stylex';
 
 const credit = {
   name: 'Kit Langton',
-  href: 'https://x.com/kitlangton/status/2106623770492588224',
+  href: 'https://x.com/kitlangton/status/2106623769146233112',
 };
 
 const transition = 520;
-
-// Geist Mono advances 0.6 em per character.
-const advance = 0.6;
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -42,50 +40,14 @@ type Layout = {
   height: number;
   boxes: ReadonlyMap<string, Box>;
   page: Box;
-  clock: { x: number; y: number };
-  caption: { x: number; y: number; chars: number; size: number };
+  clock: Box;
+  caption: Box;
   // The caption under the code frame.
-  sourceCaption: number;
+  sourceCaption: Box;
   footer: number;
   code: Box;
-  callout: { x: number; y: number; anchor: 'start' | 'end' } | null;
+  callout: Box | null;
 };
-
-function fit(text: string, chars: number): string {
-  return text.length <= chars
-    ? text
-    : `${text.slice(0, Math.max(1, chars - 1))}…`;
-}
-
-function wrap(text: string, chars: number, rows: number): string[] {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let current = '';
-
-  for (const word of words) {
-    const next = current === '' ? word : `${current} ${word}`;
-
-    if (next.length <= chars || current === '') {
-      current = next;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-
-  if (current !== '') {
-    lines.push(current);
-  }
-
-  if (lines.length <= rows) {
-    return lines.map((line) => fit(line, chars));
-  }
-
-  return [
-    ...lines.slice(0, rows - 1),
-    fit(lines.slice(rows - 1).join(' '), chars),
-  ];
-}
 
 function column(entities: readonly Entity[]): Entity[] {
   return entities.filter(
@@ -119,12 +81,12 @@ function wideLayout(scene: Scene): Layout {
     height: 540,
     boxes,
     page: { x: 380, y: 200, w: 200, h: 136 },
-    clock: { x: 56, y: 182 },
-    caption: { x: 56, y: 452, chars: 92, size: 15 },
-    sourceCaption: 452,
-    footer: 516,
+    clock: { x: 56, y: 182, w: 188, h: 28 },
+    caption: { x: 56, y: 432, w: 848, h: 66 },
+    sourceCaption: { x: 56, y: 428, w: 848, h: 66 },
+    footer: 506,
     code: { x: 96, y: 84, w: 768, h: 304 },
-    callout: { x: 342, y: 118, anchor: 'end' },
+    callout: { x: 56, y: 104, w: 286, h: 24 },
   };
 }
 
@@ -148,13 +110,13 @@ function narrowLayout(scene: Scene): Layout {
   return {
     kind: 'narrow',
     width: 360,
-    height: y + 156,
+    height: y + 172,
     boxes,
     page: { x: 90, y: 222, w: 180, h: 124 },
-    clock: { x: 20, y: 94 },
-    caption: { x: 20, y: y + 30, chars: 40, size: 13 },
-    sourceCaption: 456,
-    footer: y + 124,
+    clock: { x: 20, y: 94, w: 200, h: 28 },
+    caption: { x: 20, y: y + 16, w: 320, h: 104 },
+    sourceCaption: { x: 20, y: 430, w: 320, h: 104 },
+    footer: y + 132,
     code: { x: 12, y: 96, w: 336, h: 300 },
     callout: null,
   };
@@ -220,18 +182,26 @@ const phaseLabels = {
   source: 'the source',
 } satisfies Record<Beat['phase'], string>;
 
-function phaseText(scene: Scene, beat: Beat): string {
-  return beat.phase === 'source'
-    ? phaseLabels.source
-    : `${phaseLabels[beat.phase]} · ${beat.phase} ${shortRevision(scene.revisions[beat.phase])}`;
-}
-
 function shortRevision(revision: string): string {
   const commit = /[0-9a-f]{7}/.exec(revision)?.[0];
 
   return revision.startsWith('worktree') && commit !== undefined
     ? `worktree on ${commit}`
     : (revision.split(' · ')[0] ?? revision);
+}
+
+function phaseText(scene: Scene, beat: Beat): string {
+  return beat.phase === 'source'
+    ? phaseLabels.source
+    : `${phaseLabels[beat.phase]} · ${beat.phase} ${shortRevision(scene.revisions[beat.phase])}`;
+}
+
+// The beat the scene rests on before anyone presses Play: the after side's
+// verdict, the moment the scene exists to show.
+function restingBeat(scene: Scene): number {
+  const index = scene.beats.findLastIndex((beat) => beat.phase === 'candidate');
+
+  return index === -1 ? 0 : index;
 }
 
 const boxTones = {
@@ -257,6 +227,30 @@ const edgeKinds = {
   checked: ['checkedBy', 'checkedByPulse'],
 } as const satisfies Record<Edge['kind'], readonly [string, string]>;
 
+// Every text sits on its own opaque background, so axe-core can measure its
+// contrast; text over the SVG layer reads to it as text over an image.
+function Placed({
+  box,
+  xstyle,
+  children,
+}: {
+  box: Box;
+  xstyle?: stylex.StyleXStyles;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      {...stylex.props(
+        styles.placed,
+        styles.at(box.x, box.y, box.w, box.h),
+        xstyle,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function EntityBox({
   entity,
   box,
@@ -271,52 +265,38 @@ function EntityBox({
   progress: number;
 }) {
   const changed = previous?.line !== state.line || previous.tone !== state.tone;
-  const titleChars = Math.floor((box.w - 28) / (13 * advance));
-  const lineChars = Math.floor((box.w - 28) / (12 * advance));
 
   return (
-    <g>
-      <rect
-        x={box.x}
-        y={box.y}
-        width={box.w}
-        height={box.h}
-        rx={8}
-        strokeWidth={1}
-        {...stylex.props(styles[boxTones[state.tone]])}
-      />
-      <text
-        x={box.x + 14}
-        y={box.y + box.h / 2 - 4}
+    <Placed box={box} xstyle={[styles.box, styles[boxTones[state.tone]]]}>
+      <span
         {...stylex.props(
           styles.boxTitle,
           state.tone === 'regression' && styles.lineRegression,
         )}
       >
-        {fit(entity.title, titleChars)}
-      </text>
-      <text
-        x={box.x + 14}
-        y={box.y + box.h / 2 + 15}
-        opacity={changed ? progress : 1}
-        {...stylex.props(styles.stateLine, styles[lineTones[state.tone]])}
+        {entity.title}
+      </span>
+      <span
+        {...stylex.props(
+          styles.stateLine,
+          styles[lineTones[state.tone]],
+          styles.fade(changed ? progress : 1),
+        )}
       >
-        {fit(state.line, lineChars)}
-      </text>
-    </g>
+        {state.line}
+      </span>
+    </Placed>
   );
 }
 
-function PageFrame({
+function PageImage({
   layout,
-  state,
   screenshot,
   fade,
   pattern,
   clip,
 }: {
   layout: Layout;
-  state: EntityState | undefined;
   screenshot: string | null;
   fade: number;
   pattern: string;
@@ -324,7 +304,6 @@ function PageFrame({
 }) {
   const resolve = use(EvidenceUrls);
   const { page } = layout;
-  const chars = Math.floor((page.w + 80) / (12 * advance));
 
   return (
     <g>
@@ -371,27 +350,6 @@ function PageFrame({
         strokeWidth={1}
         {...stylex.props(styles.frame)}
       />
-      <text
-        x={page.x + page.w / 2}
-        y={page.y + page.h + 24}
-        textAnchor="middle"
-        {...stylex.props(styles.boxTitle)}
-      >
-        page
-      </text>
-      {state === undefined ? null : (
-        <text
-          x={page.x + page.w / 2}
-          y={page.y + page.h + 43}
-          textAnchor="middle"
-          {...stylex.props(styles.stateLine, styles[lineTones[state.tone]])}
-        >
-          {fit(
-            screenshot === null ? state.line : `◼ screenshot · ${state.line}`,
-            chars,
-          )}
-        </text>
-      )}
     </g>
   );
 }
@@ -496,13 +454,7 @@ function CodeFrame({
   source: SourceText;
   fade: number;
 }) {
-  const { code } = layout;
-  const size = layout.kind === 'wide' ? 13 : 11;
-  const row = layout.kind === 'wide' ? 24 : 20;
-  const gutter = layout.kind === 'wide' ? 64 : 48;
-  const chars = Math.floor((code.w - gutter - 24) / (size * advance));
-  const place = scene.source?.place ?? '';
-  const words = scene.source?.words ?? '';
+  const wide = layout.kind === 'wide';
   // Red marks only a stack frame of a failing check; other anchors are
   // associations, drawn neutral.
   const failing =
@@ -511,150 +463,84 @@ function CodeFrame({
     scene.source?.anchor.basis === 'stack-frame';
 
   return (
-    <g opacity={fade}>
-      <rect
-        x={code.x}
-        y={code.y}
-        width={code.w}
-        height={code.h}
-        rx={12}
-        strokeWidth={1}
-        {...stylex.props(styles.panel)}
-      />
-      <circle
-        cx={code.x + 18}
-        cy={code.y + 20}
-        r={3}
-        {...stylex.props(styles.dotMark)}
-      />
-      <text x={code.x + 30} y={code.y + 24} {...stylex.props(styles.small)}>
-        {fit(place, Math.floor((code.w - 48) / (12 * advance)))}
-      </text>
-      <line
-        x1={code.x}
-        x2={code.x + code.w}
-        y1={code.y + 40}
-        y2={code.y + 40}
-        strokeWidth={1}
-        {...stylex.props(styles.rule)}
-      />
-      {source.kind !== 'ready' ? (
-        <text
-          x={code.x + 24}
-          y={code.y + 80}
-          {...stylex.props(styles.stateLine, styles.lineQuiet)}
-        >
-          {source.kind === 'loading'
-            ? 'Reading the source snapshot'
-            : 'The bundle holds no snapshot of this line'}
-        </text>
-      ) : (
-        source.lines.map((line, index) => {
-          const y = code.y + 72 + index * row;
-          const annotation = `◂ ${words}`;
-          const room = chars - line.text.length - 3;
-
-          return (
-            <g key={index}>
-              {line.change === 'same' && !line.anchor ? null : (
-                <rect
-                  x={code.x + 1}
-                  y={y - row + 7}
-                  width={code.w - 2}
-                  height={row}
-                  {...stylex.props(
-                    line.anchor && failing
-                      ? styles.anchorBand
-                      : styles.changeBand,
-                  )}
-                />
+    <Placed box={layout.code} xstyle={[styles.panel, styles.fade(fade)]}>
+      <div {...stylex.props(styles.panelHeader)}>
+        <span aria-hidden="true" {...stylex.props(styles.panelDot)} />
+        {scene.source?.place}
+      </div>
+      {source.kind === 'ready' ? (
+        <div {...stylex.props(styles.codeLines, !wide && styles.codeNarrow)}>
+          {source.lines.map((line, index) => (
+            <div
+              key={index}
+              {...stylex.props(
+                styles.codeLine,
+                line.change !== 'same' && styles.changeBand,
+                line.anchor && (failing ? styles.anchorBand : styles.anchor),
               )}
-              {line.anchor ? (
-                <rect
-                  x={code.x + 1}
-                  y={y - row + 7}
-                  width={3}
-                  height={row}
-                  {...stylex.props(
-                    failing ? styles.anchorBar : styles.anchorBarNeutral,
-                  )}
-                />
-              ) : null}
-              <text
-                x={code.x + gutter - 30}
-                y={y}
-                textAnchor="end"
-                fontSize={size}
-                {...stylex.props(styles.code, !line.anchor && styles.lineQuiet)}
-              >
+            >
+              <span {...stylex.props(!line.anchor && styles.lineQuiet)}>
                 {line.number ?? ''}
-              </text>
-              <text
-                x={code.x + gutter - 18}
-                y={y}
-                fontSize={size}
-                {...stylex.props(styles.code, styles.lineQuiet)}
-              >
+              </span>
+              <span {...stylex.props(!line.anchor && styles.lineQuiet)}>
                 {codeSigns[line.change]}
-              </text>
-              <text
-                x={code.x + gutter}
-                y={y}
-                fontSize={size}
-                xmlSpace="preserve"
+              </span>
+              <span
                 {...stylex.props(
-                  styles.code,
+                  styles.codeText,
                   line.change === 'removed' && styles.removed,
                 )}
               >
-                {fit(line.text, chars)}
-              </text>
-              {line.anchor && room >= annotation.length ? (
-                <text
-                  x={code.x + gutter + (line.text.length + 2) * size * advance}
-                  y={y}
-                  fontSize={size}
-                  {...stylex.props(
-                    styles.code,
-                    failing ? styles.annotation : styles.clockValue,
-                  )}
-                >
-                  {annotation}
-                </text>
-              ) : null}
-            </g>
-          );
-        })
+                {line.text}
+                {line.anchor && wide ? (
+                  <span
+                    {...stylex.props(
+                      failing ? styles.lineRegression : styles.clockValue,
+                    )}
+                  >
+                    {`  ◂ ${scene.source?.words ?? ''}`}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p {...stylex.props(styles.stateLine, styles.lineQuiet, styles.pad)}>
+          {source.kind === 'loading'
+            ? 'Reading the source snapshot'
+            : 'The bundle holds no snapshot of this line'}
+        </p>
       )}
-      <text x={code.x} y={code.y + code.h + 26} {...stylex.props(styles.small)}>
-        {layout.kind === 'wide'
+      <p {...stylex.props(styles.small, styles.below)}>
+        {wide
           ? 'condensed for display · common indentation removed'
           : 'condensed for display'}
-      </text>
-    </g>
+      </p>
+    </Placed>
   );
 }
 
 function Emphasized({
-  line,
+  text,
   emphasis,
 }: {
-  line: string;
+  text: string;
   emphasis: Beat['emphasis'];
 }) {
-  const at = emphasis === null ? -1 : line.indexOf(emphasis.text);
+  const at = emphasis === null ? -1 : text.indexOf(emphasis.text);
 
   if (emphasis === null || at === -1) {
-    return line;
+    return text;
   }
 
   return (
     <>
-      {line.slice(0, at)}
-      <tspan {...stylex.props(styles[lineTones[emphasis.tone]])}>
+      {text.slice(0, at)}
+      <span {...stylex.props(styles[lineTones[emphasis.tone]])}>
         {emphasis.text}
-      </tspan>
-      {line.slice(at + emphasis.text.length)}
+      </span>
+      {text.slice(at + emphasis.text.length)}
     </>
   );
 }
@@ -666,6 +552,7 @@ function SceneStage({
   progress,
   motion,
   source,
+  scale,
 }: {
   scene: Scene;
   layout: Layout;
@@ -673,6 +560,7 @@ function SceneStage({
   progress: number;
   motion: boolean;
   source: SourceText;
+  scale: number;
 }) {
   const ids = useId();
   const beat = scene.beats[index];
@@ -691,201 +579,207 @@ function SceneStage({
   const shownElapsed =
     clock === null ? 0 : fromElapsed + (clock.elapsed - fromElapsed) * progress;
   const chip = phaseText(scene, beat);
-  const chipWidth = chip.length * 12 * advance + 34;
-  const caption = wrap(
-    beat.caption,
-    layout.caption.chars,
-    layout.kind === 'wide' ? 3 : 5,
-  );
   const sourcePhase = beat.phase === 'source';
-  const titleChars = Math.floor(
-    (layout.kind === 'wide' ? 560 : layout.width - 40) / (16 * advance),
-  );
+  const wide = layout.kind === 'wide';
   const check = scene.check;
   const checkBox = layout.boxes.get('check');
+  const page = beat.states.get('page');
+  const callout =
+    layout.callout === null || check?.measure === undefined
+      ? null
+      : layout.callout;
 
   return (
-    <svg
-      viewBox={`0 0 ${layout.width} ${layout.height}`}
-      width="100%"
-      role="img"
-      aria-label={`${scene.title}, ${chip}. ${beat.caption}`}
-      data-scene-ready={
-        source.kind === 'loading' && scene.source !== null ? undefined : ''
-      }
-      {...stylex.props(styles.stage)}
-    >
-      <rect
-        width={layout.width}
-        height={layout.height}
-        {...stylex.props(styles.canvas)}
-      />
-      <text
-        x={layout.kind === 'wide' ? 56 : 20}
-        y={layout.kind === 'wide' ? 56 : 38}
-        {...stylex.props(styles.title)}
-      >
-        {fit(scene.title, titleChars)}
-      </text>
-      <g
-        transform={
-          layout.kind === 'wide'
-            ? `translate(${layout.width - 56 - chipWidth} 36)`
-            : 'translate(20 52)'
-        }
-      >
-        <rect
-          width={chipWidth}
-          height={26}
-          rx={13}
-          strokeWidth={1}
-          {...stylex.props(styles.chip)}
-        />
-        <circle cx={14} cy={13} r={3.5} {...stylex.props(styles.dotMark)} />
-        <text x={24} y={17.5} {...stylex.props(styles.small, styles.chipText)}>
-          {chip}
-        </text>
-      </g>
-      {sourcePhase ? (
-        <CodeFrame
-          scene={scene}
-          layout={layout}
-          source={source}
-          fade={fresh ? progress : 1}
-        />
-      ) : (
-        <g>
-          {clock === null ? null : (
-            <g transform={`translate(${layout.clock.x} ${layout.clock.y})`}>
-              <rect
-                width={layout.kind === 'wide' ? 188 : 200}
-                height={28}
-                rx={14}
-                strokeWidth={1}
-                {...stylex.props(styles.chip)}
-              />
-              <text x={14} y={19} {...stylex.props(styles.small)}>
-                <tspan {...stylex.props(styles.lineQuiet)}>
-                  step {clock.step}/{clock.steps}
-                </tspan>
-                <tspan dx={12} {...stylex.props(styles.clockValue)}>
-                  {seconds(shownElapsed)}
-                </tspan>
-              </text>
-            </g>
-          )}
-          {scene.edges.map((edge) => {
-            const from =
-              edge.from === 'page' ? layout.page : layout.boxes.get(edge.from);
-            const to =
-              edge.to === 'page' ? layout.page : layout.boxes.get(edge.to);
-
-            return from === undefined || to === undefined ? null : (
-              <EdgeLine
-                key={edgeId(edge)}
-                edge={edge}
-                curve={curveBetween(from, to, layout)}
-                lit={beat.lit.includes(edgeId(edge))}
-                progress={progress}
-                motion={motion}
-              />
-            );
-          })}
-          <PageFrame
-            layout={layout}
-            state={beat.states.get('page')}
-            screenshot={beat.screenshot}
-            fade={previous?.screenshot === beat.screenshot ? 1 : progress}
-            pattern={`${ids}-dots`}
-            clip={`${ids}-clip`}
-          />
-          {scene.entities.map((entity) => {
-            const box = layout.boxes.get(entity.id);
-            const state = beat.states.get(entity.id);
-
-            return box === undefined || state === undefined ? null : (
-              <EntityBox
-                key={entity.id}
-                entity={entity}
-                box={box}
-                state={state}
-                previous={fresh ? undefined : previous.states.get(entity.id)}
-                progress={progress}
-              />
-            );
-          })}
-          {layout.callout === null ||
-          checkBox === undefined ||
-          check?.measure === undefined ? null : (
-            <g>
-              <line
-                x1={layout.callout.x + 6}
-                x2={checkBox.x}
-                y1={layout.callout.y - 4}
-                y2={checkBox.y + checkBox.h / 2}
-                strokeWidth={1}
-                {...stylex.props(styles.rule)}
-              />
-              <text
-                x={layout.callout.x}
-                y={layout.callout.y}
-                textAnchor={layout.callout.anchor}
-                {...stylex.props(styles.small)}
-              >
-                <tspan {...stylex.props(styles.clockValue)}>
-                  {check.measure.label}
-                </tspan>
-                <tspan {...stylex.props(styles.lineQuiet)}>
-                  {' '}
-                  · what the check measures
-                </tspan>
-              </text>
-            </g>
-          )}
-        </g>
+    <div
+      {...stylex.props(
+        styles.scaled(layout.width * scale, layout.height * scale),
       )}
-      <text
-        x={layout.caption.x}
-        y={sourcePhase ? layout.sourceCaption : layout.caption.y}
-        opacity={progress}
-        fontSize={layout.caption.size}
-        {...stylex.props(styles.caption)}
+    >
+      <div
+        role="img"
+        aria-label={`${scene.title}, ${chip}. ${beat.caption}`}
+        data-scene-ready={
+          source.kind === 'loading' && scene.source !== null ? undefined : ''
+        }
+        {...stylex.props(
+          styles.stage,
+          styles.stageSize(layout.width, layout.height, scale),
+        )}
       >
-        {caption.map((line, row) => (
-          <tspan
-            key={row}
-            x={layout.caption.x}
-            dy={row === 0 ? 0 : layout.caption.size * 1.5}
-          >
-            <Emphasized line={line} emphasis={beat.emphasis} />
-          </tspan>
-        ))}
-      </text>
-      <text
-        x={layout.kind === 'wide' ? 56 : 20}
-        y={layout.footer}
-        {...stylex.props(styles.footnote)}
-      >
-        {layout.kind === 'wide'
-          ? 'drawn from recorded evidence · not a screen recording'
-          : 'drawn from evidence · not a recording'}
-      </text>
-      {layout.kind === 'narrow' ? (
-        <text x={20} y={layout.footer + 16} {...stylex.props(styles.footnote)}>
-          after {credit.name}
-        </text>
-      ) : null}
-      {layout.kind === 'wide' ? (
-        <text
-          x={layout.width - 56}
-          y={layout.footer}
-          textAnchor="end"
-          {...stylex.props(styles.footnote)}
+        <svg
+          aria-hidden="true"
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
+          width={layout.width}
+          height={layout.height}
+          {...stylex.props(styles.layer)}
         >
-          after {credit.name}
-        </text>
-      ) : null}
-    </svg>
+          {sourcePhase ? null : (
+            <>
+              {scene.edges.map((edge) => {
+                const from =
+                  edge.from === 'page'
+                    ? layout.page
+                    : layout.boxes.get(edge.from);
+                const to =
+                  edge.to === 'page' ? layout.page : layout.boxes.get(edge.to);
+
+                return from === undefined || to === undefined ? null : (
+                  <EdgeLine
+                    key={edgeId(edge)}
+                    edge={edge}
+                    curve={curveBetween(from, to, layout)}
+                    lit={beat.lit.includes(edgeId(edge))}
+                    progress={progress}
+                    motion={motion}
+                  />
+                );
+              })}
+              <PageImage
+                layout={layout}
+                screenshot={beat.screenshot}
+                fade={previous?.screenshot === beat.screenshot ? 1 : progress}
+                pattern={`${ids}-dots`}
+                clip={`${ids}-clip`}
+              />
+              {callout === null || checkBox === undefined ? null : (
+                <line
+                  x1={callout.x + callout.w + 4}
+                  x2={checkBox.x}
+                  y1={callout.y + callout.h / 2}
+                  y2={checkBox.y + checkBox.h / 2}
+                  strokeWidth={1}
+                  {...stylex.props(styles.rule)}
+                />
+              )}
+            </>
+          )}
+        </svg>
+        <Placed
+          box={{
+            x: wide ? 56 : 20,
+            y: wide ? 36 : 20,
+            w: wide ? 560 : 320,
+            h: 26,
+          }}
+          xstyle={styles.title}
+        >
+          <span {...stylex.props(styles.onCanvas)}>{scene.title}</span>
+        </Placed>
+        <Placed
+          box={
+            wide
+              ? { x: 600, y: 36, w: 304, h: 26 }
+              : { x: 20, y: 52, w: 320, h: 26 }
+          }
+          xstyle={[styles.chipRow, wide && styles.chipRight]}
+        >
+          <span {...stylex.props(styles.chip)}>
+            <span aria-hidden="true" {...stylex.props(styles.panelDot)} />
+            {chip}
+          </span>
+        </Placed>
+        {sourcePhase ? (
+          <CodeFrame
+            scene={scene}
+            layout={layout}
+            source={source}
+            fade={fresh ? progress : 1}
+          />
+        ) : (
+          <>
+            {clock === null ? null : (
+              <Placed box={layout.clock} xstyle={[styles.chip, styles.clock]}>
+                <span {...stylex.props(styles.lineQuiet)}>
+                  step {clock.step}/{clock.steps}
+                </span>
+                <span {...stylex.props(styles.clockValue)}>
+                  {seconds(shownElapsed)}
+                </span>
+              </Placed>
+            )}
+            {page === undefined ? null : (
+              <Placed
+                box={{
+                  x: layout.page.x - 60,
+                  y: layout.page.y + layout.page.h + 8,
+                  w: layout.page.w + 120,
+                  h: 40,
+                }}
+                xstyle={styles.pageLabel}
+              >
+                <span {...stylex.props(styles.onCanvas, styles.boxTitle)}>
+                  page
+                </span>
+                <span
+                  {...stylex.props(
+                    styles.onCanvas,
+                    styles.stateLine,
+                    styles[lineTones[page.tone]],
+                  )}
+                >
+                  {beat.screenshot === null
+                    ? page.line
+                    : `◼ screenshot · ${page.line}`}
+                </span>
+              </Placed>
+            )}
+            {scene.entities.map((entity) => {
+              const box = layout.boxes.get(entity.id);
+              const state = beat.states.get(entity.id);
+
+              return box === undefined || state === undefined ? null : (
+                <EntityBox
+                  key={entity.id}
+                  entity={entity}
+                  box={box}
+                  state={state}
+                  previous={fresh ? undefined : previous.states.get(entity.id)}
+                  progress={progress}
+                />
+              );
+            })}
+            {callout === null || check?.measure === undefined ? null : (
+              <Placed box={callout} xstyle={styles.callout}>
+                <span {...stylex.props(styles.onCanvas, styles.small)}>
+                  <span {...stylex.props(styles.clockValue)}>
+                    {check.measure.label}
+                  </span>{' '}
+                  · what the check measures
+                </span>
+              </Placed>
+            )}
+          </>
+        )}
+        <Placed
+          box={sourcePhase ? layout.sourceCaption : layout.caption}
+          xstyle={[
+            styles.caption,
+            !wide && styles.captionNarrow,
+            styles.fade(progress),
+          ]}
+        >
+          <span {...stylex.props(styles.onCanvas)}>
+            <Emphasized text={beat.caption} emphasis={beat.emphasis} />
+          </span>
+        </Placed>
+        <Placed
+          box={{
+            x: wide ? 56 : 20,
+            y: layout.footer,
+            w: wide ? 848 : 320,
+            h: wide ? 18 : 36,
+          }}
+          xstyle={[styles.footer, !wide && styles.footerNarrow]}
+        >
+          <span {...stylex.props(styles.onCanvas)}>
+            {wide
+              ? 'drawn from recorded evidence · not a screen recording'
+              : 'drawn from evidence · not a recording'}
+          </span>
+          <span {...stylex.props(styles.onCanvas)}>after {credit.name}</span>
+        </Placed>
+      </div>
+    </div>
   );
 }
 
@@ -907,8 +801,12 @@ function useReducedMotion(): boolean {
   );
 }
 
-function useNarrow(target: RefObject<HTMLElement | null>): boolean {
-  const [narrow, setNarrow] = useState(false);
+const narrowBelow = 840;
+
+const narrowMax = 520;
+
+function useWidth(target: RefObject<HTMLElement | null>): number | null {
+  const [width, setWidth] = useState<number | null>(null);
 
   useEffect(() => {
     const element = target.current;
@@ -919,7 +817,7 @@ function useNarrow(target: RefObject<HTMLElement | null>): boolean {
 
     const observer = new ResizeObserver(([entry]) => {
       if (entry !== undefined) {
-        setNarrow(entry.contentRect.width < 840);
+        setWidth(entry.contentRect.width);
       }
     });
 
@@ -928,7 +826,7 @@ function useNarrow(target: RefObject<HTMLElement | null>): boolean {
     return () => observer.disconnect();
   }, [target]);
 
-  return narrow;
+  return width;
 }
 
 type Playhead = { index: number; time: number };
@@ -937,12 +835,14 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
   const reduced = useReducedMotion();
   const titleId = `${useId()}-scene`;
   const figure = useRef<HTMLDivElement>(null);
-  const narrow = useNarrow(figure);
-  const [head, setHead] = useState<Playhead>({ index: 0, time: transition });
+  const width = useWidth(figure);
+  const rest = restingBeat(scene);
+  const [head, setHead] = useState<Playhead>({
+    index: rest,
+    time: transition,
+  });
   const [playing, setPlaying] = useState(false);
   const [announce, setAnnounce] = useState('');
-  const started = useRef(false);
-  const visible = useRef(false);
   const source = useSource(scene);
   const last = scene.beats.length - 1;
   const beat = scene.beats[head.index];
@@ -957,25 +857,16 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
       return;
     }
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        visible.current = entry?.isIntersecting === true;
-
-        if (!visible.current) {
-          setPlaying(false);
-        } else if (!started.current && !reduced) {
-          started.current = true;
-          setHead({ index: 0, time: 0 });
-          setPlaying(true);
-        }
-      },
-      { threshold: 0.5 },
-    );
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting !== true) {
+        setPlaying(false);
+      }
+    });
 
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [reduced]);
+  }, []);
 
   useEffect(() => {
     if (!running) {
@@ -1038,12 +929,13 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
     setAnnounce(scene.beats[target]?.caption ?? '');
   };
 
-  const restart = () => {
+  const playFromStart = () => {
     setAnnounce('');
     setHead({ index: 0, time: reduced ? transition : 0 });
     setPlaying(true);
   };
 
+  // Play from the resting beat or the end starts the scene over.
   const toggle = () => {
     if (playing) {
       setPlaying(false);
@@ -1051,8 +943,13 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
       return;
     }
 
+    if (head.index === last || head.index === rest) {
+      playFromStart();
+
+      return;
+    }
+
     setAnnounce('');
-    setHead(head.index === last ? { index: 0, time: 0 } : head);
     setPlaying(true);
   };
 
@@ -1073,7 +970,9 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
     }
   };
 
+  const narrow = width !== null && width < narrowBelow;
   const layout = narrow ? narrowLayout(scene) : wideLayout(scene);
+  const shown = narrow ? Math.min(width, narrowMax) : (width ?? layout.width);
   const progress = reduced ? 1 : Math.min(1, head.time / transition);
 
   return (
@@ -1082,31 +981,37 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
         Before and after
       </Heading>
       <p {...stylex.props(styles.text)}>
-        Each box shows a value the run recorded. The clock shows recorded time;
-        playback holds each step so it can be read.
+        Each box shows a value the run recorded. The scene rests on the verdict;
+        Play runs it from the start. The clock shows recorded time, and playback
+        holds each step so it can be read.
       </p>
-      <div
-        ref={figure}
-        tabIndex={0}
-        role="group"
-        aria-roledescription="scene"
-        aria-label={`${scene.title}: space plays or pauses, arrow keys step`}
-        onKeyDown={keys}
-        {...stylex.props(styles.figure, narrow && styles.narrowFigure)}
-      >
-        <SceneStage
-          scene={scene}
-          layout={layout}
-          index={head.index}
-          progress={progress}
-          motion={!reduced}
-          source={source}
-        />
+      <div ref={figure} {...stylex.props(styles.measure)}>
+        <div
+          tabIndex={0}
+          role="group"
+          aria-roledescription="scene"
+          aria-label={`${scene.title}: space plays or pauses, arrow keys step`}
+          onKeyDown={keys}
+          {...stylex.props(
+            styles.figure,
+            narrow && styles.figureWidth(Math.min(width, narrowMax)),
+          )}
+        >
+          <SceneStage
+            scene={scene}
+            layout={layout}
+            index={head.index}
+            progress={progress}
+            motion={!reduced}
+            source={source}
+            scale={shown / layout.width}
+          />
+        </div>
       </div>
       <div {...stylex.props(styles.controls)}>
         <button
           type="button"
-          onClick={restart}
+          onClick={playFromStart}
           {...stylex.props(styles.control)}
         >
           Restart
@@ -1213,34 +1118,141 @@ const styles = stylex.create({
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
   },
-  stage: { display: 'block', fontFamily: fonts.mono },
-  canvas: { fill: colors.canvas },
-  title: { fill: colors.text, fontSize: 16 },
-  chip: { fill: colors.surface, stroke: colors.border },
-  chipText: { fill: colors.textSecondary },
-  dotMark: { fill: colors.textMuted },
-  small: { fill: colors.textMuted, fontSize: 12 },
-  footnote: { fill: colors.textMuted, fontSize: 11 },
-  clockValue: { fill: colors.text },
-  caption: { fill: colors.text },
-  boxQuiet: { fill: colors.surface, stroke: colors.borderControl },
-  boxActive: { fill: colors.surfaceMuted, stroke: colors.text },
-  boxChecked: { fill: colors.checkedFill, stroke: colors.checked },
-  boxRegression: {
-    fill: colors.regressionFill,
-    stroke: colors.regression,
-    strokeWidth: 1.5,
+  figureWidth: (width: number) => ({ marginInline: 'auto', width }),
+  measure: { minWidth: 0 },
+  scaled: (width: number, height: number) => ({
+    height,
+    overflow: 'hidden',
+    width,
+  }),
+  stage: {
+    backgroundColor: colors.canvas,
+    color: colors.text,
+    fontFamily: fonts.mono,
+    position: 'relative',
+    transformOrigin: '0 0',
   },
-  boxUnknown: { fill: colors.unknownFill, stroke: colors.unknown },
-  boxTitle: { fill: colors.text, fontSize: 13 },
-  stateLine: { fontSize: 12 },
-  lineQuiet: { fill: colors.textMuted },
-  lineActive: { fill: colors.textSecondary },
-  lineChecked: { fill: colors.checked },
-  lineRegression: { fill: colors.regression },
-  lineUnknown: { fill: colors.unknown },
+  stageSize: (width: number, height: number, scale: number) => ({
+    height,
+    transform: `scale(${scale})`,
+    width,
+  }),
+  layer: { left: 0, position: 'absolute', top: 0 },
+  placed: { boxSizing: 'border-box', position: 'absolute' },
+  at: (x: number, y: number, width: number, height: number) => ({
+    height,
+    left: x,
+    top: y,
+    width,
+  }),
+  fade: (opacity: number) => ({ opacity }),
+  title: {
+    fontSize: 16,
+    lineHeight: '26px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  chipRow: { alignItems: 'center', display: 'flex' },
+  chipRight: { justifyContent: 'flex-end' },
+  chip: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 9999,
+    borderStyle: 'solid',
+    borderWidth: 1,
+    color: colors.textSecondary,
+    display: 'inline-flex',
+    fontSize: 12,
+    gap: 8,
+    height: 26,
+    paddingInline: 12,
+    whiteSpace: 'nowrap',
+  },
+  clock: { gap: 12, height: 28 },
+  panelDot: {
+    backgroundColor: colors.textMuted,
+    borderRadius: 9999,
+    display: 'inline-block',
+    flexShrink: 0,
+    height: 7,
+    width: 7,
+  },
+  small: { color: colors.textMuted, fontSize: 12 },
+  clockValue: { color: colors.text },
+  onCanvas: { backgroundColor: colors.canvas },
+  box: {
+    borderRadius: 8,
+    borderStyle: 'solid',
+    borderWidth: 1,
+    display: 'grid',
+    gap: 4,
+    paddingInline: 14,
+    placeContent: 'center stretch',
+  },
+  boxQuiet: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderControl,
+  },
+  boxActive: { backgroundColor: colors.surfaceMuted, borderColor: colors.text },
+  boxChecked: {
+    backgroundColor: colors.checkedFill,
+    borderColor: colors.checked,
+  },
+  boxRegression: {
+    backgroundColor: colors.regressionFill,
+    borderColor: colors.regression,
+    borderWidth: 1.5,
+  },
+  boxUnknown: {
+    backgroundColor: colors.unknownFill,
+    borderColor: colors.unknown,
+  },
+  boxTitle: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  stateLine: {
+    fontSize: 12,
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  lineQuiet: { color: colors.textMuted },
+  lineActive: { color: colors.textSecondary },
+  lineChecked: { color: colors.checked },
+  lineRegression: { color: colors.regression },
+  lineUnknown: { color: colors.unknown },
+  pageLabel: {
+    alignItems: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  callout: {
+    alignItems: 'center',
+    display: 'flex',
+    justifyContent: 'flex-end',
+    whiteSpace: 'nowrap',
+  },
+  caption: { fontSize: 15, lineHeight: 1.5 },
+  captionNarrow: { fontSize: 13 },
+  footer: {
+    color: colors.textMuted,
+    display: 'flex',
+    fontSize: 11,
+    justifyContent: 'space-between',
+  },
+  footerNarrow: { flexDirection: 'column', gap: 4 },
   dot: { fill: colors.borderControl },
   frame: { stroke: colors.borderControl },
+  rule: { stroke: colors.border },
   drives: { stroke: colors.linkImports },
   requested: { stroke: colors.linkRequested, strokeDasharray: '2 4' },
   threw: { stroke: colors.linkThrewAt, strokeDasharray: '9 3 2 3' },
@@ -1249,15 +1261,51 @@ const styles = stylex.create({
   requestedPulse: { fill: colors.linkRequested },
   threwPulse: { fill: colors.linkThrewAt },
   checkedByPulse: { fill: colors.linkCheckedBy },
-  panel: { fill: colors.surface, stroke: colors.border },
-  rule: { stroke: colors.border },
-  code: { fill: colors.text, whiteSpace: 'pre' },
-  removed: { fill: colors.textMuted, textDecoration: 'line-through' },
-  changeBand: { fill: colors.surfaceMuted },
-  anchorBand: { fill: colors.regressionFill },
-  anchorBar: { fill: colors.regression },
-  anchorBarNeutral: { fill: colors.text },
-  annotation: { fill: colors.regression },
+  panel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderStyle: 'solid',
+    borderWidth: 1,
+  },
+  panelHeader: {
+    alignItems: 'center',
+    borderBottomColor: colors.border,
+    borderBottomStyle: 'solid',
+    borderBottomWidth: 1,
+    color: colors.textMuted,
+    display: 'flex',
+    fontSize: 12,
+    gap: 10,
+    height: 40,
+    paddingInline: 16,
+  },
+  codeLines: { display: 'grid', fontSize: 13, paddingBlock: 12 },
+  codeNarrow: { fontSize: 11 },
+  codeLine: {
+    alignItems: 'center',
+    display: 'grid',
+    gridTemplateColumns: '3ch 2ch 1fr',
+    gap: 8,
+    lineHeight: 1.85,
+    paddingInlineStart: 12,
+  },
+  codeText: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'pre',
+  },
+  removed: { color: colors.textMuted, textDecoration: 'line-through' },
+  changeBand: { backgroundColor: colors.surfaceMuted },
+  anchor: {
+    boxShadow: `inset 3px 0 0 ${colors.text}`,
+  },
+  anchorBand: {
+    backgroundColor: colors.regressionFill,
+    boxShadow: `inset 3px 0 0 ${colors.regression}`,
+  },
+  pad: { margin: 0, padding: 24 },
+  below: { left: 0, margin: 0, position: 'absolute', top: 'calc(100% + 10px)' },
   controls: {
     alignItems: 'center',
     display: 'flex',
@@ -1291,7 +1339,6 @@ const styles = stylex.create({
   },
   primary: { minWidth: 84 },
   inactive: { cursor: 'default', opacity: 0.5 },
-  narrowFigure: { marginInline: 'auto', maxWidth: 520, width: '100%' },
   position: {
     color: colors.textMuted,
     fontFamily: fonts.mono,
@@ -1308,9 +1355,9 @@ const styles = stylex.create({
   },
   transcript: { color: colors.textSecondary, fontSize: '0.875rem' },
   summary: {
+    alignContent: 'center',
     cursor: 'pointer',
     minHeight: geometry.target,
-    alignContent: 'center',
   },
   list: { display: 'grid', gap: 4, margin: 0, paddingInlineStart: 20 },
   beatButton: {
@@ -1322,9 +1369,6 @@ const styles = stylex.create({
     display: 'grid',
     font: 'inherit',
     gap: 2,
-    paddingBlock: 6,
-    paddingInline: 8,
-    textAlign: 'start',
     outlineColor: {
       default: 'transparent',
       ':focus-visible': colors.focus,
@@ -1333,6 +1377,9 @@ const styles = stylex.create({
     outlineOffset: 2,
     outlineStyle: 'solid',
     outlineWidth: { default: 0, ':focus-visible': 2 },
+    paddingBlock: 6,
+    paddingInline: 8,
+    textAlign: 'start',
   },
   current: { backgroundColor: colors.surfaceMuted, color: colors.text },
   beatPhase: {
