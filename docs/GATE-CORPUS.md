@@ -1,8 +1,8 @@
 # Independent gate corpus
 
 The corpus runs the public CLI against disposable Git repositories. Each pair
-writes its required result before capture. The checker reads `result.json`,
-HAR entries, and agent-browser text output. It imports no Observed code.
+writes and commits its required result before capture. The checker reads `result.json`,
+HAR entries, agent-browser text output, errors, and raw CDP coverage. It imports no Observed code.
 
 ## Run
 
@@ -32,7 +32,7 @@ written. A failed assertion or unreadable artifact makes the checker exit 1. Cap
 are retained, including failed runs. The missing-evidence runner modifies only
 copies of a completed pair.
 
-The four checker tests run in `bun run test` and CI. Browser pairs currently run
+The checker tests run in `bun run test` and CI. Browser pairs currently run
 locally through `bun run gates`; CI execution of the full corpus is pending.
 
 ## Pairs and limits
@@ -41,7 +41,7 @@ locally through `bun run gates`; CI execution of the full corpus is pending.
 | --- | --- | --- | --- |
 | 1 | `correct-change` | Exit 0, passing checks, HAR count 1 on each side, exercised `app.ts` | Check changed-line mapping against raw coverage |
 | 2 | `request-fault`, `text-fault` | Exit 2, regression, exact HAR counts or raw element text on both sides | Accessibility, browser errors, performance, React, API operations, imported Playwright; observation-only kinds need separate expectations |
-| 3 | None yet. Generated journeys shipped in #91, and trial PRs [#17](https://github.com/esau-morais/observed-trial-express/pull/17) and [#18](https://github.com/esau-morais/observed-trial-express/pull/18) were captured by hand outside the runner | No readings yet | Add the error pair and the wrong-data pair to the runner; no pass claimed here |
+| 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window` | Exit 1, unavailable conclusion, unknown base evidence, exact failure reasons, candidate HAR | Unknown collector kind; stale revision identity; a real base startup failure. The current failed-base pair changes capture metadata. The stale pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text, removed-journey pair, and a pair that changes `source`, `setup` or `start` |
 | 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
@@ -49,7 +49,7 @@ locally through `bun run gates`; CI execution of the full corpus is pending.
 | 8 | Checker corruption tests only | Forged verdicts, wrong values, wrong exit, missing/malformed raw output, escaping symlink | Seed faults into disposable copies of the comparator and collector |
 
 A green corpus summary does not mean every release gate holds. The table names
-the parts these pairs do not cover. Gate 3 needs its two pairs in the runner.
+the parts these pairs do not cover.
 Gates 9 and 10 need people and have no automated pass.
 
 The trial repository has the request pair at
@@ -58,3 +58,21 @@ from `trial/gate-corpus-base` to `trial/gate-corpus-request`. Its base commits t
 expectation before the candidate changes the request count. Do not merge the
 seeded fault. The local fixture needs no credentials, framework, or package
 installation.
+
+## Generated journey pairs
+
+The gate 3 fixture retains the browser source, source maps and proposals from
+trial PRs [#17](https://github.com/esau-morais/observed-trial-express/pull/17)
+and [#18](https://github.com/esau-morais/observed-trial-express/pull/18).
+A Bun server serves those same files locally. The saved journey reads only the
+summary; each generated proposal clicks the action containing the fault.
+Run one with `bun run gates evidence/generated-01 outside-error-generated`.
+
+At `979f990`, all four local pairs and fresh runs of both original trial PRs in
+both modes met expectations committed before capture. A deliberately wrong
+regression expectation for the saved-only error run failed with checker exit 1.
+The source maps remain not observed. The checker reads the innermost CDP range
+at line 2, column 2 of both revisions and rejects absent or ambiguous ranges.
+It also checks the generated journey's change-map connection. An error can
+make the file's relation checked through a stack frame; that relation alone
+does not establish execution coverage.
