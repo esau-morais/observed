@@ -28,7 +28,7 @@ Pin compatible versions during application setup. Stack changes need an explicit
 
 ## Commands and enforcement
 
-The Phase 0 CLI generates Markdown reports from imported evidence. Check package.json before running commands. Never claim an absent check passed. Viewer commands apply when the viewer exists.
+The CLI captures, compares and reports; `report` renders imported evidence. Check package.json before running commands. Never claim an absent check passed. Viewer commands apply when the viewer exists.
 
 | Command | Contract |
 | --- | --- |
