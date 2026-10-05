@@ -16,8 +16,9 @@ schema version 9; generated journeys add optional fields.
   PR explainers. It shows the browser, the page, the request routes (extra
   routes share one box), browser errors and the deciding check, with a step
   clock and the failing check in red. When the evidence points at a source
-  line, the scene closes on that code. It opens still on the result; Play,
-  Pause, Previous and Next run it, and so do Space and the arrow keys.
+  line, the scene closes on that line, with its code when the bundle holds a
+  snapshot of it. It opens still on the result; Play, Pause, Previous and Next
+  run it, and so do Space and the arrow keys.
 - **The scene in the comment and Slack.** When a check fails and its journey
   has a scene, the comment shows the scene as a GIF under the verdict. It is
   stored and pruned with the screenshot crops, so it needs `contents: write`
@@ -31,9 +32,12 @@ schema version 9; generated journeys add optional fields.
   runs up to three journeys an agent proposes for files no saved journey
   reaches. They run fixed baseline checks for browser errors, serious
   accessibility violations and server errors, and never change
-  `observed.json`. Text read from their `textSelectors` shows as a
-  difference that sets no verdict. When coverage shows the changed lines
-  ran, the report proposes saving the journey.
+  `observed.json`. When coverage shows the changed lines ran, the report
+  proposes saving the journey.
+- **Text differences.** When a journey records text, saved through its
+  `collectors` or generated through `textSelectors`, the report, viewer and
+  comment list the text that changed between the two sides. A text
+  difference sets no verdict.
 
 ## 0.2.0-alpha.5 (2026-10-04)
 
