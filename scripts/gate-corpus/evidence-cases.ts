@@ -56,6 +56,89 @@ const input = [
 export const evidencePairs: readonly Pair[] = [
   {
     expectation: {
+      id: 'api-status-fault',
+      gate: 2,
+      reason:
+        'The saved API operation returns 503 instead of its protected 200 expectation.',
+      exitCode: 2,
+      assertions: [
+        ...faultAssertions('saved-api'),
+        ...(['base', 'candidate'] as const).flatMap((side) => [
+          {
+            label: `${side} API status agrees with the application response log`,
+            actual: resultReading([
+              'journeys',
+              0,
+              side,
+              'checks',
+              { key: 'id', equals: 'saved-api' },
+              'actual',
+            ]),
+            expected: side === 'base' ? 200 : 503,
+            raw: raw(side, 'application.log', ['status']),
+          },
+          {
+            label: `${side} raw operation method`,
+            actual: raw(side, 'application.log', ['method']),
+            expected: 'GET',
+          },
+          {
+            label: `${side} raw operation path`,
+            actual: raw(side, 'application.log', ['path']),
+            expected: '/api/status',
+          },
+        ]),
+      ],
+    },
+    baseProject: {
+      ...project,
+      capture: {
+        ...project.capture,
+        collectors: [
+          {
+            kind: 'api',
+            operations: [{ id: 'status', method: 'GET', path: '/api/status' }],
+          },
+        ],
+        checks: [
+          ...project.capture.checks,
+          {
+            kind: 'api-status',
+            id: 'saved-api',
+            name: 'Status operation succeeds',
+            scope: 'The saved GET /api/status operation.',
+            operation: 'status',
+            status: 200,
+          },
+        ],
+      },
+    },
+    baseEdits: [
+      {
+        file: 'server.ts',
+        from: "    if (pathname === '/api/items') {",
+        to: [
+          "    if (pathname === '/api/status') {",
+          '      const status = 200;',
+          '      const response = Response.json({ ready: true }, { status });',
+          '      console.log(JSON.stringify({ method: request.method, path: pathname, status: response.status }));',
+          '      return response;',
+          '    }',
+          '',
+          "    if (pathname === '/api/items') {",
+        ].join('\n'),
+      },
+    ],
+    edits: [
+      {
+        file: 'server.ts',
+        from: 'const status = 200;',
+        to: 'const status = 503;',
+      },
+    ],
+  },
+  {
+    expectation: {
       id: 'browser-errors-fault',
       gate: 2,
       reason:
