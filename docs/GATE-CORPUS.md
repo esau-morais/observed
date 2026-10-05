@@ -43,10 +43,11 @@ The checker tests run in `bun run test` and CI. The
 [Corpus workflow](../.github/workflows/corpus.yml) runs `gates:faults`, which
 covers every pair, the missing-evidence probes and the seeded faults, on pull
 requests that change `src`, `viewer`, the corpus scripts, gate fixtures, build
-configuration or dependencies, and on pushes to main, where a newer push cancels
-a run still in progress. It takes about seven minutes, so other pull requests
-skip it. It is not a required check. Each run uploads its evidence as the
-`gate-corpus` artifact for seven days.
+configuration or dependencies, and on every push to main. A newer push cancels
+an unfinished pull request run, never a run on main. It takes about seven
+minutes, so other pull requests skip it. It is not a required check. Each run
+that reaches the corpus step uploads its evidence as the `gate-corpus` artifact
+for seven days.
 
 ### Seeded source faults
 
