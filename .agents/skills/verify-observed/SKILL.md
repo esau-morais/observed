@@ -24,10 +24,11 @@ by what the diff touches:
 
 | Changed area | Evidence that can fail |
 | --- | --- |
-| Comparator, checks, change scope, result wording | `bun run gates <new dir>` for the affected gates, plus one fault seeded into a disposable copy that turns the affected pair red |
+| Comparator, checks, change scope, result wording | `bun run gates <new dir>` for the affected gates, plus one fault seeded into a disposable copy of Observed's comparator or collector that makes the gate checker fail |
 | Capture and collectors | The affected gate pairs, read against producer output (HAR, raw coverage, agent-browser text), not files Observed derives |
 | Viewer | `bun run verify`, and agent-browser screenshots of the changed component at 1440 and 390 px in both themes, with keyboard use |
-| Action, comment, chat delivery | A workflow run on a trial pull request whose head SHA equals the result's candidate, and a screenshot of the comment it posted |
+| GitHub action and comment | A workflow run on a trial pull request whose head SHA equals the result's candidate, and a screenshot of the comment it posted |
+| Chat delivery | A run through the affected adapter, and the message it posted or the request it would send |
 | Docs, skills, plans | Diff, link and anchor review. No screenshot unless a rendered output changed |
 
 When no rendered output changed, write "no rendered output changed" instead of
@@ -37,14 +38,15 @@ attaching screenshots of an unchanged page.
 
 - Write each expectation before the run it judges, and record its hash in the
   run directory.
-- State behavior. Never quote a string that the diff under test adds.
+- State behavior. Never copy an expected string from the output under test.
+  An exact string is fine when the specification set it before the run.
 - Name one expected outcome per run. An expectation that accepts either
   outcome checks nothing.
 - A live check needs an input that would make it fail, such as an old ref for
   a pruning check. Without one, report it as unverified.
-- A checker counts after it has failed once on a seeded wrong result. Commit it
-  before the runs it reads. A checker written after reading the output is
-  exploration, not verification.
+- A standalone evidence checker counts after it has failed once on a seeded
+  wrong result. Record its hash before the runs it reads. A checker written
+  after reading the output is exploration, not verification.
 
 Use expectations established independently of the renderer. Missing required
 evidence must not support a passing claim. Preserve useful failure cases in
@@ -64,7 +66,8 @@ tests; run fault injection only against disposable copies.
 
 ## Reviews
 
-Record each reviewer's provider and model, and the SHA range it reviewed. A
+Record the author's and each reviewer's provider and model, and the SHA range
+each review covered. A
 reviewer from the author's model family gives a same-family review. Never call
 it independent. A review covers only its SHA. After a rebase that resolved
 conflicts, review the range-diff before merging. Model review findings are not
