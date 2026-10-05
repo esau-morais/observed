@@ -359,12 +359,15 @@ both identities and verifies the PNG before publishing it. Rendering conditions
 record the browser, platform, viewport, scale, locale, timezone, browser arguments,
 and renderer hash. Each rendered side records its effective Mermaid configuration
 and hash, theme, and computed SVG font family, including frontmatter overrides.
-Mermaid clears the diagram-type scope before returning an SVG. The adapter
-briefly restores it using the pinned build's internal configuration export,
-reads the resolved configuration, then clears it. This avoids mutating diagram
-renderers, some of which are read-only module namespaces. The internal import
-must be checked when upgrading Mermaid; its scope behavior was checked against
-[the tagged configuration source](https://github.com/mermaid-js/mermaid/blob/mermaid%4012.1.0/packages/mermaid/src/config.ts#L134)
+The adapter snapshots configuration as drawing begins, after Mermaid's diagram
+initializer runs and before its rendering scope clears. It temporarily wraps
+the writable renderer slot in the pinned build's diagram registry, restoring
+that slot in `finally`; renderer module exports remain untouched. Rebuilding
+configuration after rendering would lose initializer adjustments such as
+sequence wrapping. The internal registry import must be checked when upgrading
+Mermaid; its lifecycle was checked against the tagged
+[diagram construction](https://github.com/mermaid-js/mermaid/blob/mermaid%4012.1.0/packages/mermaid/src/Diagram.ts#L41)
+and [rendering source](https://github.com/mermaid-js/mermaid/blob/mermaid%4012.1.0/packages/mermaid/src/mermaidAPI.ts#L572)
 on 2026-10-05.
 Input over 50,000 characters is unavailable. The viewer and single-file report do not display diagrams yet; the raw bundle keeps both
 formats. A worktree candidate records "not run" because this adapter reads only

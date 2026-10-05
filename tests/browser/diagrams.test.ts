@@ -11,6 +11,12 @@ import { json, sha256 } from '../../src/encoding';
 
 test.each([
   {
+    name: 'sequence wrapping',
+    theme: '  sequence:\n    theme: dark\n  wrap: true',
+    source:
+      'sequenceDiagram\nAlice->>Bob: A message that wraps across multiple lines for the reader',
+  },
+  {
     name: 'root flowchart',
     theme: '  theme: dark',
     source: 'flowchart LR\nA-->B',
@@ -33,7 +39,7 @@ test.each([
   },
 ])(
   'records effective configuration and SVG font for $name',
-  async ({ theme, source }) => {
+  async ({ name, theme, source }) => {
     const root = await mkdtemp(path.join(tmpdir(), 'observed-diagram-config-'));
     const projectRoot = path.join(root, 'repo');
     const directory = path.join(root, 'report');
@@ -103,6 +109,12 @@ test.each([
         pair.candidate.kind !== 'rendered'
       ) {
         throw new Error('Expected both diagrams to render');
+      }
+
+      if (name === 'sequence wrapping') {
+        expect(pair.candidate.conditions.configuration).toMatchObject({
+          sequence: { wrap: true },
+        });
       }
 
       expect(pair.base.conditions.fontFamily).toContain('trebuchet');

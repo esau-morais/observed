@@ -1,22 +1,36 @@
 import mermaid from 'mermaid';
-import { setDiagramConfigScope } from 'mermaid/dist/chunks/mermaid.core/chunk-VPRB5NB3.mjs';
+import { getDiagram } from 'mermaid/dist/chunks/mermaid.core/chunk-VPRB5NB3.mjs';
 import { diagramConfiguration } from './configuration';
 
 async function renderWithConfiguration(source: string) {
-  const result = await mermaid.render('observed-diagram', source);
-  // Mermaid 12.1.0 clears scope before returning; restore it only for this read.
-  // This pinned internal export preserves Mermaid's own appearance resolution.
-  try {
-    setDiagramConfigScope(result.diagramType);
-    const configuration = mermaid.mermaidAPI.getConfig();
+  const { diagramType } = await mermaid.parse(source);
+  const definition = getDiagram(diagramType);
+  const renderer = definition.renderer;
+  const conditions = { configuration: '', theme: '' };
+  // The registry slot is writable even when renderer exports are read-only.
+  // Read after diagram initialization, before Mermaid clears scope on return.
+  definition.renderer = {
+    ...renderer,
+    ...(renderer.getClasses === undefined
+      ? {}
+      : { getClasses: renderer.getClasses.bind(renderer) }),
+    draw(...args) {
+      const configuration = mermaid.mermaidAPI.getConfig();
+      conditions.configuration = JSON.stringify(configuration);
+      conditions.theme = configuration.theme ?? '';
 
-    return {
-      ...result,
-      configuration: JSON.stringify(configuration),
-      theme: configuration.theme,
-    };
+      return renderer.draw(...args);
+    },
+  };
+  try {
+    const result = await mermaid.render('observed-diagram', source);
+    if (conditions.configuration === '' || conditions.theme === '') {
+      throw new Error('The diagram rendering configuration is unavailable');
+    }
+
+    return { ...result, ...conditions };
   } finally {
-    setDiagramConfigScope();
+    definition.renderer = renderer;
   }
 }
 
