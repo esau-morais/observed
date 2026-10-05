@@ -91,8 +91,9 @@ pull request and decides none of these gates.
 The probes behind the status column are kept in the maintainer's checkout
 under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The
 [gate corpus](GATE-CORPUS.md) adds runnable pairs and lists the remaining checks.
-Local results for gates 1 to 7 above come from corpus runs at `65d347e`, a commit on the
-gate corpus branch before #90 was squashed, so it is on no branch now. They do
+Initial local results came from corpus runs at `65d347e`, a commit on the
+gate corpus branch before #90 was squashed, so it is on no branch now. Later
+runs are identified in the table and corpus documentation. These results do
 not establish all of a gate's requirements.
 
 ## What waits

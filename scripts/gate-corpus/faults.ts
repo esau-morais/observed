@@ -8,7 +8,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { checkRun } from './check';
-import { pairs } from './cases';
+import { checkRequestFault } from './fault-check';
 import {
   availabilityCases,
   availabilityExpectation,
@@ -190,41 +190,11 @@ await Effect.runPromise(
           [process.execPath, 'run', 'gates', corpus, 'request-fault'],
           path.join(directory, 'corpus-execution.json'),
         );
-        const pair = pairs.find(
-          (item) => item.expectation.id === 'request-fault',
-        );
-        if (pair === undefined) {
-          throw new Error('The request-fault pair is required');
-        }
-
         const pairDirectory = path.join(corpus, 'request-fault');
         const exit = decodeExit(
           await readFile(path.join(pairDirectory, 'exit.json'), 'utf8'),
         );
-        const result = await checkRun(
-          path.join(pairDirectory, 'run/report'),
-          pair.expectation,
-          exit,
-        );
-        const [firstRaw, ...otherRaw] = pair.expectation.assertions.flatMap(
-          (assertion) =>
-            assertion.raw === undefined
-              ? []
-              : [{ ...assertion, actual: assertion.raw }],
-        );
-        if (firstRaw === undefined) {
-          throw new Error('Request fault needs independent raw readings');
-        }
-
-        const raw = await checkRun(
-          path.join(pairDirectory, 'run/report'),
-          {
-            ...pair.expectation,
-            exitCode: 0,
-            assertions: [firstRaw, ...otherRaw],
-          },
-          0,
-        );
+        const { result, raw } = await checkRequestFault(pairDirectory, exit);
         await writeFile(path.join(directory, 'raw-checked.json'), json(raw));
         if (!raw.passed) {
           throw new Error(`Raw producer readings failed: ${fault.id}`);

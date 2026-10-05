@@ -1,4 +1,4 @@
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -8,7 +8,11 @@ import {
   type Expectation,
 } from '../scripts/gate-corpus/check';
 import { pairs } from '../scripts/gate-corpus/cases';
-import { detectedFault } from '../scripts/gate-corpus/fault-cases';
+import { checkRequestFault } from '../scripts/gate-corpus/fault-check';
+import {
+  detectedFault,
+  seededFaults,
+} from '../scripts/gate-corpus/fault-cases';
 
 const roots: string[] = [];
 
@@ -93,6 +97,95 @@ test('does not credit a detected fault when required raw evidence is also broken
   expect(
     detectedFault((await checkRun(root, expected, 2)).failures, required),
   ).toBe(false);
+});
+
+test('request mutation classification retains pinned revision controls', async () => {
+  const root = await fixture();
+  const report = path.join(root, 'run/report');
+  for (const [side, count] of [
+    ['base', 1],
+    ['candidate', 2],
+  ] as const) {
+    const capture = path.join(report, 'journey-1', side);
+    await mkdir(capture, { recursive: true });
+    await writeFile(
+      path.join(capture, 'requests.har'),
+      JSON.stringify({
+        log: {
+          entries: Array.from({ length: count }, () => ({
+            request: { method: 'GET', url: 'http://localhost/api/items' },
+            response: { status: 200 },
+          })),
+        },
+      }),
+    );
+  }
+
+  await writeFile(
+    path.join(report, 'result.json'),
+    JSON.stringify({
+      conclusion: { kind: 'no-regression' },
+      revision: 'pinned-base',
+      journeys: [
+        {
+          checks: [
+            { id: 'one-request', verdict: 'passed' },
+            { id: 'loaded-text', verdict: 'passed' },
+          ],
+          base: { checks: [{ id: 'one-request', actual: 1 }] },
+          candidate: { checks: [{ id: 'one-request', actual: 2 }] },
+        },
+      ],
+    }),
+  );
+  const pair = pairs.find((item) => item.expectation.id === 'request-fault');
+  const fault = seededFaults.find((item) => item.id === 'regression-as-passed');
+  if (pair === undefined || fault === undefined) {
+    throw new Error('Missing request fault');
+  }
+
+  const expectation: Expectation = {
+    ...pair.expectation,
+    assertions: [
+      ...pair.expectation.assertions,
+      {
+        label: 'base pinned revision',
+        actual: { kind: 'json', file: 'result.json', path: ['revision'] },
+        expected: 'pinned-base',
+        raw: { kind: 'json', file: 'identity.json', path: ['revision'] },
+      },
+    ],
+  };
+  await writeFile(
+    path.join(root, 'expected.json'),
+    JSON.stringify(expectation),
+  );
+  const identity = path.join(report, 'identity.json');
+  await writeFile(identity, JSON.stringify({ revision: 'pinned-base' }));
+  const valid = await checkRequestFault(root, 0);
+  expect(valid.raw.passed).toBe(true);
+  expect(detectedFault(valid.result.failures, fault.requiredFailures)).toBe(
+    true,
+  );
+
+  for (const broken of [
+    JSON.stringify({ revision: 'wrong-base' }),
+    '{}',
+    'not JSON',
+    null,
+  ]) {
+    if (broken === null) {
+      await rm(identity);
+    } else {
+      await writeFile(identity, broken);
+    }
+
+    const checked = await checkRequestFault(root, 0);
+    expect(checked.raw.passed).toBe(false);
+    expect(detectedFault(checked.result.failures, fault.requiredFailures)).toBe(
+      false,
+    );
+  }
 });
 
 test('rejects a forged pass, wrong measurement, and wrong CLI exit independently', async () => {
