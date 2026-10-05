@@ -399,7 +399,9 @@ flowchart TD
     U -->|Yes| A{"Agent changed the recipe?"}
     A -->|Yes| H["Stop: needs a person"]
     A -->|No| F{"Passed?"}
-    F -->|Yes| R{"Rerun without an edit passes?"}
+    F -->|Yes| W{"Unchanged since a failure?"}
+    W -->|Yes| L
+    W -->|No| R{"Rerun without an edit passes?"}
     R -->|Yes| S["Stop: passed locally"]
     R -->|No| L["Stop: flaky"]
     F -->|No| G{"Budget left and progress?"}
@@ -415,18 +417,19 @@ merges, not report wording.
 
 ### Pinned base
 
-The loop pins the base before it starts the agent. A hook pins it on the
-first `SessionStart` in a worktree. A pin resolves the revision to a commit
-SHA and lives in Observed's state directory outside the repository. Nothing
-re-pins while a pin exists, including `SessionStart` on resume, clear or
-compaction. Only a person resets it. The default base is the merge base of
-`HEAD` with the remote's default branch, and `--base` sets another. Revision
-arguments that start with `-` are rejected.
+The loop pins the base before it starts the agent. A hook pins it on the first
+`SessionStart` in a worktree. A pin resolves the revision to a commit SHA and
+lives in Observed's state directory outside the repository. Nothing re-pins
+while a pin exists, including `SessionStart` on resume, clear or compaction.
+Only a person resets it, with `observed pin --reset`, which pins the base
+again and records the recipe hashes again. The default base is the merge base
+of `HEAD` with the remote's default branch, and `--base` sets another.
+Revision arguments that start with `-` are rejected.
 
 The base's expectations judge every check that the base defines, as
-[PRODUCT.md](PRODUCT.md#altered-checks) describes. After gate 5, recipe
-differences in `result.json` cover every field of `observed.json` and every
-imported test file (see [Decisions](ROADMAP.md#decisions)).
+[PRODUCT.md](PRODUCT.md#altered-checks) describes. Recipe differences in
+`result.json` already cover imported test files. After gate 5 they cover
+every field of `observed.json` (see [Decisions](ROADMAP.md#decisions)).
 
 The loop and the hooks also record the hash of `observed.json` and of each
 imported test file when they pin the base. A later run whose files differ
@@ -435,7 +438,9 @@ from those hashes means the agent changed the recipe, and the loop stops with
 accepts a new check. The comparison is a stop rule and sets no verdict. A
 recipe difference that the person's changes already held before the loop
 started does not stop it, and the pull request's job judges that difference
-as usual.
+as usual. In a hook session the person and the agent share one worktree, so
+the hooks cannot tell their edits apart. A recipe edit the person makes there
+also stops with "needs a person" until the person resets the pin.
 
 A stub behind an unchanged `start`, such as a changed package script or
 fixture, is a source change, not a recipe difference. The change scope lists
@@ -454,14 +459,20 @@ Running the command is the person's authorization for that loop.
 3. Stop by the table below. Otherwise give `agentText` to the agent as an
    argument vector without a shell. Like the MCP `evidence` output, the
    handoff is redacted and labels captured page text as data.
-   - `claude -p --output-format json --allowedTools <list>`, on stdin. The
-     list lets print mode edit files and run the named commands without a
-     prompt ([headless](https://code.claude.com/docs/en/headless), checked
-     2026-10-05).
+   - `claude -p --output-format json --permission-mode dontAsk
+     --allowedTools <list>`, on stdin. The list lets print mode edit files
+     and run the named commands without a prompt, and `dontAsk` denies the
+     rest. Without a mode, the run can start in `auto`, which drops a bare
+     `Bash` entry ([headless](https://code.claude.com/docs/en/headless),
+     checked 2026-10-05).
    - `codex exec --json -s workspace-write`, on stdin.
    - `opencode run --file`. The help of opencode 2.0.22 lists no stdin input.
 4. When the agent exits, go back to step 2. The loop records the agent's exit
    status and last message and never reads them as a verdict.
+
+The loop sets `OBSERVED_LOOP` in the agent's environment. A Stop hook that
+the person installed in the project's settings sees it and does nothing,
+because `claude -p` runs project hooks unless `--bare` is set.
 
 When the agent runs in a sandbox, the loop keeps the report and state
 directories outside its writable roots. Codex's `workspace-write` can write to
@@ -471,9 +482,11 @@ directories outside its writable roots. Codex's `workspace-write` can write to
 checked 2026-10-05). Claude Code's Bash sandbox is opt-in and writes to the
 working directory and a per-user temp directory
 ([sandboxing](https://code.claude.com/docs/en/sandboxing), checked
-2026-10-05). So the report and state directories go under neither the
-worktree nor a temp directory. Without a sandbox, an allowed shell command can
-reach them. `loop.json` records which applied.
+2026-10-05). That sandbox covers shell commands only. Claude's file tools
+follow permission rules, so the loop's `Edit` entries name the worktree only.
+The report and state directories therefore go under neither the worktree nor
+a temp directory. Without a sandbox, an allowed shell command can reach them.
+`loop.json` records which applied.
 
 The first row that matches decides the stop. The loop's exit codes differ
 from `observe`'s on purpose: a run that checked nothing, `not-checked` or
@@ -501,24 +514,25 @@ duration. Last comes the stop reason.
 ### Hooks
 
 `observed hook claude-stop` and `observed hook codex-stop` read the Stop
-hook's JSON on stdin and run `observe` against the pinned base. They skip the
-run when the snapshot hash equals the last judged one. They use the loop's
-stop table, and block only while the loop would hand the evidence to the
-agent, with `{"decision":"block","reason":...}` and the handoff as the
-reason. Both agents send that reason back to the model
-([Claude Code hooks](https://code.claude.com/docs/en/hooks),
-[Codex hooks](https://learn.chatgpt.com/docs/hooks), checked 2026-10-05). On
-any other stop they let the turn end, print the stop reason, and add it to
-the worktree's `loop.json`.
+hook's JSON on stdin and run `observe` against the pinned base. After a pass
+they run the confirming rerun in the same call. They skip the run when the
+snapshot hash already has a final stop. They use the loop's stop table, and
+block only while the loop would hand the evidence to the agent, with
+`{"decision":"block","reason":...}` and the handoff as the reason. Both agents
+send that reason back to the model ([Claude Code
+hooks](https://code.claude.com/docs/en/hooks), [Codex
+hooks](https://learn.chatgpt.com/docs/hooks), checked 2026-10-05). On any
+other stop they let the turn end, print the stop reason, and add it to the
+worktree's `loop.json`.
 
 The hooks count their own blocks. Claude Code overrides a block after eight
-consecutive continuations, and the count resets each time Claude calls a
-tool. Codex documents no limit. Both
-default to a 600-second hook timeout, and one `observe` runs two captures per
-journey, so the hook's timeout must exceed twice the journey count times
-`--timeout`. Codex project hooks need trust through `/hooks`. Observed prints
-the hook entry and the command that adds it, and changes an agent's settings
-only when the person runs that command.
+consecutive continuations, raised with `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`, and
+the count resets each time Claude calls a tool. Codex documents no limit. Both
+default to a 600-second hook timeout. A pass and its confirming rerun take
+four captures per journey, so the hook's timeout must exceed four times the
+journey count times `--timeout`. Codex project hooks need trust through
+`/hooks`. Observed prints the hook entry and the command that adds it, and
+changes an agent's settings only when the person runs that command.
 
 ### MCP server
 
@@ -570,7 +584,8 @@ access starts it, under the trigger rules in
 same repository. The loop's job runs the candidate's code next to the agent's
 credentials and a `GITHUB_TOKEN` that can push, so that code can read them.
 The agent pushes a commit with the job's `GITHUB_TOKEN`. That push starts the
-pull request's workflow runs in an approval-required state, and a person with write access starts them
+pull request's workflow runs in an approval-required state, and a person with
+write access starts them
 ([GITHUB_TOKEN](https://docs.github.com/en/actions/concepts/security/github_token),
 checked 2026-10-05). That approval is the authorization for each judged run,
 and it keeps the 2026-09-28 decision to need no GitHub App. The pull request's
@@ -586,16 +601,16 @@ pull request's job, which reruns on its own runner from the pull request's
 base and carries the verdict. An agent with a shell can reach the state
 directory, the hook configuration and Observed's installation. Claude Code
 applies settings edited during a session, which a `ConfigChange` hook can
-block, and `--bare` skips hooks ([hooks](https://code.claude.com/docs/en/hooks),
-[CLI reference](https://code.claude.com/docs/en/cli-reference), checked
+block, and `--bare` skips hooks
+([hooks](https://code.claude.com/docs/en/hooks), [CLI
+reference](https://code.claude.com/docs/en/cli-reference), checked
 2026-10-05). Agents also cheat by special-casing tests, not only by editing
 them ([ImpossibleBench](https://arxiv.org/abs/2510.20270)). The CI run is
 separate from the agent's session. It still runs the candidate's `start`
-command and code. So local results are evidence for
-the agent, and the CI run is the evidence for the merge, within that limit. A
-second model's review, an agent's exit 0, or its own claim of success never
-sets a verdict. Imported agent claims stay imported until a controlled run
-checks them.
+command and code. So local results are evidence for the agent, and the CI run
+is the evidence for the merge. A second model's review, an agent's exit 0, or
+its own claim of success never sets a verdict. Imported agent claims stay
+imported until a controlled run checks them.
 
 ## Formal results
 
