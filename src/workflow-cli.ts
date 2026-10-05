@@ -130,6 +130,11 @@ const openViewer = Effect.fnUntraced(function* (
   yield* Effect.never;
 });
 
+const descriptionsFlag = Flag.String('descriptions').pipe(
+  Flag.withDescription('Optional agent descriptions for this run'),
+  Flag.optional,
+);
+
 const observe = Command.make(
   'observe',
   {
@@ -145,6 +150,7 @@ const observe = Command.make(
       Flag.withDescription('Revision to capture instead of the working tree'),
       Flag.optional,
     ),
+    descriptions: descriptionsFlag,
     generated: Flag.String('generated').pipe(
       Flag.withDescription(
         'Run up to three generated journeys from a separate JSON file',
@@ -170,6 +176,7 @@ const observe = Command.make(
     headless,
     timeout,
     generated,
+    descriptions,
   }) {
     const projectRoot = path.resolve(project);
     const directory = yield* chooseDirectory(output, 'run', projectRoot);
@@ -182,6 +189,7 @@ const observe = Command.make(
       candidateRevision: Option.getOrNull(candidate),
       timeoutMs: timeout,
       quiet: machine,
+      ...(Option.isSome(descriptions) ? { descriptionsFile: path.resolve(descriptions.value) } : {}),
       ...(Option.isSome(generated)
         ? { generatedFile: path.resolve(generated.value) }
         : {}),
@@ -290,10 +298,11 @@ const compare = Command.make(
     candidate: Argument.String('candidate-directory').pipe(
       Argument.withDescription('Candidate capture directory'),
     ),
+    descriptions: descriptionsFlag,
     output: outputFlag,
     machine: machineFlag,
   },
-  Effect.fn('compareCommand')(function* ({ base, candidate, output, machine }) {
+  Effect.fn('compareCommand')(function* ({ base, candidate, output, machine, descriptions }) {
     const directory = yield* chooseDirectory(
       output,
       'comparison',
@@ -309,6 +318,7 @@ const compare = Command.make(
             },
           ],
           directory,
+          ...(Option.isSome(descriptions) ? { descriptionsFile: path.resolve(descriptions.value) } : {}),
           viewerDirectory: yield* buildViewer(toolRoot),
           mode: base === 'none' ? 'preview' : 'comparison',
         });

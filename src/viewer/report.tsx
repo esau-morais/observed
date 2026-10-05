@@ -1550,12 +1550,14 @@ export function ComparisonReport({ result }: { result: Comparison }) {
   const scope =
     result.mode === 'comparison' && result.changeScope.kind === 'recorded'
       ? result.changeScope
-      : null;
+      : result.repositoryMap?.kind === 'recorded'
+        ? { ...result.repositoryMap, view: 'repository' as const }
+        : null;
   // The map leads only when it has a captured file to draw; otherwise the
   // journeys' evidence explains the verdict and the files follow it.
   const mapFirst =
     scope !== null &&
-    result.changeMap.kind === 'recorded' &&
+    ('view' in scope ? scope.map.kind === 'recorded' : result.changeMap.kind === 'recorded') &&
     scope.files.some((file) => file.captured);
 
   return (

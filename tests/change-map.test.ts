@@ -1,3 +1,4 @@
+import { agentDescriptionsSchema, descriptionProblem, type AgentDescriptions } from '../src/agent-descriptions';
 import { Schema } from 'effect';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,6 +6,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   changeMap,
+  repositoryMap,
   snapshotImports,
   type MapSnapshot,
 } from '../src/change-map';
@@ -12,6 +14,7 @@ import { scopeTable } from '../src/viewer/map-model';
 import type { CoverageRecord } from '../src/change-scope';
 import {
   comparisonSchema,
+  repositoryMapSchema,
   type ChangeMap,
   type Journey,
   type Side,
@@ -277,4 +280,35 @@ test('an import the change removed stays on the map, marked removed', async () =
       change: 'removed',
     }),
   );
+});
+
+test('repository chips use all candidate lines and retain files without readable source', async () => {
+  const source = await snapshot(candidate);
+  const coverage: CoverageRecord = { kind: 'recorded', files: new Map([
+    ['src/api.js', { executed: [[1, 1]], unexecuted: [] }],
+  ]), excluded: new Map(), unmapped: [] };
+  const repository = repositoryMap({
+    journeys: [{ journey: { ...recorded, findings: [] }, coverage, sources: { base: null, candidate: source } }],
+    snapshot: { journey: recorded, source },
+  });
+  expect(repository.kind).toBe('recorded');
+  if (repository.kind !== 'recorded') { throw new Error(repository.reason); }
+  expect(repository.files.map((file) => file.path).sort()).toEqual(recorded.candidate.capture?.manifest.source.files.map((file) => file.path).sort());
+  expect(repository.files.find((file) => file.path === 'src/api.js')).toMatchObject({ relation: 'exercised', lines: { ran: [[1, 1]] } });
+  expect(repository.files.find((file) => file.path === 'src/app.css')).toMatchObject({ relation: 'not-observed' });
+  expect(repository.map.kind).toBe('recorded');
+  if (repository.map.kind === 'recorded') {
+    expect(repository.map.connections.filter((edge) => edge.kind === 'imports').every((edge) => edge.change === 'unchanged')).toBe(true);
+  }
+  expect(Schema.is(repositoryMapSchema)(repository)).toBe(true);
+});
+
+test('agent descriptions cannot invent snapshot files or connections', async () => {
+  const source = await snapshot(candidate);
+  const repository = repositoryMap({ journeys: [], snapshot: { journey: recorded, source } });
+  const descriptions = { schemaVersion: 1, blocks: [{ target: { kind: 'file', path: 'src/App.jsx' }, name: 'Items screen', text: 'Loads the item list.', sources: ['src/App.jsx'] }], connections: [] } satisfies AgentDescriptions;
+  expect(descriptionProblem(descriptions, repository, { kind: 'unavailable', reason: 'No change' })).toBeNull();
+  expect(descriptionProblem({ ...descriptions, blocks: [{ ...descriptions.blocks[0], sources: ['private/secret.ts'] }] }, repository, { kind: 'unavailable', reason: 'No change' })).toContain('outside');
+  expect(descriptionProblem({ ...descriptions, connections: [{ kind: 'imports', from: 'file:src/App.jsx', to: 'file:invented.js', text: 'Reads data.', sources: ['src/App.jsx'] }] }, repository, { kind: 'unavailable', reason: 'No change' })).toContain('absent');
+  expect(Schema.is(agentDescriptionsSchema)({ ...descriptions, blocks: [{ ...descriptions.blocks[0], text: 'word '.repeat(26) }] })).toBe(false);
 });

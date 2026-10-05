@@ -90,6 +90,7 @@ export const renderReportPage = Effect.fn('renderReportPage')(function* (
     'img-src data: blob:',
     // The scene's code frame reads embedded source files from blob: URLs.
     'connect-src blob:',
+    "worker-src blob:",
     "base-uri 'none'",
     "object-src 'none'",
     "form-action 'none'",

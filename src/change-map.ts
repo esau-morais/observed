@@ -9,8 +9,10 @@ import type {
   MapConnection,
   MapEvidence,
   Side,
+  RepositoryMap,
 } from './comparison-model';
-import { addedLines, ranges, type CoverageRecord } from './change-scope';
+import { addedLines, ranges, repositoryFiles, type ScopeJourney, type CoverageRecord } from './change-scope';
+import { lines } from './source-diff';
 
 // The verified text of a snapshot's files and the directory that holds them
 // on disk, which import resolution reads.
@@ -505,6 +507,68 @@ function dedupeConnections(connections: MapConnection[]): MapConnection[] {
 
     return true;
   });
+}
+
+export function repositoryMap({
+  journeys,
+  snapshot,
+}: {
+  journeys: readonly ScopeJourney[];
+  snapshot: { journey: Journey; source: MapSnapshot } | null;
+}): RepositoryMap {
+  if (snapshot === null) {
+    return { kind: 'unavailable', reason: 'No candidate source snapshot could be read.' };
+  }
+
+  const manifest = snapshot.journey.candidate.capture?.manifest.source;
+
+  if (manifest === undefined || journeys.some(({ journey }) =>
+    journey.candidate.capture !== null &&
+    journey.candidate.capture.manifest.source.sha256 !== manifest.sha256,
+  )) {
+    return { kind: 'unavailable', reason: 'The candidate journeys do not share one source snapshot.' };
+  }
+
+  // Missing source text cannot supply imports, but its file must remain visible.
+  const readable = snapshot.source.files;
+  const imports = snapshotImports(snapshot.source);
+  const edges = [...importEdges(imports, snapshot.journey.candidate).values()];
+  const allLines = new Map([...readable].map(([file, text]) =>
+    [file, lines(text).map((_, index) => index + 1)] as const,
+  ));
+  const evidence = journeys.map((item, index) => journeyConnections(item, index, allLines));
+  const packages = new Set(edges.flatMap((edge) =>
+    edge.to.startsWith('package:') ? [edge.to.slice('package:'.length)] : [],
+  ));
+  const routes = new Map(evidence.flatMap((item) => item.routes).map((route) => [route.id, route]));
+  const files = new Map(repositoryFiles(journeys, readable).map((file) => [file.path, file]));
+
+  return {
+    kind: 'recorded',
+    snapshot: manifest.sha256,
+    files: manifest.files.map(({ path }) => files.get(path) ?? {
+      path, captured: true, relation: 'not-observed', basis: 'none',
+      reason: 'The source file is missing or failed its integrity check.', journeys: [], checks: [],
+    }),
+    map: {
+      kind: 'recorded',
+      blocks: [
+        ...manifest.files.map(({ path }): MapBlock => ({
+          id: fileId(path), kind: 'file', path, changed: false, changedLines: [],
+          imports: readable.has(path) ? blockImports(imports.get(path)) : {
+            kind: 'unavailable', reason: 'The source file is missing or failed its integrity check.',
+          },
+        })),
+        ...[...packages].sort().map((name): MapBlock => ({ id: packageId(name), kind: 'package', name })),
+        ...journeys.map(({ journey }, index): MapBlock => ({ id: journeyId(index), kind: 'journey', title: journey.title })),
+        ...routes.values(),
+      ],
+      connections: dedupeConnections([
+        ...edges.map((edge): MapConnection => ({ kind: 'imports', from: edge.from, to: edge.to, change: 'unchanged', evidence: [edge.evidence] })),
+        ...evidence.flatMap((item) => item.connections),
+      ]),
+    },
+  };
 }
 
 // The map of a recorded change scope. Every connection comes from a verified

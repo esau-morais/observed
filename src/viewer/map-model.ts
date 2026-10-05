@@ -1,5 +1,6 @@
 import {
   fileDetail,
+  scopeLine,
   relationLabels,
   repositoryPath,
   scopeFileLines,
@@ -11,12 +12,27 @@ import type {
   MapBlock,
   MapConnection,
   ScopeFile,
+  RepositoryFile,
+  RepositoryMap,
 } from '../comparison-model';
 import { fromRepositoryRoot, type Tone } from '../result-text';
 
 export type RecordedMap = Extract<ChangeMap, { kind: 'recorded' }>;
 
 export type RecordedScope = Extract<ChangeScope, { kind: 'recorded' }>;
+
+export type MapFile = ScopeFile | RepositoryFile;
+export type MapScope = RecordedScope | (Extract<RepositoryMap, { kind: 'recorded' }> & { view: 'repository' });
+export function isRepository(scope: MapScope): boolean { return 'view' in scope; }
+export function mapPath(scope: MapScope | ChangeScope, file: string): string {
+  return 'view' in scope ? file : fromRepositoryRoot(scope, file);
+}
+export function mapScopeLine(scope: MapScope): string {
+  return 'view' in scope
+    ? `${scope.files.length} captured files. Chips describe the latest capture, across all file lines.`
+    : scopeLine(scope);
+}
+
 
 // A relation is never shown as a passing check: only "checked" uses the
 // checked tone, and its label names the relation, not a check outcome.
@@ -54,7 +70,7 @@ export const connectionLabels = {
 
 export const connectionSources = {
   imports: 'The static import graph of each snapshot',
-  'ran-in': 'Execution coverage of the changed lines',
+  'ran-in': 'Execution coverage of the lines in scope',
   requested: 'The request ledger of each side',
   'threw-at': 'An error record and its stack frame',
   'checked-by': 'A named check and its scope',
@@ -73,14 +89,14 @@ export function blockName(block: MapBlock): string {
   }
 }
 
-export function blockTitle(block: MapBlock, scope?: ChangeScope): string {
+export function blockTitle(block: MapBlock, scope?: ChangeScope | MapScope): string {
   if (block.kind !== 'file') {
     return blockName(block);
   }
 
   return scope === undefined
     ? block.path
-    : fromRepositoryRoot(scope, block.path);
+    : mapPath(scope, block.path);
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -91,7 +107,7 @@ function plural(count: number, one: string, many: string): string {
 export function connectionText(
   connection: MapConnection,
   blocks: ReadonlyMap<string, MapBlock>,
-  scope?: ChangeScope,
+  scope?: ChangeScope | MapScope,
 ): string {
   const from = blocks.get(connection.from);
   const to = blocks.get(connection.to);
@@ -109,7 +125,7 @@ export function connectionText(
       return `${name(from)} imports ${name(to)}${change}`;
     }
     case 'ran-in':
-      return `${plural(connection.ran, 'changed line', 'changed lines')} of ${name(from)} ran in ${name(to)}, and ${connection.notRan} did not`;
+      return `${plural(connection.ran, scope !== undefined && 'view' in scope ? 'line' : 'changed line', scope !== undefined && 'view' in scope ? 'lines' : 'changed lines')} of ${name(from)} ran in ${name(to)}, and ${connection.notRan} did not`;
     case 'requested': {
       const base =
         connection.base === null

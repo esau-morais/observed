@@ -8,6 +8,7 @@ import type {
   LineRange,
   RecipeScope,
   ScopeFile,
+  RepositoryFile,
 } from './comparison-model';
 import { evidenceKinds } from './evidence-kinds';
 import { diffLines, lines } from './source-diff';
@@ -225,8 +226,12 @@ function capturedFile(
   identity: Pick<ScopeFile, 'path' | 'change'>,
   journeys: readonly ScopeJourney[],
   sources: ScopeJourney['sources'] | null,
+  allLines?: readonly number[],
 ): ScopeFile {
-  const anchored = anchorsOn(journeys, identity.path);
+  const anchored = anchorsOn(journeys, identity.path).filter(
+    ({ anchor }) => allLines === undefined ||
+      (anchor.side === 'candidate' && anchor.basis !== 'diff-name-match'),
+  );
   const strong = anchored.filter(
     (item) => item.anchor.basis !== 'diff-name-match',
   );
@@ -250,7 +255,7 @@ function capturedFile(
       coverage.kind === 'recorded' ? coverage.unmapped : [],
     )
     .at(0);
-  const changed = addedLines(
+  const changed = allLines ?? addedLines(
     identity.path,
     identity.change,
     sources?.base?.files ?? null,
@@ -377,6 +382,23 @@ function capturedFile(
     journeys: [],
     checks: [],
   };
+}
+
+export function repositoryFiles(
+  journeys: readonly ScopeJourney[],
+  snapshot: ReadonlyMap<string, string>,
+): RepositoryFile[] {
+  return [...snapshot].sort(([a], [b]) => a.localeCompare(b)).map(([path, text]) => {
+    const { change: _change, ...file } = capturedFile(
+      { path, change: 'modified' }, journeys,
+      { base: null, candidate: { files: snapshot } },
+      lines(text).map((_, index) => index + 1),
+    );
+
+    return 'reason' in file
+      ? { ...file, reason: file.reason.replaceAll('changed line', 'line') }
+      : file;
+  });
 }
 
 function snapshotPair(journey: Journey) {

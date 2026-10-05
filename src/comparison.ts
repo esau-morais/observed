@@ -33,7 +33,8 @@ import {
 } from './evidence-kinds';
 import { json, sha256 } from './encoding';
 import path from 'node:path';
-import { changeMap } from './change-map';
+import { changeMap, repositoryMap } from './change-map';
+import { DescriptionFailure, descriptionProblem } from './agent-descriptions';
 import {
   changeScope,
   coverageSchemaVersion,
@@ -2118,15 +2119,16 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
   const scope: ScopeJourney = {
     journey,
     sources,
-    coverage:
-      mode === 'comparison'
-        ? yield* loadCoverage(candidateDirectory, candidate)
-        : unreadCoverage('A preview has no change scope'),
+    coverage: yield* loadCoverage(candidateDirectory, candidate),
   };
 
   return {
     journey,
     scope,
+    repositorySnapshot: sources.candidate === null ? null : {
+      journey,
+      source: { root: path.join(candidateDirectory, 'source'), files: sources.candidate.files },
+    },
     snapshots:
       sources.base === null ||
       sources.candidate === null ||
@@ -2224,6 +2226,16 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
   const savedCount = inspected.filter(
     (item) => item.journey.generated === undefined,
   ).length;
+  const repository = repositoryMap({
+    journeys: inspected.map((item) => item.scope),
+    snapshot: inspected.find((item) => item.repositorySnapshot !== null)?.repositorySnapshot ?? null,
+  });
+  const descriptions = selection.agentDescriptions;
+  const problem = descriptions === undefined ? null : descriptionProblem(descriptions, repository, map);
+
+  if (problem !== null) {
+    return yield* new DescriptionFailure({ message: problem });
+  }
 
   return {
     result: {
@@ -2241,6 +2253,8 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
           selection.mode === 'preview' ? [] : removedJourneys(plan.removed),
       }),
       changeMap: map,
+      repositoryMap: repository,
+      ...(descriptions === undefined ? {} : { agentDescriptions: descriptions }),
     },
     visualDiffs: inspected.flatMap((item) =>
       item.visualDiff === null ? [] : [item.visualDiff],

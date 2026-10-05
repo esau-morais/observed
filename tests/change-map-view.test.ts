@@ -214,7 +214,7 @@ test('the map opens on the directory that holds most of the change', () => {
   expect(index.opening).toBe('src');
 });
 
-test('layout wraps a wide row inside the width and gives the same layout twice', () => {
+test('ELK layout is deterministic and routes each edge between its recorded blocks', async () => {
   const nodes = Array.from({ length: 12 }, (_, at) => ({
     id: `n${String(at).padStart(2, '0')}`,
     width: 100,
@@ -223,12 +223,10 @@ test('layout wraps a wide row inside the width and gives the same layout twice',
   }));
   const edges = [{ id: 'long', from: 'n00', to: 'n11' }];
   const options = { maxWidth: 460, nodeGap: 20, rankGap: 40, bottomGap: 80 };
-  const first = layoutGraph(nodes, edges, options);
+  const first = await layoutGraph(nodes, edges, options);
 
-  expect(layoutGraph(nodes, edges, options)).toEqual(first);
-  expect(
-    Math.max(...[...first.nodes.values()].map((box) => box.x + box.width)),
-  ).toBeLessThanOrEqual(options.maxWidth);
+  expect(await layoutGraph(nodes, edges, options)).toEqual(first);
+  expect(first.nodes.size).toBe(nodes.length);
 
   const from = first.nodes.get('n00');
   const to = first.nodes.get('n11');

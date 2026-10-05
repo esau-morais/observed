@@ -3,6 +3,7 @@ import type {
   CheckVerdict,
   Comparison,
   ScopeFile,
+  RepositoryFile,
   VerdictRecipe,
 } from './comparison-model';
 import { proposedOf } from './comparison-model';
@@ -105,7 +106,7 @@ export function scopeLine(scope: ChangeScope): string {
     .join(' ');
 }
 
-export function fileDetail(result: Comparison, file: ScopeFile): string {
+export function fileDetail(result: Comparison, file: ScopeFile | RepositoryFile): string {
   const journeys = listed(file.journeys);
 
   if (file.relation === 'checked') {
@@ -113,7 +114,7 @@ export function fileDetail(result: Comparison, file: ScopeFile): string {
   }
 
   if (file.relation === 'exercised' && file.basis === 'coverage') {
-    return `${plural(lineCount(file.lines.ran), 'changed line', 'changed lines')} ran in ${journeys}, and ${lineCount(file.lines.notRan)} did not.`;
+    return `${plural(lineCount(file.lines.ran), 'change' in file ? 'changed line' : 'line', 'change' in file ? 'changed lines' : 'lines')} ran in ${journeys}, and ${lineCount(file.lines.notRan)} did not.`;
   }
 
   if (file.relation === 'exercised' && file.basis === 'diff-name-match') {

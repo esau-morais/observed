@@ -240,6 +240,7 @@ const policy = [
   "font-src 'self'",
   "img-src 'self'",
   "connect-src 'self'",
+  "worker-src blob:",
   "base-uri 'none'",
   "object-src 'none'",
   "frame-ancestors 'none'",

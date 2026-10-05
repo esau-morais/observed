@@ -10,6 +10,7 @@ import {
 } from './capture/model';
 import { json, sha256 } from './encoding';
 import { inspectComparison } from './comparison';
+import { loadAgentDescriptions } from './agent-descriptions';
 import {
   selectionSchema,
   selectionSchemaVersion,
@@ -266,6 +267,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   mode = 'comparison',
   changes,
   recipes,
+  descriptionsFile,
 }: {
   journeys: readonly [JourneyDirectories, ...JourneyDirectories[]];
   directory: string;
@@ -273,8 +275,12 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   mode?: 'preview' | 'comparison';
   changes?: GitChanges;
   recipes?: RecipeSources;
+  descriptionsFile?: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
+  const agentDescriptions = descriptionsFile === undefined
+    ? undefined
+    : yield* loadAgentDescriptions(descriptionsFile);
   const sides = yield* Effect.forEach(journeys, (journey) =>
     Effect.all({
       generated: Effect.succeed(journey.generated),
@@ -399,6 +405,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
     journeys: selected,
     ...(changes === undefined ? {} : { changes }),
     ...(recipes === undefined ? {} : { recipes }),
+    ...(agentDescriptions === undefined ? {} : { agentDescriptions }),
   });
 
   yield* fs.writeFileString(

@@ -50,6 +50,7 @@ export const runProject = Effect.fn('runProject')(function* (options: {
   timeoutMs: number;
   quiet?: boolean;
   generatedFile?: string;
+  descriptionsFile?: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const {
@@ -205,6 +206,7 @@ export const runProject = Effect.fn('runProject')(function* (options: {
       mode: options.baseRevision === null ? 'preview' : 'comparison',
       ...(changes === undefined ? {} : { changes }),
       ...(sources === undefined ? {} : { recipes: sources }),
+      ...(options.descriptionsFile === undefined ? {} : { descriptionsFile: options.descriptionsFile }),
     });
   }).pipe(Effect.scoped);
 });

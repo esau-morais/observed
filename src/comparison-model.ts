@@ -1,4 +1,5 @@
 import { Option, Schema } from 'effect';
+import { agentDescriptionsSchema } from './agent-descriptions';
 import { generatedOriginSchema, recipeSchema } from './capture/recipe';
 import { journeySchema as projectJourneySchema } from './project';
 import { evidenceViewSchema } from './evidence-kinds';
@@ -531,6 +532,16 @@ export type ChangeScope = typeof changeScopeSchema.Type;
 
 export type ScopeFile = typeof scopeFileSchema.Type;
 
+const repositoryFileSchema = Schema.Union(
+  scopeFileSchema.members.map((member) =>
+    member.mapFields(({ change: _change, ...fields }) => fields),
+  ),
+).check(Schema.makeFilter((file) => file.captured, {
+  message: 'A repository file belongs to the captured snapshot',
+}));
+
+export type RepositoryFile = typeof repositoryFileSchema.Type;
+
 export type ChangedLines = typeof changedLinesSchema.Type;
 
 export type LineRange = typeof lineRangeSchema.Type;
@@ -654,6 +665,18 @@ export type MapConnection = typeof mapConnectionSchema.Type;
 
 export type MapEvidence = typeof mapEvidenceSchema.Type;
 
+export const repositoryMapSchema = Schema.Union([
+  unavailableSchema,
+  Schema.Struct({
+    kind: Schema.Literal('recorded'),
+    snapshot: digest,
+    files: Schema.Array(repositoryFileSchema),
+    map: changeMapSchema,
+  }),
+]);
+
+export type RepositoryMap = typeof repositoryMapSchema.Type;
+
 export const resultSchemaVersion = 9;
 
 export const comparisonSchema = Schema.Struct({
@@ -671,6 +694,8 @@ export const comparisonSchema = Schema.Struct({
     Schema.Struct({ journey: text, checks: Schema.Array(checkVerdictSchema) }),
   ),
   changeMap: changeMapSchema,
+  repositoryMap: Schema.optionalKey(repositoryMapSchema),
+  agentDescriptions: Schema.optionalKey(agentDescriptionsSchema),
 }).check(
   Schema.makeFilter(
     (result) =>
@@ -810,6 +835,7 @@ export const selectionSchema = Schema.Struct({
   journeys: Schema.NonEmptyArray(journeySelectionSchema),
   changes: Schema.optionalKey(gitChangesSchema),
   recipes: Schema.optionalKey(recipeSourcesSchema),
+  agentDescriptions: Schema.optionalKey(agentDescriptionsSchema),
 }).check(
   Schema.makeFilter(
     (selection) =>

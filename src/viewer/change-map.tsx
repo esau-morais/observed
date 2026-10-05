@@ -14,14 +14,12 @@ import {
   fileDetail,
   recipeLabels,
   recipeLines,
-  scopeLine,
 } from '../change-scope-text';
 import type {
   Comparison,
   MapBlock,
   MapConnection,
   MapEvidence,
-  ScopeFile,
 } from '../comparison-model';
 import { runVerdicts } from '../comparison-model';
 import {
@@ -43,7 +41,9 @@ import {
   scopeTable,
   verdictChecks,
   type RecordedMap,
-  type RecordedScope,
+  type MapScope,
+  type MapFile,
+  mapScopeLine,
 } from './map-model';
 import {
   cardKinds,
@@ -332,6 +332,8 @@ const styles = stylex.create({
     textTransform: 'uppercase',
     whiteSpace: 'nowrap',
   },
+  inference: { color: colors.inference },
+  description: { color: colors.inference, fontSize: '0.75rem', lineHeight: 1.4 },
   cardName: {
     display: '-webkit-box',
     fontSize: '0.875rem',
@@ -810,12 +812,14 @@ function linkKey(link: Pick<Link, 'from' | 'to'>) {
 // Inside cards in layered rows, the outside row under them, and the journey
 // row last. Only the first two take part in the layered layout; journey
 // links show on demand.
-function placeLevel(level: Level, width: number, root: boolean): Placed {
-  const size = width < 560 ? sizes.narrow : sizes.wide;
+async function placeLevel(level: Level, width: number, root: boolean): Promise<Placed> {
+  const baseSize = width < 560 ? sizes.narrow : sizes.wide;
+  const described = [...level.inside, ...level.outside, ...level.journeys].some((card) => card.description !== undefined);
+  const size = described ? { width: width < 560 ? 260 : 264, height: 212 } : baseSize;
   const pad = root ? 0 : 16;
   const top = root ? 0 : 36;
   const inner = Math.max(size.width, width - pad * 2);
-  const layout = layoutGraph(
+  const layout = await layoutGraph(
     [
       ...level.inside.map((card) => ({ id: card.id, ...size, bottom: false })),
       ...level.outside.map((card) => ({ id: card.id, ...size, bottom: true })),
@@ -996,7 +1000,12 @@ function CardButton({
         <span {...stylex.props(styles.eyebrow)}>{eyebrowOf(card, place)}</span>
         <StatusChip status={card.status} compact />
       </span>
-      <span {...stylex.props(styles.cardName)}>{card.name}</span>
+      <span {...stylex.props(styles.cardName, card.description !== undefined && styles.inference)}>{card.name}</span>
+      {card.description === undefined ? null : (
+        <span {...stylex.props(styles.description)}>
+          <span>Agent description · written by the agent</span><br />{card.description.text}
+        </span>
+      )}
       <span {...stylex.props(styles.cardFoot)}>
         <span {...stylex.props(styles.cardFootText)}>{foot}</span>
         {hasParts(card) ? (
@@ -1023,7 +1032,7 @@ function Tooltip({
   links: readonly Link[];
   names: ReadonlyMap<string, string>;
   blocks: ReadonlyMap<string, MapBlock>;
-  scope: RecordedScope;
+  scope: MapScope;
   at: Point;
 }) {
   const [first] = links;
@@ -1073,6 +1082,8 @@ function Tooltip({
     </div>
   );
 }
+
+const emptyPlacement: Placed = { width: 1, height: 1, cards: new Map(), edges: new Map(), container: null, outsideLabel: null, journeyRule: null };
 
 function MapCanvas({
   index,
@@ -1140,10 +1151,16 @@ function MapCanvas({
       ?.focus();
   }, [focusId, level]);
 
-  const placed = useMemo(
-    () => placeLevel(level, width, root),
-    [level, width, root],
-  );
+  const [layout, setLayout] = useState<{ placed: Placed | null; error: boolean }>({ placed: null, error: false });
+  useEffect(() => {
+    let active = true;
+    void placeLevel(level, width, root).then(
+      (placed) => { if (active) { setLayout({ placed, error: false }); } },
+      () => { if (active) { setLayout({ placed: null, error: true }); } },
+    );
+    return () => { active = false; };
+  }, [level, width, root]);
+  const placed = layout.placed ?? emptyPlacement;
   const cards = useMemo(
     () =>
       [
@@ -1294,6 +1311,10 @@ function MapCanvas({
       setZoom(null);
     }
   };
+
+  if (layout.placed === null) {
+    return <div ref={scroller} role="status" {...stylex.props(styles.quiet)}>{layout.error ? 'Map layout unavailable. Open Files to read the same evidence.' : 'Laying out the map…'}</div>;
+  }
 
   return (
     <div {...stylex.props(styles.viewportWrap)}>
@@ -1649,6 +1670,14 @@ function Legend({ level }: { level: Level }) {
   );
 }
 
+function AgentDescription({ description }: { description: { text: string; sources: readonly string[] } }) {
+  return <div {...stylex.props(styles.description)}>
+    <p>Agent description · written by the agent</p>
+    <p>{description.text}</p>
+    <p>Sources: {description.sources.join(', ')}</p>
+  </div>;
+}
+
 function ConnectionRows({
   title,
   direction,
@@ -1658,14 +1687,16 @@ function ConnectionRows({
   blocks,
   scope,
   onSelect,
+  descriptions,
 }: {
+  descriptions: Comparison['agentDescriptions'];
   title: string;
   direction: 'to' | 'from';
   card: Card;
   links: readonly Link[];
   names: ReadonlyMap<string, string>;
   blocks: ReadonlyMap<string, MapBlock>;
-  scope: RecordedScope;
+  scope: MapScope;
   onSelect: (id: string) => void;
 }) {
   const rows = links
@@ -1714,6 +1745,7 @@ function ConnectionRows({
                   </p>
                   <Evidence evidence={connection.evidence} />
                 </details>
+                {descriptions?.connections.filter((item) => item.kind === connection.kind && item.from === connection.from && item.to === connection.to).map((item) => <AgentDescription key={item.text} description={item} />)}
               </li>
             );
           })}
@@ -1750,6 +1782,7 @@ function ChangedLines({ card }: { card: Card }) {
   }
 
   const changed = card.block.changedLines;
+  const repository = !('change' in card.file);
   const coverage = 'lines' in card.file ? card.file.lines : null;
   let lines = 'Unknown: the snapshots could not be compared.';
 
@@ -1762,8 +1795,8 @@ function ChangedLines({ card }: { card: Card }) {
 
   return (
     <section {...stylex.props(styles.group)}>
-      <h4 {...stylex.props(styles.panelHeading)}>Changed lines</h4>
-      <p {...stylex.props(styles.text)}>{lines}</p>
+      <h4 {...stylex.props(styles.panelHeading)}>{repository ? 'Captured lines' : 'Changed lines'}</h4>
+      <p {...stylex.props(styles.text)}>{repository ? 'All file lines are in scope.' : lines}</p>
       {coverage === null ? null : (
         <p {...stylex.props(styles.text)}>
           Ran: {coverage.ran.length === 0 ? 'none' : rangeText(coverage.ran)}.
@@ -2152,7 +2185,7 @@ function Counts({ index }: { index: MapIndex }) {
   return (
     <section {...stylex.props(styles.group)}>
       <h4 {...stylex.props(styles.panelHeading)}>
-        Changed files in this run ({files.length})
+        {'view' in index.scope ? 'Captured files' : 'Changed files in this run'} ({files.length})
       </h4>
       <ul {...stylex.props(styles.list)}>
         {rows.map(({ status, count }) => (
@@ -2218,7 +2251,7 @@ function Panel({
             <Glyph symbol="×" />
           </button>
         </span>
-        <h3 {...stylex.props(styles.panelName)}>
+        <h3 {...stylex.props(styles.panelName, shown?.description !== undefined && styles.inference)}>
           {shown === null ? index.result.title : shown.name}
         </h3>
         {shown === null || cardPath(index, shown) === null ? null : (
@@ -2238,6 +2271,7 @@ function Panel({
       ) : null}
       {shown === null ? null : (
         <>
+          {shown.description === undefined ? null : <AgentDescription description={shown.description} />}
           <ChangedLines card={shown} />
           <Sources index={index} card={shown} />
           <Parts index={index} card={shown} onOpen={onOpen} />
@@ -2253,6 +2287,7 @@ function Panel({
                 names={names}
                 blocks={index.blocks}
                 scope={index.scope}
+                descriptions={index.result.agentDescriptions}
                 onSelect={onSelect}
               />
               <ConnectionRows
@@ -2263,6 +2298,7 @@ function Panel({
                 names={names}
                 blocks={index.blocks}
                 scope={index.scope}
+                descriptions={index.result.agentDescriptions}
                 onSelect={onSelect}
               />
             </>
@@ -2390,7 +2426,7 @@ function MapSection({
 }: {
   result: Comparison;
   map: RecordedMap;
-  scope: RecordedScope;
+  scope: MapScope;
   view: 'map' | 'table';
   toolbar: ReactNode;
 }) {
@@ -2596,7 +2632,7 @@ function MapSection({
           ) : null}
           <div {...stylex.props(styles.titleRow)}>
             <h2 id="change-map-title" {...stylex.props(styles.title)}>
-              {root ? 'Change map' : level.name}
+              {root ? ('view' in scope ? 'Repository map' : 'Change map') : level.name}
             </h2>
             <span {...stylex.props(styles.chip, styles.kindChip)}>
               {root ? 'project' : 'directory'}
@@ -2626,11 +2662,12 @@ function MapSection({
               Details
             </button>
           </div>
-          <p {...stylex.props(styles.lead)}>{scopeLine(scope)}</p>
+          <p {...stylex.props(styles.lead)}>{mapScopeLine(scope)}</p>
+          <p {...stylex.props(styles.hint)}>Map design adapted from <a href="https://x.com/_overment/status/2106102411051888770">_overment</a>.</p>
           <p {...stylex.props(styles.counts)}>
             {level.inside.length} blocks · {linkTotal} connections ·{' '}
             {level.outside.length} outside
-            {elsewhere === 0 ? '' : ` · ${elsewhere} changed elsewhere`}
+            {elsewhere === 0 ? '' : ` · ${elsewhere} ${'view' in scope ? 'files' : 'changed'} elsewhere`}
             {journeyTotal === 0
               ? ''
               : ` · ${journeyTotal} journey links show on hover`}
@@ -2695,7 +2732,7 @@ function MapSection({
 type TreeNode = {
   name: string;
   path: string;
-  files: ScopeFile[];
+  files: MapFile[];
   directories: TreeNode[];
 };
 
@@ -2767,8 +2804,8 @@ function TreeLevel({
         <li key={file.path} {...stylex.props(styles.treeFile)}>
           <span {...stylex.props(styles.treeRow)}>
             <span {...stylex.props(styles.gutter)}>
-              <Glyph symbol={gutters[file.change]} />
-              <span {...stylex.props(styles.srOnly)}>{file.change}</span>
+              <Glyph symbol={'change' in file ? gutters[file.change] : ''} />
+              <span {...stylex.props(styles.srOnly)}>{'change' in file ? file.change : ''}</span>
             </span>
             <span {...stylex.props(styles.mono)}>
               {repoPath(index.scope, file.path).split('/').at(-1)}
@@ -2787,7 +2824,7 @@ function TreeLevel({
 // The change as a file tree with a change gutter and one note per file, then
 // every connection with its records: the map's text version.
 function FileTree({ index }: { index: MapIndex }) {
-  const { notes } = scopeTable(index.result);
+  const { notes } = 'view' in index.scope ? { notes: [] } : scopeTable(index.result);
 
   return (
     <div
@@ -2855,12 +2892,16 @@ function ConnectionTable({ index }: { index: MapIndex }) {
 
 export function ChangeScopeView({
   result,
-  scope,
+  scope: initialScope,
 }: {
   result: Comparison;
-  scope: RecordedScope;
+  scope: MapScope;
 }) {
-  const map = result.changeMap.kind === 'recorded' ? result.changeMap : null;
+  const [repository, setRepository] = useState('view' in initialScope);
+  const repositoryScope = useMemo(() => result.repositoryMap?.kind === 'recorded' ? { ...result.repositoryMap, view: 'repository' as const } : null, [result.repositoryMap]);
+  const scope = repository && repositoryScope !== null ? repositoryScope : initialScope;
+  const chosenMap = 'view' in scope ? scope.map : result.changeMap;
+  const map = chosenMap.kind === 'recorded' ? chosenMap : null;
   const [view, setView] = useState<'map' | 'table'>(
     map === null ? 'table' : 'map',
   );
@@ -2875,7 +2916,7 @@ export function ChangeScopeView({
         <h2 id="change-map-title" {...stylex.props(styles.heading)}>
           Changed files
         </h2>
-        <p {...stylex.props(styles.text)}>{scopeLine(scope)}</p>
+        <p {...stylex.props(styles.text)}>{mapScopeLine(scope)}</p>
         {map === null && result.changeMap.kind === 'unavailable' ? (
           <p {...stylex.props(styles.text, styles.muted)}>
             Map unavailable: {result.changeMap.reason}
@@ -2892,6 +2933,7 @@ export function ChangeScopeView({
       aria-label="Change scope view"
       {...stylex.props(styles.titleRow)}
     >
+      {!('view' in initialScope) && repositoryScope !== null ? <button type="button" onClick={() => setRepository(!repository)} aria-pressed={repository} {...stylex.props(styles.toggle, repository && styles.pressed)}>Repository</button> : null}
       {(['map', 'table'] as const).map((item) => (
         <button
           key={item}
@@ -2909,6 +2951,7 @@ export function ChangeScopeView({
   return (
     <section aria-labelledby="change-map-title">
       <MapSection
+        key={repository ? 'repository' : 'change'}
         result={result}
         map={map}
         scope={scope}
@@ -2921,7 +2964,7 @@ export function ChangeScopeView({
 
 // The file tree needs only the scope, so it works when the map is
 // unavailable.
-function quietIndex(result: Comparison, scope: RecordedScope): MapIndex {
+function quietIndex(result: Comparison, scope: MapScope): MapIndex {
   return indexMap(
     result,
     result.changeMap.kind === 'recorded'

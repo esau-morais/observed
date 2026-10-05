@@ -1,3 +1,4 @@
+import type { AgentDescriptions } from '../agent-descriptions';
 import { fileDetail, relationLabels } from '../change-scope-text';
 import type {
   CheckVerdict,
@@ -5,16 +6,14 @@ import type {
   Journey,
   MapBlock,
   MapConnection,
-  ScopeFile,
 } from '../comparison-model';
 import {
   conclusionLabels,
   conclusionTones,
-  fromRepositoryRoot,
   toneSymbols,
   type Tone,
 } from '../result-text';
-import type { RecordedMap, RecordedScope } from './map-model';
+import { mapPath, type RecordedMap, type MapScope, type MapFile } from './map-model';
 
 export type Status = {
   label: string;
@@ -26,14 +25,14 @@ export type Status = {
 
 type FileBlock = Extract<MapBlock, { kind: 'file' }>;
 
-export type Card =
+export type Card = (
   | {
       kind: 'directory';
       id: string;
       path: string;
       name: string;
       files: number;
-      changed: ScopeFile[];
+      changed: MapFile[];
       status: Status;
     }
   | {
@@ -42,7 +41,7 @@ export type Card =
       path: string;
       name: string;
       block: FileBlock;
-      file: ScopeFile | undefined;
+      file: MapFile | undefined;
       status: Status;
     }
   | {
@@ -64,7 +63,7 @@ export type Card =
       kind: 'outside-files';
       id: string;
       name: string;
-      files: ScopeFile[];
+      files: MapFile[];
       status: Status;
     }
   | {
@@ -88,7 +87,9 @@ export type Card =
       name: string;
       routes: string[];
       status: Status;
-    };
+    }
+
+) & { description?: AgentDescriptions['blocks'][number] };
 
 // Groups of files that share one card until the reader opens it.
 export type Fold = 'config' | 'unchanged';
@@ -120,11 +121,11 @@ const relationStatus = {
   'not-observed': { tone: 'unknown', symbol: '?' },
   'outside-captured-source': { tone: 'unknown', symbol: '∅' },
 } as const satisfies Record<
-  ScopeFile['relation'],
+  MapFile['relation'],
   { tone: Tone; symbol: string }
 >;
 
-export function statusOf(relation: ScopeFile['relation']): Status {
+export function statusOf(relation: MapFile['relation']): Status {
   return {
     label: relationLabels[relation].toLowerCase(),
     ...(relation === 'outside-captured-source' ? { short: 'outside' } : {}),
@@ -138,7 +139,7 @@ const unchanged: Status = { label: 'unchanged', tone: 'neutral', symbol: '–' }
 // behind a checked sibling.
 const weakest = ['not-observed', 'exercised', 'checked'] as const;
 
-function directoryStatus(changed: readonly ScopeFile[]): Status {
+function directoryStatus(changed: readonly MapFile[]): Status {
   const relation = weakest.find((item) =>
     changed.some((file) => file.relation === item),
   );
@@ -164,8 +165,8 @@ function normalize(file: string): string {
 
 // fromRepositoryRoot, then without `.` segments or a `..` a later segment
 // undoes.
-export function repoPath(scope: RecordedScope, file: string): string {
-  return normalize(fromRepositoryRoot(scope, file));
+export function repoPath(scope: MapScope, file: string): string {
+  return normalize(mapPath(scope, file));
 }
 
 function parent(directory: string): string {
@@ -180,12 +181,12 @@ function under(file: string, directory: string): boolean {
 
 export type MapIndex = {
   map: RecordedMap;
-  scope: RecordedScope;
+  scope: MapScope;
   result: Comparison;
   blocks: Map<string, MapBlock>;
-  files: Map<string, ScopeFile>;
+  files: Map<string, MapFile>;
   captured: FileBlock[];
-  outsideFiles: ScopeFile[];
+  outsideFiles: MapFile[];
   root: string;
   opening: string;
 };
@@ -193,7 +194,7 @@ export type MapIndex = {
 export function indexMap(
   result: Comparison,
   map: RecordedMap,
-  scope: RecordedScope,
+  scope: MapScope,
 ): MapIndex {
   const files = new Map(scope.files.map((file) => [file.path, file]));
   const captured = map.blocks.filter(
@@ -297,6 +298,13 @@ export function isConfig(path: string): boolean {
   return configName.test(path.split('/').at(-1) ?? path);
 }
 
+function describeCard(index: MapIndex, card: Card): Card {
+  const description = index.result.agentDescriptions?.blocks.find(({ target }) =>
+    (card.kind === 'file' || card.kind === 'directory') && target.kind === card.kind && target.path === card.path,
+  );
+  return description === undefined ? card : { ...card, name: description.name, description };
+}
+
 export function directoryCard(index: MapIndex, path: string): Card {
   const inside = index.captured.filter((block) => under(block.path, path));
   const changed = inside.flatMap((block) => {
@@ -305,7 +313,7 @@ export function directoryCard(index: MapIndex, path: string): Card {
     return file === undefined ? [] : [file];
   });
 
-  return {
+  return describeCard(index, {
     kind: 'directory',
     id: directoryId(path),
     path,
@@ -313,13 +321,13 @@ export function directoryCard(index: MapIndex, path: string): Card {
     files: inside.length,
     changed,
     status: directoryStatus(changed),
-  };
+  });
 }
 
 function fileCard(index: MapIndex, block: FileBlock): Card {
   const file = index.files.get(block.path);
 
-  return {
+  return describeCard(index, {
     kind: 'file',
     id: block.id,
     path: block.path,
@@ -327,7 +335,7 @@ function fileCard(index: MapIndex, block: FileBlock): Card {
     block,
     file,
     status: file === undefined ? unchanged : statusOf(file.relation),
-  };
+  });
 }
 
 // The directories and files directly under `directory`.
@@ -761,12 +769,12 @@ export function cardSentence(index: MapIndex, card: Card): string {
 
       return card.changed.length === 0
         ? `${plural(card.files, 'file', 'files')} on the map, none changed.`
-        : `${plural(card.files, 'file', 'files')} on the map, ${card.changed.length} changed: ${counts.join(', ')}.`;
+        : `${plural(card.files, 'file', 'files')} on the map, ${'view' in index.scope ? 'latest capture' : `${card.changed.filter((file) => 'change' in file).length} changed`}: ${counts.join(', ')}.`;
     }
     case 'file':
       return card.file === undefined
         ? 'Unchanged. On the map because it imports or is imported by a changed file.'
-        : `${card.file.change.charAt(0).toUpperCase()}${card.file.change.slice(1)}. ${fileDetail(index.result, card.file)}`;
+        : `${'change' in card.file ? `${card.file.change.charAt(0).toUpperCase()}${card.file.change.slice(1)}. ` : ''}${fileDetail(index.result, card.file)}`;
     case 'package':
       return `${plural(card.packages.length, 'package', 'packages')} outside the captured source, imported from this level.`;
     case 'outside-files':
@@ -830,7 +838,7 @@ function lineTotal(list: readonly (readonly [number, number])[]): number {
   return list.reduce((sum, [start, end]) => sum + end - start + 1, 0);
 }
 
-function fileFoot(block: FileBlock, file: ScopeFile | undefined): string {
+function fileFoot(block: FileBlock, file: MapFile | undefined): string {
   if (file === undefined) {
     return 'unchanged';
   }
@@ -839,8 +847,10 @@ function fileFoot(block: FileBlock, file: ScopeFile | undefined): string {
     const ran = lineTotal(file.lines.ran);
     const total = ran + lineTotal(file.lines.notRan);
 
-    return `${file.change} · ${ran} of ${total} lines ran`;
+    return `${'change' in file ? `${file.change} · ` : ''}${ran} of ${total} lines ran`;
   }
+
+  if (!('change' in file)) { return 'latest capture'; }
 
   const changed = block.changedLines;
 
@@ -852,7 +862,7 @@ function fileFoot(block: FileBlock, file: ScopeFile | undefined): string {
 export function partsLabel(card: Card): string | null {
   switch (card.kind) {
     case 'directory':
-      return `${plural(card.files, 'file', 'files')}${card.changed.length === 0 ? '' : ` · ${card.changed.length} changed`}`;
+      return `${plural(card.files, 'file', 'files')}${card.changed.some((file) => 'change' in file) ? ` · ${card.changed.length} changed` : ''}`;
     case 'file':
       return fileFoot(card.block, card.file);
     case 'outside-files':
