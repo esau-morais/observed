@@ -1,0 +1,46 @@
+name: Corpus
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/gate-corpus/**'
+      - 'tests/fixtures/gate-*/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.github/workflows/corpus.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corpus-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  corpus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run setup --with-deps
+      # Runs every pair and missing-evidence probe unmutated, then each seeded
+      # comparator and collector fault in a disposable copy.
+      - run: mkdir evidence && bun run gates:faults evidence/corpus
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: gate-corpus
+          path: |
+            evidence/corpus/
+            !evidence/corpus/**/node_modules/**
+          retention-days: 7
