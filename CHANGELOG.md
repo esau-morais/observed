@@ -10,18 +10,19 @@ Tenth alpha of 0.2.0.
 The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
 `result.json` stays at schema version 9.
 
-- **Browser launch failures say why.** When agent-browser fails during a
-  capture, the failure reason quotes its error instead of saying only that a
-  `bun` process exited. When Chrome finds no usable sandbox, as on Ubuntu 23.10
-  and later, the reason names `capture.browserArguments ["--no-sandbox"]`.
-  Concealed values stay redacted.
-- **Altered expectations in the verification corpus.** Runnable pairs now cover
-  a relaxed check, a removed check, a rewritten journey and a removed journey,
-  each judged by the base's expectation.
-- **Kits for the two release gates that need people.** `docs/GATE-KITS.md`
-  holds the facilitator's script for setting Observed up on an unfamiliar
-  project and the reader packet for gate 3 and 5 reports, with an answer key
-  written before anyone reads. Neither gate has been run.
+- **Browser failures during a capture say why.** When agent-browser fails during
+  a capture, the failure reason quotes the first line of its error instead of
+  saying only that a `bun` process exited. When Chrome finds no usable sandbox,
+  as on Ubuntu 23.10 and later, the reason names
+  `capture.browserArguments ["--no-sandbox"]`. Concealed values stay redacted.
+- **A removed journey in the verification corpus.** A new pair removes one of
+  two journeys: its two checks stay unknown while the other journey's two checks
+  pass. The relaxed and removed check pairs now also assert the protected and
+  proposed expectation text against raw request counts.
+- **Kits for gates 9 and 10, the two release gates that need people.**
+  `docs/GATE-KITS.md` holds the facilitator's script for setting Observed up on
+  an unfamiliar project and the reader packet of gate 3 and gate 5 reports, with
+  an answer key written before anyone reads. Neither gate has been run.
 
 ## 0.2.0-alpha.8 (2026-10-05)
 
