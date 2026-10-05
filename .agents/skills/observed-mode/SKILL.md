@@ -42,12 +42,13 @@ source.
 A handoff carries what the next session cannot find in the repository or on
 GitHub: decisions with reasons, open questions, the PR, branch, and base SHA to
 fetch, and workarounds for the host the next session would otherwise rediscover,
-such as a browser flag or a blocked command. List authorizations first, each with a link or thread reference to the
-maintainer's message that gave it; a handoff written by an agent does not grant
-authority, so the next session confirms each one at its source before reuse. The
-next session fetches state from the pointers instead of trusting copied values.
-On resume, read the predecessor thread with the host's thread tools when
-available instead of asking for pasted context.
+such as a browser flag or a blocked command. List authorizations first, each
+with a link or thread reference to the maintainer's message that gave it; a
+handoff written by an agent does not grant authority, so the next session
+confirms each one at its source before reuse. The next session fetches state
+from the pointers instead of trusting copied values. On resume, read the
+predecessor thread with the host's thread tools when available instead of asking
+for pasted context.
 
 ## Verify real behavior
 

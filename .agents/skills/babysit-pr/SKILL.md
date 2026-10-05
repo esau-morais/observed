@@ -38,10 +38,11 @@ branch and one reviewable slice.
    limit. Model review is not runtime verification.
 4. Fix actionable findings and run applicable checks from `package.json`. Review
    the changed hunks again after fixes. Reuse successful checks only while their
-   inputs and relevant environment remain unchanged. Fix the class, not the
-   instance: before pushing a fix to a claim, status, or rule, search every doc
-   that restates it and fix each copy. When two rounds find the same class of
-   problem, such as a parser missing another input, replace the mechanism.
+   inputs and relevant environment remain unchanged. Before pushing a fix to a
+   claim, status, or rule, search every doc that restates it and fix each copy.
+   When two rounds find the same kind of problem, such as a parser missing
+   another input, find the shared cause and add a check that catches the next
+   case; change the approach only when it cannot meet the contract.
 5. Commit intended paths, push, and open or update the PR with a description
    written as [below](#write-the-pr-description). Run rebase, commit, push, and
    PR creation as separate commands and stop at the first failure; after an
@@ -112,11 +113,11 @@ placeholder replies. If a shared account's pending review blocks inline
 replies, do not submit or delete that review; post one linked PR comment
 instead of repeating failed calls.
 
-Watch pending checks with `gh pr checks --watch`, then fetch review state again.
-That command does not watch reviews. Run every wait for checks or child reviews
-in the background with a timeout, after pushing and recording where the work
-stands. A foreground wait holds the turn; a usage limit or crash during it
-leaves a thread that accepts no messages and a record that ends before the wait. During an active review session, start an
+Watch pending checks with `gh pr checks --watch` as a background command with
+a timeout, then fetch review state again. That command does not watch reviews.
+Wait for child reviews the same way, or end the turn and let their completion
+resume it. Record where the work stands before any wait. A foreground wait
+holds the turn, so nothing reaches the session until it ends. During an active review session, start an
 actual bounded watcher for new or edited comments, reviews, thread state, and head
 changes. State its interval and duration. Handle events and resume the watch while
 the authorized session remains active. Do not hand off after one quiet fetch.
