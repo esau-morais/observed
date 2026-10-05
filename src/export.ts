@@ -256,6 +256,7 @@ function contains(root: string, directory: string): boolean {
 export type JourneyDirectories = {
   baseDirectory: string | null;
   candidateDirectory: string;
+  generated?: JourneySelection['generated'];
 };
 
 export const exportComparison = Effect.fn('exportComparison')(function* ({
@@ -276,6 +277,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   const fs = yield* FileSystem.FileSystem;
   const sides = yield* Effect.forEach(journeys, (journey) =>
     Effect.all({
+      generated: Effect.succeed(journey.generated),
       candidate: loadSide(journey.candidateDirectory, 'Candidate'),
       base:
         journey.baseDirectory === null
@@ -340,7 +342,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
   const evaluatedAt = DateTime.formatIso(yield* DateTime.now);
   const selected: JourneySelection[] = [];
 
-  for (const [index, { base, candidate }] of sides.entries()) {
+  for (const [index, { base, candidate, generated }] of sides.entries()) {
     const journeyDirectory = `journey-${index + 1}`;
 
     yield* fs.makeDirectory(path.join(destination, journeyDirectory));
@@ -358,6 +360,7 @@ export const exportComparison = Effect.fn('exportComparison')(function* ({
 
     selected.push({
       directory: journeyDirectory,
+      ...(generated === undefined ? {} : { generated }),
       ...(base?.kind === 'unavailable'
         ? {
             baseIssue: base.issue,

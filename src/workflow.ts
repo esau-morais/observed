@@ -167,7 +167,13 @@ export const runProject = Effect.fn('runProject')(function* (options: {
         );
       }
 
-      return { baseDirectory, candidateDirectory };
+      return {
+        baseDirectory,
+        candidateDirectory,
+        ...(recipe.generated === undefined
+          ? {}
+          : { generated: { name: recipe.name, ...recipe.generated } }),
+      };
     }),
   );
   const [first, ...rest] = journeys;

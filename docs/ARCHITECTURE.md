@@ -215,12 +215,16 @@ journey has at most 10 text selectors. Browser settings come from the first
 saved candidate journey. Each capture uses the run's `--timeout`.
 
 A generated recipe records its targets and reason in an optional `generated`
-field. Its three check definitions are fixed and validated again when the
+field. The run selection also retains its name and origin when source selection
+fails before either capture writes a recipe. Its three check definitions are fixed and validated again when the
 recipe is read. The optional field is an additive extension of recipe schema
 2 and result schema 9. An older reader that lacks the baseline check kinds
 rejects the recipe rather than treating it as a saved journey.
 
-Browser errors include initial navigation and readiness. Their signatures
+Browser errors and the generated request window include initial navigation and
+readiness. Generated captures start request recording on a blank page before
+the first application navigation; saved request windows still start after
+readiness. Browser error signatures
 normalize the application's local port. The server check compares counts of
 500-or-above responses by method, origin, and pathname. The request ledger
 does not distinguish query values or request bodies, so neither does this

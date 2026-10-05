@@ -478,6 +478,17 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     });
   });
 
+  const startRequests = Effect.gen(function* () {
+    yield* command(['network', 'requests', '--clear']);
+    const startedAt = DateTime.formatIso(yield* DateTime.now);
+    yield* command(['network', 'har', 'start', '--content', 'none']);
+
+    return startedAt;
+  });
+
+  const earlyStartedAt =
+    recipe.generated === undefined ? null : yield* startRequests;
+
   yield* command(['open', new URL(recipe.path, options.url).toString()]);
 
   yield* command([
@@ -513,11 +524,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     });
   }
 
-  yield* command(['network', 'requests', '--clear']);
-
-  const startedAt = DateTime.formatIso(yield* DateTime.now);
-
-  yield* command(['network', 'har', 'start', '--content', 'none']);
+  const startedAt = earlyStartedAt ?? (yield* startRequests);
 
   const journey = Effect.gen(function* () {
     stepLog.before = yield* readStepErrors(command);

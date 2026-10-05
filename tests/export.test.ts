@@ -11,6 +11,46 @@ import { json } from '../src/encoding';
 import { comparisonSchema } from '../src/comparison-model';
 import { Schema } from 'effect';
 
+test('source failures on both sides retain generated origin without passing a check', async () => {
+  const root = await mkdtemp(
+    path.join(tmpdir(), 'observed-generated-failure-'),
+  );
+  try {
+    const viewer = path.join(root, 'viewer');
+    await mkdir(viewer);
+    await writeFile(path.join(viewer, 'index.html'), '<title>Failure</title>');
+    const generated = {
+      name: 'Open details',
+      targets: ['details.js'],
+      reason: 'Not observed by saved journeys.',
+    } as const;
+    const journey = {
+      baseDirectory: path.join(root, 'missing-base'),
+      candidateDirectory: path.join(root, 'missing-candidate'),
+      generated,
+    };
+    const exported = await Effect.runPromise(
+      exportComparison({
+        journeys: [journey],
+        directory: path.join(root, 'report'),
+        viewerDirectory: viewer,
+      }).pipe(Effect.provide(BunServices.layer)),
+    );
+    expect(exported.result.journeys[0]).toMatchObject({
+      title: 'Open details (generated)',
+      generated: { targets: generated.targets, reason: generated.reason },
+      conclusion: { kind: 'unavailable' },
+    });
+    expect(
+      exported.result.journeys[0].checks.some(
+        (check) => check.verdict === 'passed',
+      ),
+    ).toBe(false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test.each(['base', 'candidate'] as const)(
   'exports and serves original %s source-failure artifacts without claiming source verification',
   async (side) => {

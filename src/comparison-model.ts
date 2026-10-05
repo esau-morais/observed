@@ -764,6 +764,9 @@ export type SideArtifact = Side['artifacts'][number];
 
 const journeySelectionSchema = Schema.Struct({
   directory: text.check(Schema.isPattern(/^journey-[1-9][0-9]*$/)),
+  generated: Schema.optionalKey(
+    Schema.Struct({ name: text, ...generatedOriginSchema.fields }),
+  ),
   baseIssue: Schema.optionalKey(text),
   candidateIssue: Schema.optionalKey(text),
   baseFailureArtifacts: Schema.optionalKey(Schema.Array(captureArtifactSchema)),

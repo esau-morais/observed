@@ -1568,6 +1568,7 @@ export function compareJourney({
   mode = 'comparison',
   sources = { base: null, candidate: null },
   judgement = { kind: 'not-compared' },
+  generatedJourney,
 }: {
   base: Side;
   candidate: Side;
@@ -1576,6 +1577,7 @@ export function compareJourney({
   mode?: 'preview' | 'comparison';
   sources?: { base: SideSource | null; candidate: SideSource | null };
   judgement?: JourneyJudgement;
+  generatedJourney?: JourneySelection['generated'];
 }): Journey {
   const base = sideAt(inspectedBase, evaluatedAt);
   const candidate = sideAt(inspectedCandidate, evaluatedAt);
@@ -1672,10 +1674,15 @@ export function compareJourney({
     pairs?.map((pair) => pair.candidate),
   );
 
-  const generated = candidate.recipe?.generated ?? base.recipe?.generated;
+  const generated =
+    candidate.recipe?.generated ??
+    base.recipe?.generated ??
+    (generatedJourney === undefined
+      ? undefined
+      : { targets: generatedJourney.targets, reason: generatedJourney.reason });
   const journey = {
     ...(generated === undefined ? {} : { generated }),
-    title: `${candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after'}${generated === undefined ? '' : ' (generated)'}`,
+    title: `${candidate.recipe?.name ?? base.recipe?.name ?? generatedJourney?.name ?? 'Before and after'}${generated === undefined ? '' : ' (generated)'}`,
     base: evaluatedBase,
     candidate: evaluatedCandidate,
     comparison,
@@ -2102,6 +2109,7 @@ export const inspectJourney = Effect.fn('inspectJourney')(function* ({
     visual,
     mode,
     sources,
+    generatedJourney: selection?.generated,
     judgement:
       candidate.recipe === null
         ? { kind: 'not-compared' }
