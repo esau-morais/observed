@@ -117,6 +117,7 @@ export type Pair = {
   generated?: string;
   edits: readonly Edit[];
   baseEdits?: readonly Edit[];
+  baseProject?: Project;
   candidateProject?: Project;
 };
 

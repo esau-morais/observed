@@ -4,6 +4,7 @@ import path from 'node:path';
 import { checkRun, type Expectation } from './check';
 import { pairs, project, type Pair } from './cases';
 import { generatedPairs } from './generated-cases';
+import { evidencePairs } from './evidence-cases';
 import { startupFailurePair } from './missing-cases';
 import { provenance } from './provenance';
 
@@ -51,7 +52,12 @@ await Effect.runPromise(
       throw new Error('Usage: bun run gates NEW_OUTPUT_DIRECTORY [PAIR_ID]');
     }
 
-    const available = [...pairs, ...generatedPairs, startupFailurePair];
+    const available = [
+      ...pairs,
+      ...generatedPairs,
+      ...evidencePairs,
+      startupFailurePair,
+    ];
     const chosen =
       selected === undefined
         ? available
@@ -93,8 +99,11 @@ await Effect.runPromise(
           recursive: true,
         },
       );
-      if (pair.fixture === undefined) {
-        await writeFile(path.join(fixture, 'observed.json'), json(project));
+      if (pair.baseProject !== undefined || pair.fixture === undefined) {
+        await writeFile(
+          path.join(fixture, 'observed.json'),
+          json(pair.baseProject ?? project),
+        );
       }
 
       await writeFile(
