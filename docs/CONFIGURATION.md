@@ -435,3 +435,48 @@ and missing evidence is unknown. Exit success means the report was written, not 
 See the [schema](../src/schema.ts), the
 [example manifest](../tests/fixtures/todomvc/manifest.json) and the
 [TodoMVC provenance](../tests/fixtures/todomvc/README.md).
+
+## Generated journeys
+
+Run saved journeys first. Give the files marked "not observed" to your agent.
+The agent can write a separate proposal file, then run:
+
+```bash
+observed schema --generated
+observed observe --base HEAD --generated generated.json --json
+```
+
+The proposal file does not change `observed.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "journeys": [{
+    "name": "Open invoice details",
+    "path": "/invoices",
+    "ready": [{ "kind": "wait-selector", "selector": "#details" }],
+    "steps": [
+      { "kind": "click", "selector": "#details" },
+      { "kind": "network-idle" }
+    ],
+    "targets": ["src/invoice-details.ts"],
+    "reason": "The saved journey does not open invoice details.",
+    "textSelectors": ["#detail"]
+  }]
+}
+```
+
+Each run accepts at most three generated journeys. Each `ready` or `steps` list
+accepts at most 20 actions. `textSelectors` is optional and accepts up to ten
+selectors. Browser settings come from the first saved journey. Each capture
+uses `--timeout`, including setup. The file cannot supply checks or commands,
+and its journey names must differ from saved names on both revisions.
+
+The fixed baseline checks compare browser errors, serious accessibility
+violations, and server responses of 500 or above. They require captured evidence
+from both sides. Text and pixel differences set no verdict.
+
+Generated journeys are labeled as agent interpretation. When coverage shows
+changed lines ran, the report proposes saving the journey. With three saved
+journeys, it proposes replacing one. It never changes a saved journey itself.
+Stop after the budget and report the files still not observed with their reasons.

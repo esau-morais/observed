@@ -42,6 +42,8 @@ const checkSections: Record<
   CheckDefinition['kind'],
   EvidenceKind | 'requests'
 > = {
+  'baseline-server-errors': 'requests',
+  'baseline-browser-errors': 'browser-errors',
   'request-count': 'requests',
   text: 'text',
   'react-renders': 'react',

@@ -318,13 +318,17 @@ function errorFindings({
   const baseRecord = recorded(base, 'browser-errors');
   const known = new Set(baseRecord?.entries.map(signature) ?? []);
   const checks = definitions(journey.candidate, 'browser-errors');
+  const baselineChecks = definitions(
+    journey.candidate,
+    'baseline-browser-errors',
+  );
   const seen = new Set<string>();
   const findings: Finding[] = [];
 
   for (const entry of record.entries) {
     const key = signature(entry);
 
-    if (entry.step === null || seen.has(key)) {
+    if ((entry.step === null && baselineChecks.length === 0) || seen.has(key)) {
       continue;
     }
 
@@ -400,9 +404,12 @@ function errorFindings({
     findings.push({
       id: findingId('browser-errors', key),
       evidence: 'browser-errors',
-      checks: checks
-        .filter((check) => !ignoredBy(check, entry))
-        .map((check) => check.id),
+      checks: [
+        ...checks.filter(
+          (check) => entry.step !== null && !ignoredBy(check, entry),
+        ),
+        ...baselineChecks,
+      ].map((check) => check.id),
       subject: errorSubject(entry.source, name),
       comparison: baseline(baseRecord !== null, known.has(key)),
       location: located(

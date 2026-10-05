@@ -1,3 +1,4 @@
+import { proposeSaving } from './generated-proposals';
 import { DateTime, Effect, Option, Schema } from 'effect';
 import { readFile, realpath } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
@@ -1622,7 +1623,9 @@ export function compareJourney({
           candidate,
           mode,
           comparison.kind === 'available',
-          judgement,
+          candidate.recipe.generated === undefined
+            ? judgement
+            : { kind: 'not-compared' },
         )
       : null;
   const pairs =
@@ -1669,8 +1672,10 @@ export function compareJourney({
     pairs?.map((pair) => pair.candidate),
   );
 
+  const generated = candidate.recipe?.generated ?? base.recipe?.generated;
   const journey = {
-    title: candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after',
+    ...(generated === undefined ? {} : { generated }),
+    title: `${candidate.recipe?.name ?? base.recipe?.name ?? 'Before and after'}${generated === undefined ? '' : ' (generated)'}`,
     base: evaluatedBase,
     candidate: evaluatedCandidate,
     comparison,
@@ -1683,6 +1688,11 @@ export function compareJourney({
       mode,
     ),
     limitations: [
+      ...(generated === undefined
+        ? []
+        : [
+            'Generated journey: agent interpretation. Only executed baseline checks set verdicts; other differences remain observations.',
+          ]),
       'Checks cover only their stated expectations and scopes. Browser errors remain available as evidence.',
       'Screenshot differences are observations of rendered pixels, not a visual regression.',
       'Artifact hashes detect changed bytes; they do not establish collector honesty or source causation.',
@@ -2197,22 +2207,32 @@ export const inspectComparison = Effect.fn('inspectComparison')(function* ({
     recipe: plan.scope,
   });
 
+  const map = changeMap({
+    scope,
+    journeys: inspected.map((item) => item.scope),
+    snapshots:
+      inspected.find((item) => item.snapshots !== null)?.snapshots ?? null,
+  });
+  const savedCount = inspected.filter(
+    (item) => item.journey.generated === undefined,
+  ).length;
+
   return {
     result: {
       ...summarizeJourneys({
-        journeys: [first, ...rest],
+        journeys: [
+          proposeSaving(first, 0, map, savedCount),
+          ...rest.map((journey, index) =>
+            proposeSaving(journey, index + 1, map, savedCount),
+          ),
+        ],
         evaluatedAt: selection.evaluatedAt,
         mode: selection.mode,
         scope,
         removedJourneys:
           selection.mode === 'preview' ? [] : removedJourneys(plan.removed),
       }),
-      changeMap: changeMap({
-        scope,
-        journeys: inspected.map((item) => item.scope),
-        snapshots:
-          inspected.find((item) => item.snapshots !== null)?.snapshots ?? null,
-      }),
+      changeMap: map,
     },
     visualDiffs: inspected.flatMap((item) =>
       item.visualDiff === null ? [] : [item.visualDiff],

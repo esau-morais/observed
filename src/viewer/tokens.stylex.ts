@@ -23,6 +23,8 @@ export const colors = stylex.defineVars({
   regressionFill: '#F8E4DF',
   unknown: '#506473',
   unknownFill: '#E7EDF1',
+  inference: '#655580',
+  inferenceFill: '#EEE8F4',
   linkImports: '#233236',
   linkRanIn: '#0F927E',
   linkRequested: '#9E6E1A',

@@ -8,6 +8,7 @@ import { exportComparison } from './export';
 import { packaged } from './installation';
 import { readBaseJourneys } from './capture/base-project';
 import { loadProject } from './project';
+import { loadGeneratedJourneys } from './generated-journeys';
 
 export const buildViewer = Effect.fnUntraced(function* (
   toolRoot: string,
@@ -48,17 +49,53 @@ export const runProject = Effect.fn('runProject')(function* (options: {
   candidateRevision: string | null;
   timeoutMs: number;
   quiet?: boolean;
+  generatedFile?: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const {
     root,
     project,
     journeys: defined,
-    recipes,
+    recipes: savedRecipes,
   } = yield* loadProject(options.projectRoot);
   const directory = path.resolve(options.directory);
   yield* fs.makeDirectory(directory, { mode: 0o700 });
+  // Both sides ran the candidate's journeys; the base's file judges them.
+  const sources =
+    options.baseRevision === null
+      ? undefined
+      : {
+          base: yield* readBaseJourneys({
+            projectRoot: root,
+            baseRevision: options.baseRevision,
+            transcript: path.join(directory, 'base-project-transcript.jsonl'),
+          }),
+          candidate: defined,
+        };
+
+  const knownJourneys = [
+    ...defined,
+    ...(sources?.base.kind === 'read'
+      ? sources.base.journeys.filter(
+          (journey) => !defined.some((saved) => saved.name === journey.name),
+        )
+      : []),
+  ];
+  const generated =
+    options.generatedFile === undefined
+      ? null
+      : yield* loadGeneratedJourneys(options.generatedFile, knownJourneys);
+  const recipes = [...savedRecipes, ...(generated?.recipes ?? [])];
   yield* fs.makeDirectory(path.join(directory, 'captures'));
+
+  if (generated !== null) {
+    yield* fs.writeFileString(
+      path.join(directory, 'generated.json'),
+      json(generated.proposal),
+      { flag: 'wx' },
+    );
+  }
+
   yield* fs.writeFileString(
     path.join(directory, 'project.json'),
     json(project),
@@ -148,18 +185,6 @@ export const runProject = Effect.fn('runProject')(function* (options: {
           candidateRevision: options.candidateRevision,
           transcript: path.join(directory, 'changes-transcript.jsonl'),
         });
-  // Both sides ran the candidate's journeys; the base's file judges them.
-  const sources =
-    options.baseRevision === null
-      ? undefined
-      : {
-          base: yield* readBaseJourneys({
-            projectRoot: root,
-            baseRevision: options.baseRevision,
-            transcript: path.join(directory, 'base-project-transcript.jsonl'),
-          }),
-          candidate: defined,
-        };
 
   return yield* Effect.gen(function* () {
     const viewerDirectory = yield* buildViewer(

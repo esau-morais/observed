@@ -1109,6 +1109,12 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
+    ...result.journeys
+      .filter((journey) => journey.generated !== undefined)
+      .map(
+        (journey) =>
+          `Generated journey · Agent interpretation: ${inlineText(journey.title)}. Only executed baseline checks set verdicts.`,
+      ),
     ...extra(rows.length === 0 ? null : rows.join('\n')),
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),

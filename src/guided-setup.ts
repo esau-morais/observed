@@ -153,6 +153,17 @@ Don't run \`${cli}\` without a subcommand yourself, and don't open pull requests
 - \`${cli} observe --base HEAD --json\` compares it with the last commit.
 - Exit codes: 0 completed, 1 unavailable, 2 a named check failed or regressed. The JSON's \`directory\` is the report. To show it, give the person \`${cli} view <directory>\`, which serves it until they stop it.
 
+## Cover files not observed
+
+1. Read the comparison's change scope. Keep saved journeys and their expectations unchanged.
+2. Run \`${cli} schema --generated\` for the separate proposal file's schema.
+3. Write up to three journeys aimed at executable files marked "not observed". Use disposable inputs and no commands.
+4. Run \`${cli} observe --base HEAD --generated generated.json --json\`. Use the same base and candidate as the first run.
+5. Read coverage and baseline checks. Report the files still not observed, with their reasons, and stop at three proposals.
+
+Generated journeys are agent interpretation. Only executed baseline checks set verdicts. Wrong data without a baseline failure remains an observation.
+A saving proposal means changed lines ran. It does not establish correctness. Never replace a saved journey automatically.
+
 ${
   options.guide === null
     ? `Follow "Write observed.json" in ${readme}.`

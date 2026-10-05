@@ -1,3 +1,4 @@
+import { savingProposalText } from '../generated-proposals';
 import * as stylex from '@stylexjs/stylex';
 import { createContext, use, useMemo, type ReactNode } from 'react';
 import type {
@@ -352,6 +353,7 @@ const styles = stylex.create({
     color: colors.regression,
   },
   unknown: { backgroundColor: colors.unknownFill, color: colors.unknown },
+  inference: { backgroundColor: colors.inferenceFill, color: colors.inference },
   inkRegression: { color: colors.regression },
   inkUnknown: { color: colors.unknown },
   inkChecked: { color: colors.checked },
@@ -1428,6 +1430,13 @@ function JourneyView({
           )}
         </div>
       ) : null}
+      {journey.generated === undefined ? null : (
+        <p {...stylex.props(styles.text, styles.inference)}>
+          Generated journey · Agent interpretation. {journey.generated.reason}{' '}
+          Only executed baseline checks set verdicts.{' '}
+          {savingProposalText(journey)}
+        </p>
+      )}
       {scene === null ? null : <SceneView scene={scene} level={level} />}
       <div {...stylex.props(styles.disclosures)}>
         {outline.sections.map((section) => (

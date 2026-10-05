@@ -192,7 +192,8 @@ is labeled as a separate run.
 
 ### Generated journeys
 
-Planned for Phase 3a. Not built.
+`observe --generated <file>` accepts up to three journeys for one run. The file
+has schema version 1. `observed schema --generated` prints its schema.
 
 An agent supplies generated journeys for one run in a file of their own.
 Observed validates them with the journey schema, runs them after the saved
@@ -201,11 +202,36 @@ baseline checks. They cannot add a check with a written expectation, change a
 saved journey, or write to `observed.json`.
 
 Locally the person's agent drives the loop from the guide that
-`observed skill` prints, once the guide describes it: run, read the scope,
+`observed skill` prints, run, read the scope,
 write journeys for what is not observed, run again, and stop at the budget. In
 CI the same loop needs a configured agent command, which belongs to
 [Phase 4](ROADMAP.md#status). Observed treats the file as data. A journey
 cannot supply a command.
+
+The file supplies names, paths, ready actions, steps, target files, a reason,
+and optional text selectors. It cannot supply collectors, browser arguments,
+origins, or check definitions. Each action list has at most 20 steps, and each
+journey has at most 10 text selectors. Browser settings come from the first
+saved candidate journey. Each capture uses the run's `--timeout`.
+
+A generated recipe records its targets and reason in an optional `generated`
+field. Its three check definitions are fixed and validated again when the
+recipe is read. The optional field is an additive extension of recipe schema
+2 and result schema 9. An older reader that lacks the baseline check kinds
+rejects the recipe rather than treating it as a saved journey.
+
+Browser errors include initial navigation and readiness. Their signatures
+normalize the application's local port. The server check compares counts of
+500-or-above responses by method, origin, and pathname. The request ledger
+does not distinguish query values or request bodies, so neither does this
+check. Accessibility uses the existing serious-or-higher baseline comparison.
+Missing or incompatible evidence leaves these checks unknown or not run.
+
+The comparator adds a saving proposal only when a recorded coverage connection
+shows changed lines ran in that journey. Three saved journeys make the proposal
+a replacement; otherwise it is an addition. No proposal writes a project file.
+The remaining change scope retains files not observed, including files for
+which coverage is unavailable.
 
 ### Source anchors
 

@@ -24,6 +24,8 @@ export const darkColors = stylex.createTheme(colors, {
   regressionFill: '#442724',
   unknown: '#BAD0DF',
   unknownFill: '#263540',
+  inference: '#D5C8EC',
+  inferenceFill: '#332D42',
   linkImports: '#C0CDCC',
   linkRanIn: '#4EA988',
   linkRequested: '#D36D00',

@@ -1,3 +1,4 @@
+import { savingProposalText } from './generated-proposals';
 import {
   capturedFiles,
   relationLabels,
@@ -358,6 +359,11 @@ function renderJourney(
 
   return {
     lead: [
+      ...(journey.generated === undefined
+        ? []
+        : [
+            `Generated journey · Agent interpretation. ${escapeText(journey.generated.reason)} Only executed baseline checks set verdicts. ${savingProposalText(journey)}`,
+          ]),
       ...(single
         ? []
         : [

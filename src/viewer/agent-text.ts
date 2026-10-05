@@ -1,3 +1,4 @@
+import { savingProposalText } from '../generated-proposals';
 import { repositoryPath, scopeLine } from '../change-scope-text';
 import type {
   ChangeScope,
@@ -83,6 +84,12 @@ function journeyText(
       : [];
 
   return [
+    ...(journey.generated === undefined
+      ? []
+      : [
+          'Generated journey · Agent interpretation.',
+          savingProposalText(journey),
+        ]),
     ...sides.map(({ label, side }) => identity(label, side)),
     '',
     `${level} Checks`,

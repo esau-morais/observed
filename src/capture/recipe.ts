@@ -1,4 +1,6 @@
 import { Effect, Schema } from 'effect';
+import { generatedBaselineChecks } from '../checks/baseline';
+import { relativePathSchema } from '../project-path';
 import {
   checkKinds,
   checkSchema,
@@ -36,9 +38,15 @@ export const stepSchema = Schema.Union([
 
 export const recipeSchemaVersion = 2;
 
+export const generatedOriginSchema = Schema.Struct({
+  targets: Schema.NonEmptyArray(relativePathSchema).check(Schema.isUnique()),
+  reason: text,
+});
+
 export const recipeSchema = Schema.Struct({
   schemaVersion: Schema.Literal(recipeSchemaVersion),
   id: text,
+  generated: Schema.optionalKey(generatedOriginSchema),
   name: text,
   path: routeSchema,
   ready: Schema.Array(stepSchema),
@@ -56,6 +64,27 @@ export const recipeSchema = Schema.Struct({
 }).check(
   Schema.makeFilter((recipe) => {
     const issues: Schema.FilterIssue[] = [];
+    if (
+      recipe.generated !== undefined &&
+      !(
+        recipe.checks.length === generatedBaselineChecks.length &&
+        recipe.checks.every((check, index) => {
+          const fixed = generatedBaselineChecks[index];
+
+          return (
+            fixed !== undefined &&
+            check.kind === fixed.kind &&
+            check.id === fixed.id &&
+            check.name === fixed.name &&
+            check.scope === fixed.scope &&
+            (check.kind !== 'accessibility' || check.impact === 'serious')
+          );
+        })
+      )
+    ) {
+      issues.push('Generated journeys carry only the fixed baseline checks');
+    }
+
     const collected = new Set(recipe.collectors.map((item) => item.kind));
 
     if (

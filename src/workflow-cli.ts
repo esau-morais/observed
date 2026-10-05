@@ -1,3 +1,4 @@
+import { generatedJourneysSchema } from './generated-journeys';
 import { BunRuntime, BunServices } from '@effect/platform-bun';
 import {
   Cause,
@@ -144,6 +145,12 @@ const observe = Command.make(
       Flag.withDescription('Revision to capture instead of the working tree'),
       Flag.optional,
     ),
+    generated: Flag.String('generated').pipe(
+      Flag.withDescription(
+        'Run up to three generated journeys from a separate JSON file',
+      ),
+      Flag.optional,
+    ),
     output: outputFlag,
     machine: machineFlag,
     headless: Flag.Boolean('headless').pipe(
@@ -162,6 +169,7 @@ const observe = Command.make(
     machine,
     headless,
     timeout,
+    generated,
   }) {
     const projectRoot = path.resolve(project);
     const directory = yield* chooseDirectory(output, 'run', projectRoot);
@@ -174,6 +182,9 @@ const observe = Command.make(
       candidateRevision: Option.getOrNull(candidate),
       timeoutMs: timeout,
       quiet: machine,
+      ...(Option.isSome(generated)
+        ? { generatedFile: path.resolve(generated.value) }
+        : {}),
     });
     // An explicit --output leaves the application's directory untouched.
     if (Option.isNone(output)) {
@@ -491,8 +502,20 @@ const skill = Command.make(
   ),
 );
 
-const schema = Command.make('schema', {}, () =>
-  printJson(Schema.toJsonSchemaDocument(projectSchema).schema),
+const schema = Command.make(
+  'schema',
+  {
+    generated: Flag.Boolean('generated').pipe(
+      Flag.withDefault(false),
+      Flag.withDescription('Print the generated journey file schema'),
+    ),
+  },
+  ({ generated }) =>
+    printJson(
+      Schema.toJsonSchemaDocument(
+        generated ? generatedJourneysSchema : projectSchema,
+      ).schema,
+    ),
 ).pipe(Command.withDescription('Print the JSON Schema for observed.json'));
 
 // Exit code when bare observed stops at a setup step it cannot take alone.
