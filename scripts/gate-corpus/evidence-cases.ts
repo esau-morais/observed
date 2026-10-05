@@ -1,4 +1,10 @@
-import { atCheck, project, resultReading, type Pair } from './cases';
+import {
+  atCheck,
+  measuredAssertions,
+  project,
+  resultReading,
+  type Pair,
+} from './cases';
 import type { Expectation, Reading } from './check';
 
 type Assertion = Expectation['assertions'][number];
@@ -14,7 +20,10 @@ export const raw = (
   path,
 });
 
-export function faultAssertions(id: string): [Assertion, ...Assertion[]] {
+export function faultAssertions(
+  id: string,
+  evidence: string,
+): [Assertion, ...Assertion[]] {
   return [
     {
       label: 'conclusion',
@@ -26,6 +35,7 @@ export function faultAssertions(id: string): [Assertion, ...Assertion[]] {
       actual: resultReading(atCheck(check, 'verdict')),
       expected: check === id ? 'regression' : 'passed',
     })),
+    ...measuredAssertions({ id, evidence }),
   ];
 }
 
@@ -62,7 +72,7 @@ export const evidencePairs: readonly Pair[] = [
         'The candidate blocks document loading for two seconds, beyond the protected one-second median load budget.',
       exitCode: 2,
       assertions: [
-        ...faultAssertions('saved-load'),
+        ...faultAssertions('saved-load', 'performance'),
         ...(['base', 'candidate'] as const).map((side) => ({
           label: `${side} raw load samples, check measurement and budget agree`,
           actual: {
@@ -119,7 +129,7 @@ export const evidencePairs: readonly Pair[] = [
         'The saved API operation returns 503 instead of its protected 200 expectation.',
       exitCode: 2,
       assertions: [
-        ...faultAssertions('saved-api'),
+        ...faultAssertions('saved-api', 'api'),
         ...(['base', 'candidate'] as const).flatMap((side) => [
           {
             label: `${side} API status agrees with the application response log`,
@@ -202,7 +212,7 @@ export const evidencePairs: readonly Pair[] = [
         'A saved click raises one uncaught page error while its request and text checks still pass.',
       exitCode: 2,
       assertions: [
-        ...faultAssertions('saved-errors'),
+        ...faultAssertions('saved-errors', 'browser-errors'),
         ...counts('saved-errors', 'errors.json', ['data', 'errors', 'length']),
         {
           label: 'candidate raw error identity',
@@ -251,7 +261,7 @@ export const evidencePairs: readonly Pair[] = [
         'The saved click adds an input whose accessible name is removed on the candidate.',
       exitCode: 2,
       assertions: [
-        ...faultAssertions('saved-accessibility'),
+        ...faultAssertions('saved-accessibility', 'accessibility'),
         ...counts('saved-accessibility', 'a11y.json', [
           'data',
           'violations',

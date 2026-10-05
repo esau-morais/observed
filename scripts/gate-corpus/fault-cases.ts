@@ -97,6 +97,7 @@ export const seededFaults = [
     requiredFailures: [
       'conclusion: expected "regression", received "check-failed"',
       'one-request verdict: expected "regression", received "failed"',
+      'base one-request measured outcome: expected "passed", received "failed"',
       'base one-request matches raw output: expected 1, received 0',
       'base one-request matches raw output: raw producer value 1 disagrees with expected/result value',
       'candidate one-request matches raw output: expected 2, received 0',

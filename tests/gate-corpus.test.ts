@@ -8,6 +8,8 @@ import {
   type Expectation,
 } from '../scripts/gate-corpus/check';
 import { pairs } from '../scripts/gate-corpus/cases';
+import { evidencePairs } from '../scripts/gate-corpus/evidence-cases';
+import { browserPairs } from '../scripts/gate-corpus/browser-cases';
 import { checkRequestFault } from '../scripts/gate-corpus/fault-check';
 import {
   detectedFault,
@@ -132,8 +134,22 @@ test('request mutation classification retains pinned revision controls', async (
             { id: 'one-request', verdict: 'passed' },
             { id: 'loaded-text', verdict: 'passed' },
           ],
-          base: { checks: [{ id: 'one-request', actual: 1 }] },
-          candidate: { checks: [{ id: 'one-request', actual: 2 }] },
+          base: {
+            execution: 'complete',
+            evidence: [{ kind: 'text', status: 'recorded' }],
+            checks: [
+              { id: 'one-request', actual: 1, outcome: 'passed' },
+              { id: 'loaded-text', outcome: 'passed' },
+            ],
+          },
+          candidate: {
+            execution: 'complete',
+            evidence: [{ kind: 'text', status: 'recorded' }],
+            checks: [
+              { id: 'one-request', actual: 2, outcome: 'failed' },
+              { id: 'loaded-text', outcome: 'passed' },
+            ],
+          },
         },
       ],
     }),
@@ -412,4 +428,133 @@ test('requires innermost execution even when the result forges an exercised rela
 
   await rm(path.join(root, 'coverage.json'));
   expect((await checkRun(root, saved, 0)).passed).toBe(false);
+});
+
+test('fault expectations reject retained measurements on unknown or not-run sides', async () => {
+  const root = await fixture();
+  const checks = [
+    { pair: 'request-fault', id: 'one-request', kind: null },
+    { pair: 'text-fault', id: 'loaded-text', kind: 'text' },
+    { pair: 'performance-fault', id: 'saved-load', kind: 'performance' },
+    { pair: 'api-status-fault', id: 'saved-api', kind: 'api' },
+    {
+      pair: 'browser-errors-fault',
+      id: 'saved-errors',
+      kind: 'browser-errors',
+    },
+    {
+      pair: 'accessibility-fault',
+      id: 'saved-accessibility',
+      kind: 'accessibility',
+    },
+    { pair: 'react-renders-fault', id: 'saved-renders', kind: 'react' },
+    {
+      pair: 'playwright-fault',
+      id: 'playwright: saved.spec.ts › loaded items are saved',
+      kind: 'playwright',
+    },
+  ];
+  for (const fault of checks) {
+    const pair = [...pairs, ...evidencePairs, ...browserPairs].find(
+      (item) => item.expectation.id === fault.pair,
+    );
+    if (pair === undefined) {
+      throw new Error('Missing fault pair');
+    }
+
+    const assertions = pair.expectation.assertions.filter((assertion) => {
+      if (assertion.actual.kind !== 'json') {
+        return false;
+      }
+
+      const field = assertion.actual.path.at(-1);
+
+      return (
+        typeof field === 'string' &&
+        ['execution', 'outcome', 'status'].includes(field)
+      );
+    });
+    const [first, ...rest] = assertions;
+    expect.soft(first, fault.pair).toBeDefined();
+    if (first === undefined) {
+      continue;
+    }
+
+    const expected = {
+      ...pair.expectation,
+      assertions: [first, ...rest],
+    } satisfies Expectation;
+    const side = (candidate: boolean) => ({
+      execution: 'complete',
+      checks: [...new Set(['one-request', 'loaded-text', fault.id])].map(
+        (id) => ({
+          id,
+          outcome: candidate && id === fault.id ? 'failed' : 'passed',
+          actual: 1,
+        }),
+      ),
+      evidence: [
+        ...new Set(['text', ...(fault.kind === null ? [] : [fault.kind])]),
+      ].map((kind) => ({
+        kind,
+        status: 'recorded',
+        value: { retained: true },
+      })),
+    });
+    const base = side(false);
+    const candidate = side(true);
+    const check = async (sides: {
+      base: typeof base;
+      candidate: typeof candidate;
+    }) => {
+      await writeFile(
+        path.join(root, 'result.json'),
+        JSON.stringify({ journeys: [sides] }),
+      );
+
+      return (await checkRun(root, expected, 2)).passed;
+    };
+
+    expect(await check({ base, candidate })).toBe(true);
+    for (const name of ['base', 'candidate'] as const) {
+      for (const mutation of [
+        'unknown',
+        'not-run',
+        'inverted',
+        'execution',
+        'evidence',
+      ]) {
+        if (mutation === 'evidence' && fault.kind === null) {
+          continue;
+        }
+
+        const changed = structuredClone({ base, candidate });
+        const selected = changed[name];
+        const measured = selected.checks.find((item) => item.id === fault.id);
+        if (measured === undefined) {
+          throw new Error('Missing measured check');
+        }
+
+        if (mutation === 'execution') {
+          selected.execution = 'unknown';
+        } else if (mutation === 'evidence') {
+          const evidence = selected.evidence.find(
+            (item) => item.kind === fault.kind,
+          );
+          if (evidence === undefined) {
+            throw new Error('Missing evidence');
+          }
+
+          evidence.status = 'unavailable';
+        } else {
+          const inverted = name === 'base' ? 'failed' : 'passed';
+          measured.outcome = mutation === 'inverted' ? inverted : mutation;
+        }
+
+        expect
+          .soft(await check(changed), `${fault.pair} ${name} ${mutation}`)
+          .toBe(false);
+      }
+    }
+  }
 });

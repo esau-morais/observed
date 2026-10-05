@@ -1,4 +1,10 @@
-import { atCheck, project, resultReading, type Pair } from './cases';
+import {
+  atCheck,
+  measuredAssertions,
+  project,
+  resultReading,
+  type Pair,
+} from './cases';
 
 export const observationPair: Pair = {
   fixture: 'gate-observations',
@@ -27,6 +33,7 @@ export const observationPair: Pair = {
         actual: resultReading(atCheck(id, 'verdict')),
         expected: 'passed',
       })),
+      ...measuredAssertions(),
       {
         label: 'only the two named checks count',
         actual: resultReading(['journeys', 0, 'checks', 'length']),

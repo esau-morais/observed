@@ -69,6 +69,53 @@ export const atCheck = (id: string, ...fields: string[]): Selectors => [
   ...fields,
 ];
 
+export function measuredAssertions(fault?: {
+  id: string;
+  evidence?: string;
+}): Assertion[] {
+  const checks = [
+    ...new Set(['one-request', 'loaded-text', ...(fault ? [fault.id] : [])]),
+  ];
+  const evidence = [
+    ...new Set([
+      'text',
+      ...(fault?.evidence === undefined ? [] : [fault.evidence]),
+    ]),
+  ];
+
+  return (['base', 'candidate'] as const).flatMap((side) => [
+    {
+      label: `${side} execution is complete`,
+      actual: resultReading(['journeys', 0, side, 'execution']),
+      expected: 'complete',
+    },
+    ...checks.map((id) => ({
+      label: `${side} ${id} measured outcome`,
+      actual: resultReading([
+        'journeys',
+        0,
+        side,
+        'checks',
+        { key: 'id', equals: id },
+        'outcome',
+      ]),
+      expected: side === 'candidate' && id === fault?.id ? 'failed' : 'passed',
+    })),
+    ...evidence.map((kind) => ({
+      label: `${side} ${kind} is recorded`,
+      actual: resultReading([
+        'journeys',
+        0,
+        side,
+        'evidence',
+        { key: 'kind', equals: kind },
+        'status',
+      ]),
+      expected: 'recorded',
+    })),
+  ]);
+}
+
 function verdict(id: string, expected: string): Assertion {
   return {
     label: `${id} verdict`,
@@ -206,6 +253,7 @@ export const pairs: readonly Pair[] = [
     [
       verdict('one-request', 'regression'),
       verdict('loaded-text', 'passed'),
+      ...measuredAssertions({ id: 'one-request' }),
       ...rawFault,
     ],
   ),
@@ -224,6 +272,7 @@ export const pairs: readonly Pair[] = [
     ],
     [
       verdict('loaded-text', 'regression'),
+      ...measuredAssertions({ id: 'loaded-text', evidence: 'text' }),
       ...rawPassing,
       measurement('base', 'loaded-text', 'Items loaded'),
       measurement('candidate', 'loaded-text', 'Wrong items'),

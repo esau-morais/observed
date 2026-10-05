@@ -43,7 +43,7 @@ export const browserPairs: readonly Pair[] = [
         'The candidate commits a second App render during the saved click.',
       exitCode: 2,
       assertions: [
-        ...faultAssertions('saved-renders'),
+        ...faultAssertions('saved-renders', 'react'),
         ...(['base', 'candidate'] as const).flatMap((side) => [
           {
             label: `${side} measured renders match the recorder`,
@@ -134,7 +134,7 @@ export const browserPairs: readonly Pair[] = [
         'An unchanged Playwright assertion catches the candidate marking loaded items unsaved.',
       exitCode: 2,
       assertions: [
-        ...faultAssertions(playwrightId),
+        ...faultAssertions(playwrightId, 'playwright'),
         ...(['base', 'candidate'] as const).flatMap((side) => [
           {
             label: `${side} imported measurement matches the raw test attempt`,
