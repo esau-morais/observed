@@ -60,7 +60,7 @@ jobs:
             echo "::notice title=Observed::Not observed: the base has no self-observe fixture, so its viewer can't be captured."
             echo "**Not observed.** The base has no \`tests/fixtures/self-observe/captures.tar.gz\`, so its viewer can't be captured. Self-observation starts once the fixture is on the base branch." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: esau-morais/observed@e87389f7c2255a424050d9e75c8f2c332c4fea1f # v0.2.0-alpha.6
+      - uses: esau-morais/observed@d2a81e0c71ee86aa8fda691b096d6b29ce1060f8 # v0.2.0-alpha.7
         if: steps.base.outputs.ready == 'true'
         with:
           project: .
