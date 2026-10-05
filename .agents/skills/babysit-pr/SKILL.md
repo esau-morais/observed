@@ -92,8 +92,9 @@ Leave out what the diff, the commit list, or CI already shows: file-by-file
 narration, lists of test cases, output of checks CI runs, fixed review findings,
 review rounds, process notes, and repeated caveats.
 
-Before every `gh pr create` and `gh pr edit --body-file`, write the body to a
-file and run the check until it passes:
+Before creating a PR or changing its body, whether through `gh pr create`,
+`gh pr edit`, or the API, write the body to a file and run the check until it
+passes:
 
 ```bash
 bun run check:pr-body body.md

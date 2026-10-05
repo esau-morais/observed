@@ -12,6 +12,8 @@ test('a short body that opens with a screenshot, a mermaid flow or a before | af
     screenshot,
     flow,
     '| before | after |\n| --- | --- |\n| ![before](b.png) | ![after](a.png) |',
+    'before | after\n--- | ---\n<img src="b.png"> | <img src="a.png">',
+    '[![the comment](https://example.test/c.png)](https://example.test/pr/1)',
   ]) {
     expect(
       checkPrBody(
@@ -26,6 +28,7 @@ test('a body that opens with prose, or a table of text, has no opening visual', 
   for (const body of [
     `this adds a scene.\n\n${screenshot}`,
     '| run | result |\n| --- | --- |\n| 1 | ok |',
+    '![an image reference that renders nothing]',
     '',
   ]) {
     expect(checkPrBody(body, visual).problems).toEqual([
@@ -44,28 +47,32 @@ test('release and pin PRs may skip the visual with --no-visual, and keep the oth
   ]);
 });
 
-test('prose over 150 words fails; code, images, links and table rows do not count', () => {
+test('prose over 150 words fails, counting table cells but not code, images or link destinations', () => {
   const uncounted = [
     '```ts\nconst lots = "of words that are code";\n```',
-    '| a lot | of table words |',
-    '[link text](https://example.test/long/path)',
+    '![a long alt text](https://example.test/a.png)',
+    '[link](https://example.test/long/path)',
+    '| run | result |\n| --- | --- |',
   ].join('\n\n');
 
   expect(
-    checkPrBody(`${screenshot}\n\n${prose(148)}\n\n${uncounted}`, visual),
-  ).toEqual({
-    words: 150,
-    problems: [],
-  });
+    checkPrBody(`${screenshot}\n\n${prose(147)}\n\n${uncounted}`, visual),
+  ).toEqual({ words: 150, problems: [] });
   expect(
     checkPrBody(`${screenshot}\n\n${prose(151)}`, visual).problems,
   ).toEqual([expect.stringMatching(/^prose is 151 words/)]);
-});
-
-test('more than two headings fails', () => {
   expect(
     checkPrBody(
-      `${screenshot}\n\n## what\n\n## checks\n\n## not verified`,
+      `${screenshot}\n\n| a | b |\n| --- | --- |\n| ${prose(150)} | x |`,
+      visual,
+    ).problems,
+  ).toEqual([expect.stringMatching(/^prose is 153 words/)]);
+});
+
+test('more than two headings fails, indented or underlined ones included, but not lines in code', () => {
+  expect(
+    checkPrBody(
+      `${screenshot}\n\n  ## what\n\nchecks\n------\n\nnot verified\n===\n\n\`\`\`sh\n# a shell comment\n\`\`\``,
       visual,
     ).problems,
   ).toEqual(['3 headings; use at most 2 (checks, not verified)']);
@@ -74,20 +81,20 @@ test('more than two headings fails', () => {
 test('lines that narrate files fail', () => {
   expect(
     checkPrBody(
-      `${screenshot}\n\n- \`scripts/check-pr-body.ts\`: the check\n- src/report.ts — renders it\n- the viewer shows the gate`,
+      `${screenshot}\n\n- \`scripts/check-pr-body.ts\`: the check\n- src/report.ts — renders it\n1. viewer/app.css adds a color\n- the viewer shows the gate\n- 0.2.0-alpha.6 is on npm`,
       visual,
     ).problems,
-  ).toEqual(['2 lines narrate files; the diff shows those']);
+  ).toEqual(['3 lines narrate files; the diff shows those']);
 });
 
 test('review and process sections fail', () => {
   expect(
     checkPrBody(
-      `${screenshot}\n\n## review\n\nfixed two findings\n\n## process`,
+      `${screenshot}\n\nreview\n---\n\nfixed two findings\n\n## process`,
       visual,
     ).problems,
   ).toEqual([
-    'drop the "review" section; keep only declined findings, in one line',
-    'drop the "process" section; keep only declined findings, in one line',
+    'drop the "review" section; keep declined or open findings, one line each',
+    'drop the "process" section; keep declined or open findings, one line each',
   ]);
 });

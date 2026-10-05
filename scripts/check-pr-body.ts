@@ -2,12 +2,14 @@ import { readFile } from 'node:fs/promises';
 
 const wordLimit = 150;
 const headingLimit = 2;
-const visualStart = /^(!\[|<img\s|<picture|<video|```mermaid)/i;
+const fence = /^ {0,3}(```|~~~)[\s\S]*?^ {0,3}\1/gm;
+const image = /!\[[^\]]*\]\([^)\s]+(\s+"[^"]*")?\)|<img\s[^>]*\bsrc=/i;
+const tableDelimiter =
+  /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)+\|?[ \t]*$/;
 const fileLine =
-  /^\s*[-*]\s+`?[\w./-]+\.(ts|tsx|js|md|yml|yaml|json)`?\s*($|[:(—-])/gm;
+  /^[ \t]*([-*+]|\d+[.)])[ \t]+`?[\w./-]+\.[a-z][a-z0-9]{0,4}`?(?=[\s:(,—-]|$)/gim;
 const processSections = ['review', 'process', 'rounds'];
 
-// A before | after table counts as a visual when its cells hold images.
 function opensWithVisual(body: string) {
   const first = body
     .split(/\n\s*\n/)
@@ -18,20 +20,47 @@ function opensWithVisual(body: string) {
     return false;
   }
 
+  const unwrapped = first.replace(/^(\[|<(a|p|div)\b[^>]*>\s*)/i, '');
+  const second = first.split('\n')[1];
+
   return (
-    visualStart.test(first) ||
-    (first.startsWith('|') && /!\[|<img\s/i.test(first))
+    /^(```|~~~)mermaid\b/i.test(first) ||
+    /^<(picture|video)\b/i.test(unwrapped) ||
+    new RegExp(`^(${image.source})`, 'i').test(unwrapped) ||
+    (second !== undefined && tableDelimiter.test(second) && image.test(first))
   );
 }
 
-function proseWords(body: string) {
-  return body
-    .replace(/```[\s\S]*?```/g, ' ')
+function headings(text: string) {
+  const lines = text.split(/\r?\n/);
+
+  return lines.flatMap((line, index) => {
+    const atx = /^ {0,3}#{1,6}(?:[ \t]+(.*))?$/.exec(line);
+
+    if (atx !== null) {
+      return [atx[1] ?? ''];
+    }
+
+    const previous = lines[index - 1]?.trim() ?? '';
+    const setext =
+      /^ {0,3}(=+|-+)[ \t]*$/.test(line) &&
+      previous !== '' &&
+      !/^([-*+>|#]|\d+[.)])/.test(previous);
+
+    return setext ? [previous] : [];
+  });
+}
+
+function proseWords(text: string) {
+  return text
     .replace(/<[^>]+>/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(new RegExp(image.source, 'gi'), ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/`[^`]*`/g, 'x')
-    .replace(/^\s*\|.*\|\s*$/gm, ' ')
+    .split(/\r?\n/)
+    .filter((line) => !tableDelimiter.test(line))
+    .join('\n')
+    .replace(/\|/g, ' ')
     .split(/\s+/)
     .filter((word) => /[a-z0-9]/i.test(word)).length;
 }
@@ -45,7 +74,8 @@ export function checkPrBody(body: string, options: { visual: boolean }) {
     );
   }
 
-  const words = proseWords(body);
+  const text = body.replace(fence, ' ');
+  const words = proseWords(text);
 
   if (words > wordLimit) {
     problems.push(
@@ -53,24 +83,24 @@ export function checkPrBody(body: string, options: { visual: boolean }) {
     );
   }
 
-  const headings = body.match(/^#{1,6}\s/gm)?.length ?? 0;
+  const titles = headings(text);
 
-  if (headings > headingLimit) {
+  if (titles.length > headingLimit) {
     problems.push(
-      `${headings} headings; use at most ${headingLimit} (checks, not verified)`,
+      `${titles.length} headings; use at most ${headingLimit} (checks, not verified)`,
     );
   }
 
-  const files = body.match(fileLine)?.length ?? 0;
+  const files = text.match(fileLine)?.length ?? 0;
 
   if (files > 0) {
     problems.push(`${files} lines narrate files; the diff shows those`);
   }
 
   for (const section of processSections) {
-    if (new RegExp(`^#{1,6}\\s*${section}\\b`, 'im').test(body)) {
+    if (titles.some((title) => new RegExp(`^${section}\\b`, 'i').test(title))) {
       problems.push(
-        `drop the "${section}" section; keep only declined findings, in one line`,
+        `drop the "${section}" section; keep declined or open findings, one line each`,
       );
     }
   }
