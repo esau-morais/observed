@@ -8,6 +8,7 @@ import {
   type Expectation,
 } from '../scripts/gate-corpus/check';
 import { pairs } from '../scripts/gate-corpus/cases';
+import { detectedFault } from '../scripts/gate-corpus/fault-cases';
 
 const roots: string[] = [];
 
@@ -69,6 +70,30 @@ async function fixture() {
 
   return root;
 }
+
+test('does not credit a detected fault when required raw evidence is also broken', async () => {
+  const root = await fixture();
+  await writeFile(
+    path.join(root, 'result.json'),
+    JSON.stringify({ conclusion: { kind: 'no-regression' }, actual: 2 }),
+  );
+  const required = ['verdict: expected "regression", received "no-regression"'];
+  expect(
+    detectedFault((await checkRun(root, expected, 2)).failures, required),
+  ).toBe(true);
+
+  for (const raw of ['not JSON', '{}', '{"log":{"entries":[]}}']) {
+    await writeFile(path.join(root, 'requests.har'), raw);
+    expect(
+      detectedFault((await checkRun(root, expected, 2)).failures, required),
+    ).toBe(false);
+  }
+
+  await rm(path.join(root, 'requests.har'));
+  expect(
+    detectedFault((await checkRun(root, expected, 2)).failures, required),
+  ).toBe(false);
+});
 
 test('rejects a forged pass, wrong measurement, and wrong CLI exit independently', async () => {
   const root = await fixture();

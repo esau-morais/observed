@@ -60,6 +60,7 @@ export const seededFaults = [
     to: "(kinds.includes('no-regression') ? 'no-regression' : conclusionKinds.find((candidate) => kinds.includes(candidate)))",
     probe: 'availability',
     requiredFailures: [
+      'exit: expected 1, received 0',
       'aggregate conclusion: expected "unavailable", received "no-regression"',
     ],
   },
@@ -70,6 +71,8 @@ export const seededFaults = [
     to: "kind: 'no-regression',\n      text:\n        unknown.length > 0",
     probe: 'availability',
     requiredFailures: [
+      'exit: expected 1, received 0',
+      'aggregate conclusion: expected "unavailable", received "no-regression"',
       'unavailable journey: expected "unavailable", received "no-regression"',
     ],
   },
@@ -80,6 +83,8 @@ export const seededFaults = [
     to: "return { ...common, verdict: 'passed', detail: regression };",
     probe: 'request-fault',
     requiredFailures: [
+      'exit: expected 2, received 0',
+      'conclusion: expected "regression", received "no-regression"',
       'one-request verdict: expected "regression", received "passed"',
     ],
   },
@@ -90,8 +95,12 @@ export const seededFaults = [
     to: 'requests: har.log.entries.slice(0, 0).map((entry) => ({',
     probe: 'request-fault',
     requiredFailures: [
+      'conclusion: expected "regression", received "check-failed"',
+      'one-request verdict: expected "regression", received "failed"',
       'base one-request matches raw output: expected 1, received 0',
+      'base one-request matches raw output: raw producer value 1 disagrees with expected/result value',
       'candidate one-request matches raw output: expected 2, received 0',
+      'candidate one-request matches raw output: raw producer value 2 disagrees with expected/result value',
     ],
   },
 ] as const;
@@ -100,5 +109,8 @@ export function detectedFault(
   failures: readonly string[],
   required: readonly string[],
 ) {
-  return required.every((failure) => failures.includes(failure));
+  return (
+    failures.length === required.length &&
+    required.every((failure) => failures.includes(failure))
+  );
 }

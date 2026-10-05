@@ -80,7 +80,7 @@ producer output, without importing the comparator.
 | 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey, or changes how the app is set up or started | The result names each altered check and judges it by the base's expectation, with the proposed version beside it. A changed journey, `source`, `setup` or `start` makes every check in its scope unknown, with both versions shown | Three local pairs pass: relaxed check, removed check, rewritten journey. Remaining cases in the corpus table |
 | 6. Intentional change | A visual or copy change with passing checks | An observation, not a regression | Local intentional-copy pair passes; result reports visual change with passing checks |
 | 7. No captured change | A change to docs or to files outside `source.paths` | Says no captured file changed, lists the outside files, and claims nothing about the change | Local outside-source pair at `1bb17d7` passes data and saved Markdown wording checks: scope sentence, outside path, named-check limits, and rejection of known broader claims. Other delivery surfaces are not covered by this pair |
-| 8. Observed's own faults | Known faults seeded into copies of the comparator and collector | Unit tests or the gate corpus fail on each fault | Probe at `ad28490` failed for the one fault tried. With "no regression" ranked above "unavailable", all 360 unit tests passed |
+| 8. Observed's own faults | Known faults seeded into copies of the comparator and collector | Unit tests or the gate corpus fail on each fault | Four disposable-source faults turn the corpus red, with the unmutated corpus green on the same commit. Includes "no regression" above "unavailable", missing and failed bases, suppressed regression, and dropped request measurements. See the [bounded fault set](GATE-CORPUS.md#seeded-source-faults) |
 | 9. Unfamiliar project | Three projects the maintainers did not write, one non-React, set up by a person with their own agent from the README | A first report without help. Record time and every stall | Not run with people |
 | 10. Reading the result | At least three developers outside the project read reports for gates 3 and 5 | From the change map, each names what was checked and what was not, without explanation | Not run |
 
@@ -91,7 +91,7 @@ pull request and decides none of these gates.
 The probes behind the status column are kept in the maintainer's checkout
 under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The
 [gate corpus](GATE-CORPUS.md) adds runnable pairs and lists the remaining checks.
-Local results above come from corpus runs at `65d347e`, a commit on the
+Local results for gates 1 to 7 above come from corpus runs at `65d347e`, a commit on the
 gate corpus branch before #90 was squashed, so it is on no branch now. They do
 not establish all of a gate's requirements.
 
