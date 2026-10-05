@@ -2,6 +2,24 @@ import mermaid from 'mermaid';
 import { getDiagram } from 'mermaid/dist/chunks/mermaid.core/chunk-VPRB5NB3.mjs';
 import { diagramConfiguration } from './configuration';
 
+function opaqueBackground(color: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext('2d');
+  if (context === null) {
+    throw new Error('Diagram background rendering is unavailable');
+  }
+
+  context.fillStyle = 'white';
+  context.fillRect(0, 0, 1, 1);
+  context.fillStyle = color;
+  context.fillRect(0, 0, 1, 1);
+  const rgb = context.getImageData(0, 0, 1, 1).data.subarray(0, 3);
+
+  return `rgb(${Array.from(rgb).join(', ')})`;
+}
+
 async function renderWithConfiguration(source: string) {
   const { diagramType } = await mermaid.parse(source);
   const definition = getDiagram(diagramType);
@@ -52,6 +70,7 @@ async function renderObservedDiagram(source: string) {
   }
 
   container.replaceChildren();
+  container.style.backgroundColor = 'white';
   try {
     if (source.length > diagramConfiguration.maxTextSize) {
       throw new Error(
@@ -69,7 +88,11 @@ async function renderObservedDiagram(source: string) {
     }
 
     element.style.backgroundColor = background;
-    container.style.backgroundColor = background;
+    const canvasColor = opaqueBackground(
+      getComputedStyle(element).backgroundColor,
+    );
+    element.style.backgroundColor = canvasColor;
+    container.style.backgroundColor = canvasColor;
     const box = element.getBoundingClientRect();
     if (
       box.width <= 0 ||

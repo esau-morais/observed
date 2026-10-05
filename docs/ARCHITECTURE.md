@@ -360,7 +360,8 @@ record the browser, platform, viewport, scale, locale, timezone, browser argumen
 and renderer hash. Each rendered side records its effective Mermaid configuration
 and hash, theme, and computed SVG font family, including frontmatter overrides.
 The SVG and PNG canvas use the effective theme's background color, with white
-as the fallback when no valid color is provided.
+as the fallback when no valid color is provided. The browser resolves that color
+against white once, and both artifacts use the resulting opaque color.
 The adapter snapshots configuration as drawing begins, after Mermaid's diagram
 initializer runs and before its rendering scope clears. It temporarily wraps
 the writable renderer slot in the pinned build's diagram registry, restoring

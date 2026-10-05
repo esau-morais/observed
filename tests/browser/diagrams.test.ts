@@ -16,36 +16,55 @@ test.each([
     theme: '  sequence:\n    theme: dark\n  wrap: true',
     source:
       'sequenceDiagram\nAlice->>Bob: A message that wraps across multiple lines for the reader',
+    background: [51, 51, 51],
   },
   {
     name: 'custom background',
     theme: '  theme: dark\n  themeVariables:\n    background: "#123456"',
     source: 'sequenceDiagram\nAlice->>Bob: Read this message',
+    background: [18, 52, 86],
+  },
+  {
+    name: 'translucent background',
+    theme:
+      '  theme: dark\n  themeVariables:\n    background: "rgba(51,51,51,0.5)"',
+    source: 'sequenceDiagram\nAlice->>Bob: Read this message',
+    background: [153, 153, 153],
+  },
+  {
+    name: 'transparent background',
+    theme: '  theme: dark\n  themeVariables:\n    background: transparent',
+    source: 'sequenceDiagram\nAlice->>Bob: Read this message',
+    background: [255, 255, 255],
   },
   {
     name: 'root flowchart',
     theme: '  theme: dark',
     source: 'flowchart LR\nA-->B',
+    background: [51, 51, 51],
   },
   {
     name: 'scoped flowchart',
     theme: '  flowchart:\n    theme: dark',
     source: 'flowchart LR\nA-->B',
+    background: [51, 51, 51],
   },
   {
     name: 'ER',
     theme: '  er:\n    theme: dark',
     source: 'erDiagram\nCUSTOMER ||--o{ ORDER : places',
+    background: [51, 51, 51],
   },
   {
     name: 'requirement',
     theme: '  requirement:\n    theme: dark',
     source:
       'requirementDiagram\nrequirement test_req {\n id: 1\n text: "test"\n risk: low\n verifymethod: test\n}',
+    background: [51, 51, 51],
   },
 ])(
   'records effective configuration and SVG font for $name',
-  async ({ name, theme, source }) => {
+  async ({ name, theme, source, background: candidateBackground }) => {
     const root = await mkdtemp(path.join(tmpdir(), 'observed-diagram-config-'));
     const projectRoot = path.join(root, 'repo');
     const directory = path.join(root, 'report');
@@ -135,19 +154,22 @@ test.each([
           throw new Error('Expected a decoded diagram PNG');
         }
 
-        const candidateBackground =
-          name === 'custom background' ? [18, 52, 86] : [51, 51, 51];
         const background =
           side === pair.base ? [255, 255, 255] : candidateBackground;
         expect(Array.from(png.image.rgba.slice(0, 4))).toEqual([
           ...background,
           255,
         ]);
-        const color =
-          side === pair.base ? 'white' : `rgb(${background.join(', ')})`;
+        if (name === 'translucent background') {
+          const interior = (png.image.width * 8 + 8) * 4;
+          expect(
+            Array.from(png.image.rgba.slice(interior, interior + 4)),
+          ).toEqual([...background, 255]);
+        }
+
         expect(
           await readFile(path.join(directory, side.svg.path), 'utf8'),
-        ).toContain(`background-color: ${color}`);
+        ).toContain(`background-color: rgb(${background.join(', ')})`);
       }
 
       expect(pair.base.conditions.configurationHash).not.toBe(
