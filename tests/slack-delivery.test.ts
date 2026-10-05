@@ -2,11 +2,11 @@ import { Effect } from 'effect';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   readSlackState,
-  slackAction,
   slackMessage,
   uploadSlackImage,
   writeSlackState,
 } from '../scripts/slack-delivery';
+import { chatAction } from '../scripts/chat-delivery';
 import { slackSkipReason } from '../scripts/github-action';
 import { compareCaptures, inspectSide } from '../src/comparison';
 
@@ -43,14 +43,14 @@ test('Slack notifies when a pull request starts failing or recovers, and edits q
   const passes = { failing: false, passed: true };
   const neutral = { failing: false, passed: false };
 
-  expect(slackAction(null, 'C1', fails)).toBe('post');
-  expect(slackAction(null, 'C1', passes)).toBe('none');
-  expect(slackAction(failing, 'C1', fails)).toBe('update');
-  expect(slackAction(failing, 'C1', passes)).toBe('recover');
-  expect(slackAction(failing, 'C1', neutral)).toBe('update');
-  expect(slackAction(passing, 'C1', passes)).toBe('update');
-  expect(slackAction(passing, 'C1', fails)).toBe('post');
-  expect(slackAction(failing, 'C2', fails)).toBe('post');
+  expect(chatAction(null, 'C1', fails)).toBe('post');
+  expect(chatAction(null, 'C1', passes)).toBe('none');
+  expect(chatAction(failing, 'C1', fails)).toBe('update');
+  expect(chatAction(failing, 'C1', passes)).toBe('recover');
+  expect(chatAction(failing, 'C1', neutral)).toBe('update');
+  expect(chatAction(passing, 'C1', passes)).toBe('update');
+  expect(chatAction(passing, 'C1', fails)).toBe('post');
+  expect(chatAction(failing, 'C2', fails)).toBe('post');
 });
 
 test('an unavailable or unreadable result never gets a passing icon in Slack', async () => {

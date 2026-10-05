@@ -272,12 +272,12 @@ branch ruleset.
 
 [docs/GITHUB.md](docs/GITHUB.md) covers the action's inputs, pinning and
 upgrades, secrets, forks and Dependabot, the report and artifacts, signing
-comments with your own GitHub App, Slack, and turning it off.
+comments with your own GitHub App, Slack and Discord, and turning it off.
 
 ## The planned complete flow
 
 This is the intended final state. Browser capture, comparison, named checks,
-API operations, the report, GitHub and Slack delivery, and test import exist
+API operations, the report, GitHub, Slack and Discord delivery, and test import exist
 today.
 
 Not built yet: coverage of the files a change touched, protecting
@@ -297,7 +297,7 @@ flowchart TD
     I["Import existing test artifacts"] --> E
     E --> C["Compare behavior and named expectations"]
     C --> V["Interactive report with evidence and suggestions"]
-    V --> D["Local viewer, GitHub and Slack"]
+    V --> D["Local viewer, GitHub, Slack and Discord"]
     V --> Q{"Check outcome?"}
     Q -->|Passed or expected change| N["Keep the scoped result"]
     Q -->|Unknown or blocked| U["Report limits; request a decision if needed"]
@@ -329,4 +329,4 @@ observes and verifies itself.
 
 ## Project documents
 
-[Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Configuration](docs/CONFIGURATION.md) · [GitHub and Slack](docs/GITHUB.md) · [Design](DESIGN.md) · [Changelog](CHANGELOG.md)
+[Product](docs/PRODUCT.md) · [Architecture](docs/ARCHITECTURE.md) · [Roadmap](docs/ROADMAP.md) · [Configuration](docs/CONFIGURATION.md) · [GitHub, Slack and Discord](docs/GITHUB.md) · [Design](DESIGN.md) · [Changelog](CHANGELOG.md)

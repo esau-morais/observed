@@ -29,7 +29,7 @@ inputs:
     description: Token that titles this job's check with the result, posts the pull request comment, and stores the screenshot crops the comment shows. The workflow needs checks write and pull-requests write permissions, and contents write for the crops.
     default: ${{ github.token }}
   comment:
-    description: always posts or updates one comment on the pull request. off posts none; the job's check and summary still carry the result, and Slack, which keeps its message ID in the comment, posts a new message for each failing run.
+    description: always posts or updates one comment on the pull request. off posts none; the job's check and summary still carry the result, and Slack and Discord, which keep their message IDs in the comment, post a new message for each failing run.
     default: always
   image-upload-token:
     description: 'Optional fallback. A personal access token or OAuth token of a user with write access to the repository. When github-token cannot store the screenshot crops, they are uploaded as this user so the comment still shows them; nothing is uploaded when no comment is posted or for a pull request from a fork. GitHub refuses this upload for github-token and GitHub App installation tokens. Pass it from a repository secret.'
@@ -48,6 +48,15 @@ inputs:
     default: ''
   slack-images:
     description: 'true posts the screenshot crops, before, after and changed pixels around the largest changed region, in the thread of a failing Slack message. The image shows page content, including text. Needs the files:write scope; without it the message is posted without the image.'
+    default: 'false'
+  discord-bot-token:
+    description: Token of a Discord bot that can send messages in discord-channel. With discord-channel, failing results are posted to Discord. Pass it from a repository secret.
+    default: ''
+  discord-channel:
+    description: ID of the Discord text channel to post to, such as 1553218437617033238. Add the bot to the server first.
+    default: ''
+  discord-images:
+    description: 'true attaches the screenshot crops, before, after and changed pixels around the largest changed region, to the Discord message. The image shows page content, including text. Needs the Attach Files permission; without it the message is posted without the image.'
     default: 'false'
   job-outcome:
     description: Deprecated and ignored. The job's own check carries the result, so the job fails whenever the result fails or is unavailable.
@@ -202,7 +211,7 @@ runs:
         permission-pull-requests: write
 
     # A delivery problem is reported here and never changes the job's result.
-    - name: Post the result to the pull request and Slack
+    - name: Post the result to the pull request, Slack and Discord
       id: deliver
       if: ${{ !cancelled() && steps.observe.outputs.bundle != '' }}
       continue-on-error: true
@@ -225,6 +234,9 @@ runs:
         OBSERVED_SLACK_BOT_TOKEN: ${{ inputs.slack-bot-token }}
         OBSERVED_SLACK_CHANNEL: ${{ inputs.slack-channel }}
         OBSERVED_SLACK_IMAGES: ${{ inputs.slack-images }}
+        OBSERVED_DISCORD_BOT_TOKEN: ${{ inputs.discord-bot-token }}
+        OBSERVED_DISCORD_CHANNEL: ${{ inputs.discord-channel }}
+        OBSERVED_DISCORD_IMAGES: ${{ inputs.discord-images }}
         OBSERVED_COMMENT: ${{ inputs.comment }}
         OBSERVED_CROPS_PATH: ${{ steps.crops.outputs.path }}
         OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}

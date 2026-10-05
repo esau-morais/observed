@@ -23,7 +23,8 @@ the saved journey read "No regression". A duplicate request shipped with its
 expectation raised from 1 to 2 also read "No regression".
 
 Line delivery and posting modes, the two unshipped parts of the 2026-09-27
-delivery refresh, follow the MVP gates. Working code does not establish that
+delivery refresh, follow the MVP gates, and so do
+[more delivery platforms](#delivery-platforms). Working code does not establish that
 people find Observed useful, so the pilot stays a separate step.
 
 ### Phase 3a order
@@ -69,6 +70,27 @@ The probes behind the status column are kept in the maintainer's checkout
 under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The gate
 corpus replaces them with pairs anyone can run.
 
+## Delivery platforms
+
+The maintainer asked on 2026-10-05 for GitLab, Azure DevOps and Discord
+delivery next to GitHub and Slack. Each is a delivery adapter as
+[ARCHITECTURE.md](ARCHITECTURE.md#delivery-adapters) defines it, with the
+platform limits recorded there. No MVP gate needs a new platform.
+
+1. Discord, built now. It needs no gate work and reuses the Slack rules.
+2. GitLab merge requests, after gates 1 to 8 hold. A CI/CD component runs the
+   CLI on `merge_request_event` and posts one note, with a project access
+   token from a masked CI/CD variable. The job's own result is the status.
+   Images go through the uploads API.
+3. Azure DevOps pull requests, after GitLab. A pipeline template runs under the
+   Build validation policy and posts one thread and a pull request status
+   with `System.AccessToken`.
+
+Before either host adapter, the GitHub delivery code moves behind one host
+interface, and the pull request comment is rendered without GitHub-specific
+paths. Each host gets a trial repository and a real run before its first
+release, like `observed-trial-express` for GitHub.
+
 ## Decisions
 
 | Date | Decision | Basis |
@@ -97,9 +119,12 @@ corpus replaces them with pairs anyone can run.
 | 2026-10-03 | The viewer lays out the map with its own layered layout instead of elkjs, one directory level at a time | elkjs was 443 KB of the 587 KB gzipped viewer. Neither ELK nor dagre caps a row's width, and a level of Observed's own `src` held 42 blocks, about three screens wide. The map opens fitted to the width and adds zoom and pan from there |
 | 2026-10-03 | Replay records the session that produced the checked evidence, when ffmpeg is installed. Without ffmpeg the replay is unavailable and nothing else changes. A journey with a timing check records its coverage session, labeled as a separate run | Recording can change timing |
 | 2026-10-03 | A check that one side lacks reads "not run" on a complete capture and "unknown" on a capture that did not complete. The viewer's "not configured" label is gone | "Not configured" was outside the documented check values. Missing evidence is unknown, never anything else |
+| 2026-10-05 | Discord delivery posts as a bot with a channel ID, like Slack, not through a channel webhook | A webhook cannot reply to a message, so a recovery could not point at the failure it ends. See [Discord's webhook reference](https://docs.discord.com/developers/resources/webhook) |
+| 2026-10-05 | Discord attaches the screenshot crops to the message, and each edit replaces them | Discord keeps only the attachments an edit lists, so an edit never shows an earlier run's image beside the current verdict |
+| 2026-10-05 | GitLab, then Azure DevOps, follow the MVP gates. The GitHub code moves behind a host interface when GitLab starts | No gate needs them. GitLab needs a paid tier for project access tokens on GitLab.com, and Azure's attachment visibility is undocumented, so both need a trial before a design is final |
 
-The maintainer delegated the 2026-09-29 rows and every 2026-10-03 row after
-the first. Reverse any of them here. Two things stay with the maintainer. One
+The maintainer delegated the 2026-09-29 rows, every 2026-10-03 row after
+the first, and the 2026-10-05 rows. Reverse any of them here. Two things stay with the maintainer. One
 is recruiting the people for gates 9 and 10. The other is whether a required
 Observed job gets a bypass rule.
 

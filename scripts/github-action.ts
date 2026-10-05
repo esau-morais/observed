@@ -41,13 +41,19 @@ import { sha256 } from '../src/encoding';
 import {
   callSlack,
   readSlackState,
-  slackAction,
   slackMessage,
   slackRecovery,
   SlackError,
   uploadSlackImage,
   writeSlackState,
 } from './slack-delivery';
+import { chatAction } from './chat-delivery';
+import {
+  deliverDiscord,
+  discordSkipReason,
+  readDiscordState,
+  writeDiscordState,
+} from './discord-delivery';
 import { describeRevision, shortSource } from '../src/provenance-text';
 import { visualChange } from '../src/visual-text';
 import {
@@ -1944,6 +1950,12 @@ if (import.meta.main) {
           'Slack: each failing run posts a new message, because the comment that remembers the earlier one is off',
         );
       }
+
+      if (environment('OBSERVED_DISCORD_BOT_TOKEN') !== '') {
+        notes.push(
+          'Discord: each failing run posts a new message, because the comment that remembers the earlier one is off',
+        );
+      }
     }
 
     if (signer.kind === 'workflow' && signer.problem !== null) {
@@ -2079,6 +2091,19 @@ if (import.meta.main) {
         })()
       : null;
     const existing = lookup?.kind === 'found' ? lookup.comment : null;
+    const chatLinks = {
+      name,
+      pullRequest:
+        pullRequest === null || repository === null
+          ? null
+          : `${repository}/pull/${String(pullRequest)}`,
+      pullRequestLabel:
+        pullRequest === null
+          ? workflow.repository
+          : `${workflow.repository}#${String(pullRequest)}`,
+      report: Schema.is(httpsUrlSchema)(page) ? page : null,
+      run: runUrl,
+    };
     let slackState = readSlackState(existing?.body ?? null);
     const slackToken = environment('OBSERVED_SLACK_BOT_TOKEN');
     const slackChannel = environment('OBSERVED_SLACK_CHANNEL');
@@ -2100,23 +2125,11 @@ if (import.meta.main) {
       const isFailing = failing(summary.kind);
       const trusted =
         summary.trusted && Option.isSome(decoded) ? decoded.value : null;
-      const action = slackAction(slackState, slackChannel, {
+      const action = chatAction(slackState, slackChannel, {
         failing: isFailing,
         passed: trusted?.result.conclusion.kind === 'no-regression',
       });
-      const message = slackMessage(trusted?.result ?? null, {
-        name,
-        pullRequest:
-          pullRequest === null || repository === null
-            ? null
-            : `${repository}/pull/${String(pullRequest)}`,
-        pullRequestLabel:
-          pullRequest === null
-            ? workflow.repository
-            : `${workflow.repository}#${String(pullRequest)}`,
-        report: Schema.is(httpsUrlSchema)(page) ? page : null,
-        run: runUrl,
-      });
+      const message = slackMessage(trusted?.result ?? null, chatLinks);
       const post = () =>
         callSlack('chat.postMessage', slackToken, {
           channel: slackChannel,
@@ -2197,6 +2210,50 @@ if (import.meta.main) {
       }
     }
 
+    let discordState = readDiscordState(existing?.body ?? null);
+    const discordToken = environment('OBSERVED_DISCORD_BOT_TOKEN');
+    const discordChannel = environment('OBSERVED_DISCORD_CHANNEL');
+    const discordSkip = discordSkipReason({
+      token: discordToken,
+      channel: discordChannel,
+      pullRequest,
+      lookupFailed: lookup?.kind === 'failed',
+    });
+
+    if (discordSkip !== null) {
+      process.stdout.write(
+        `::warning title=Observed::${escapeCommand(`${discordSkip}.`)}\n`,
+      );
+      notes.push(discordSkip);
+    } else if (discordToken !== '') {
+      const trusted =
+        summary.trusted && Option.isSome(decoded) ? decoded.value : null;
+      const delivered = await deliverDiscord({
+        token: discordToken,
+        channel: discordChannel,
+        previous: discordState,
+        result: trusted?.result ?? null,
+        failing: failing(summary.kind),
+        links: chatLinks,
+        crops:
+          trusted !== null && environment('OBSERVED_DISCORD_IMAGES') === 'true'
+            ? () => screenshotCrops(trusted)
+            : null,
+      });
+
+      discordState = delivered.state;
+
+      for (const note of delivered.notes) {
+        if (note.level === 'warning') {
+          process.stdout.write(
+            `::warning title=Observed::${escapeCommand(note.text)}\n`,
+          );
+        }
+
+        notes.push(note.text);
+      }
+    }
+
     const items: DeliveryItem[] = [];
 
     if (commenting) {
@@ -2217,6 +2274,9 @@ if (import.meta.main) {
                     ...(slackState === null
                       ? []
                       : [writeSlackState(slackState)]),
+                    ...(discordState === null
+                      ? []
+                      : [writeDiscordState(discordState)]),
                     summary.markdown,
                   ].join('\n'),
                 ),

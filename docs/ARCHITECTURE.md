@@ -22,7 +22,7 @@ flowchart TD
     E --> K["Optional named checks"]
     K --> V
     V --> R["Portable export"]
-    V --> D["GitHub or Slack delivery"]
+    V --> D["Delivery adapters"]
 ```
 
 The coordinator starts and stops owned processes and records each run. Adapters
@@ -236,7 +236,42 @@ Evaluate [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools
 
 Later backend adapters import concrete operation results: response contracts, database readbacks against disposable fixtures, and job events. Preserve [OpenTelemetry trace IDs](https://opentelemetry.io/docs/concepts/signals/traces/) and link to existing storage instead of collecting all production telemetry.
 
-GitHub and Slack adapters consume one normalized result. Bind remote actions to repository, authenticated user, permitted action, and current revision. Recheck authorization at execution. A casual reply is not permission to merge or modify production data. Acknowledge long jobs before running them and retain their job identity.
+### Delivery adapters
+
+A delivery adapter posts one run's `result.json` to one place: a code host
+such as GitHub, or a chat such as Slack or Discord. Every adapter renders the
+same result and never recalculates it. The verdict, the check count, the
+change scope and the anchors come from the result. The headline and count
+wording are shared (`src/result-text.ts`, `scripts/chat-delivery.ts`), and so
+is the chat rule of posting when a pull request starts failing, editing
+afterwards and replying on recovery. An adapter owns its transport, escaping,
+length limits and the identity of the message it edits. Chat adapters keep
+that identity in a hidden marker in the pull request comment.
+
+A code-host adapter needs five things from its platform: a job that runs on
+the pull request with the base and head commits, one comment it can find and
+edit, a status that carries the verdict, a place to store the screenshot crops
+so the comment can show them, and a write token that untrusted code never
+reads. [t3code](https://github.com/pingdotgg/t3code) splits hosts the same
+way. One provider interface per host is chosen from the remote URL, and any
+host can leave out optional capabilities. The GitHub code moves behind such an
+interface when a second host lands, not before.
+
+| Platform | Limit that shapes the adapter | Source, checked 2026-10-05 |
+| --- | --- | --- |
+| GitLab 19.5 | `CI_JOB_TOKEN` can read but not write merge request notes and commit statuses, so the comment needs a project access token. On GitLab.com those need Premium or Ultimate | [Job token](https://docs.gitlab.com/ci/jobs/ci_job_token/), [project access tokens](https://docs.gitlab.com/user/project/settings/project_access_tokens/) |
+| GitLab 19.5 | A fork's merge request pipeline runs in the fork without the parent's variables. Running it in the parent exposes every variable to the fork's code | [Merge request pipelines](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/) |
+| GitLab 19.5 | Uploads return Markdown and anyone with the URL can view them, unless a maintainer requires authentication for media | [Uploads API](https://docs.gitlab.com/api/project_markdown_uploads/), [user file uploads](https://docs.gitlab.com/security/user_file_uploads/) |
+| GitLab 19.5 | One note per merge request through the notes API, up to 1,000,000 characters. A failing job is the status; external status checks need Ultimate | [Notes API](https://docs.gitlab.com/api/notes/), [status checks](https://docs.gitlab.com/user/project/merge_requests/status_checks/) |
+| Azure DevOps | Azure Repos runs pull request builds through the Build validation branch policy, not YAML `pr:` triggers. The build checks out the merge commit | [Azure Repos Git](https://learn.microsoft.com/en-us/azure/devops/pipelines/repos/azure-repos-git?view=azure-devops) |
+| Azure DevOps | `System.AccessToken` must be mapped into the step's environment, and the build service identity needs Contribute to pull requests | [Access tokens](https://learn.microsoft.com/en-us/azure/devops/pipelines/process/access-tokens?view=azure-devops) |
+| Azure DevOps | One thread found by its `properties`, edited through the comments API. A pull request status carries the verdict | [Threads](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create?view=azure-devops-rest-7.1), [statuses](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-statuses/create?view=azure-devops-rest-7.1) (REST 7.1) |
+| Azure DevOps | Pull request attachments need the `vso.code` scope to read. The docs do not say whether a reader who is not signed in sees the image | [Attachments](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-attachments/create?view=azure-devops-rest-7.1) |
+| Azure DevOps | Builds of forks get no secrets and a restricted token by default. Organizations created since September 2023 also need a comment to start them | [GitHub repositories](https://learn.microsoft.com/en-us/azure/devops/pipelines/repos/github?view=azure-devops) |
+| Discord | A webhook can edit its own messages but cannot reply, so Observed posts as a bot. An edit lists every attachment to keep. Mentions stay off only when each request sends `allowed_mentions` | [Webhooks](https://docs.discord.com/developers/resources/webhook), [messages](https://docs.discord.com/developers/resources/message) |
+| Discord | A 429 answer gives `retry_after` in seconds. Observed waits once for up to 10 seconds, then reports the limit | [Rate limits](https://docs.discord.com/developers/topics/rate-limits) |
+
+Delivery adapters bind remote actions to repository, authenticated user, permitted action, and current revision. Recheck authorization at execution. A casual reply is not permission to merge or modify production data. Acknowledge long jobs before running them and retain their job identity.
 
 On GitHub, delivery uses the job's own token, scoped by the workflow's `permissions:` and valid only while the job runs. Capture needs no write token, and the capture step's environment gets no GitHub token. Delivery writes only the job's own check run and one comment. An optional user App token is minted after capture and only signs the comment, since only the App that created a check run can update it. Exchanging an Actions OIDC token for an App token needs a hosted service, so any such exchange stays outside core and optional.
 
