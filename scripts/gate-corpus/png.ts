@@ -21,8 +21,9 @@ function paeth(left: number, up: number, corner: number) {
   return toUp <= toCorner ? up : corner;
 }
 
-// Decodes only the non-interlaced 8-bit RGB and RGBA PNGs the capture writes,
-// following https://www.w3.org/TR/png-3/ (IHDR, IDAT, filter types 0 to 4).
+// Decodes only the non-interlaced 8-bit RGB PNGs the capture writes, following
+// https://www.w3.org/TR/png-3/ (IHDR, IDAT, filter types 0 to 4), checked
+// 2026-10-05.
 // It stays separate from the comparator's decoder so the corpus can check it.
 export function decodePng(bytes: Uint8Array): Pixels {
   const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -61,7 +62,7 @@ export function decodePng(bytes: Uint8Array): Pixels {
 
   const width = header.readUInt32BE(0);
   const height = header.readUInt32BE(4);
-  const channels = { 2: 3, 6: 4 }[header[9] ?? -1];
+  const channels = header[9] === 2 ? 3 : undefined;
   if (
     width === 0 ||
     height === 0 ||

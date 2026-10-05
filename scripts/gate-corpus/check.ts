@@ -351,15 +351,15 @@ async function read(root: string, reading: Reading) {
     const visual = Schema.decodeUnknownSync(
       Schema.Struct({
         kind: Schema.Literal('changed'),
-        width: Schema.Number,
-        height: Schema.Number,
-        differingPixels: Schema.Number,
+        width: positive,
+        height: positive,
+        differingPixels: natural,
         regions: Schema.NonEmptyArray(
           Schema.Struct({
-            x: Schema.Number,
-            y: Schema.Number,
-            width: Schema.Number,
-            height: Schema.Number,
+            x: natural,
+            y: natural,
+            width: positive,
+            height: positive,
           }),
         ),
       }),

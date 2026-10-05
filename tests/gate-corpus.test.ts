@@ -817,6 +817,7 @@ test('corpus PNG decoder rejects inputs it cannot read exactly', async () => {
     bytes.subarray(0, bytes.length - 20),
     header(8, 16),
     header(9, 3),
+    header(9, 6),
     header(12, 1),
   ]) {
     expect(() => decodePng(invalid)).toThrow();
@@ -896,6 +897,11 @@ test('intentional copy expectations inspect raw screenshots independently', asyn
       'region',
       undefined,
       { ...visual, regions: [{ x: 3, y: 10, width: 7, height: 1 }] },
+    ],
+    [
+      'empty region',
+      undefined,
+      { ...visual, regions: [{ x: 5, y: 6, width: 0, height: 0 }] },
     ],
     ['identical kind', undefined, { kind: 'identical', width, height: 20 }],
     ['unavailable', undefined, { kind: 'unavailable', reason: 'No image' }],
