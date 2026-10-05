@@ -277,13 +277,13 @@ comments with your own GitHub App, Slack and Discord, and turning it off.
 ## The planned complete flow
 
 This is the intended final state. Browser capture, comparison, named checks,
-API operations, the report, GitHub, Slack and Discord delivery, and test import exist
-today.
+API operations, the change scope and its map, protected expectations,
+generated journeys run locally, the report and its scene, GitHub, Slack and
+Discord delivery, and test import exist today.
 
-Not built yet: coverage of the files a change touched, protecting
-expectations from the change that edits them, generated journeys, repair,
-requested reruns, model routing, and database, job, trace and formal
-adapters.
+Not built yet: the repository map, agent descriptions, replay, rendered
+diagrams for docs changes, generated journeys in CI, repair, requested reruns,
+model routing, and database, job, trace and formal adapters.
 
 ```mermaid
 flowchart TD

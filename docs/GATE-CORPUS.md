@@ -41,7 +41,7 @@ locally through `bun run gates`; CI execution of the full corpus is pending.
 | --- | --- | --- | --- |
 | 1 | `correct-change` | Exit 0, passing checks, HAR count 1 on each side, exercised `app.ts` | Check changed-line mapping against raw coverage |
 | 2 | `request-fault`, `text-fault` | Exit 2, regression, exact HAR counts or raw element text on both sides | Accessibility, browser errors, performance, React, API operations, imported Playwright; observation-only kinds need separate expectations |
-| 3 | Reserved for the generated-journeys slice | No readings yet | Add one error pair and one wrong-data pair; no pass claimed here |
+| 3 | None yet. Generated journeys shipped in #91, and trial PRs [#17](https://github.com/esau-morais/observed-trial-express/pull/17) and [#18](https://github.com/esau-morais/observed-trial-express/pull/18) were captured by hand outside the runner | No readings yet | Add the error pair and the wrong-data pair to the runner; no pass claimed here |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window` | Exit 1, unavailable conclusion, unknown base evidence, exact failure reasons, candidate HAR | Unknown collector kind; stale revision identity; a real base startup failure. The current failed-base pair changes capture metadata. The stale pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text, removed-journey pair, and a pair that changes `source`, `setup` or `start` |
 | 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
@@ -49,7 +49,7 @@ locally through `bun run gates`; CI execution of the full corpus is pending.
 | 8 | Checker corruption tests only | Forged verdicts, wrong values, wrong exit, missing/malformed raw output, escaping symlink | Seed faults into disposable copies of the comparator and collector |
 
 A green corpus summary does not mean every release gate holds. The table names
-the parts these pairs do not cover. Gate 3 follows the generated-journeys slice.
+the parts these pairs do not cover. Gate 3 needs its two pairs in the runner.
 Gates 9 and 10 need people and have no automated pass.
 
 The trial repository has the request pair at

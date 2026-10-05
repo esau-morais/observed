@@ -331,6 +331,42 @@ Runtime dependencies stay limited to agent-browser, so neither tool ships in the
 
 Narration is not built. Kit Langton makes the explainers with [psychopomp](https://github.com/kitlangton/psychopomp). At 46fd612, read 2026-10-05, its default walkthrough narration uses Fish Audio, and a study in `scenes/pr-walkthrough/narration-v4/README.md` used an ElevenLabs Professional Voice Clone named `Kit Langton`, directed with bracketed cues. Neither file says which voice the published post used, and the post's replies could not be read. Observed would use only a stock voice or one the user supplies, never a clone of someone else. A narration track stays optional, and the scene stays complete with captions alone. The default script would be the captions' evidence sentences; a script an agent writes is interpretation and carries that label. Stock voices with whisper-to-shout control exist in [ElevenLabs v3 audio tags](https://elevenlabs.io/docs/best-practices/prompting/eleven-v3) and [Azure SSML speaking styles](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-synthesis-markup-voice). [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) runs offline under Apache-2.0, without that control.
 
+### Rendered diagrams
+
+Planned, after the gate 3 and gate 8 pairs land. When a comparison's changed
+files include Markdown whose `mermaid` fenced blocks differ, Observed reads
+each file from the base and candidate commits with Git, pairs the blocks by
+the nearest heading and their order under it, and renders each changed pair
+in agent-browser's Chrome. The page loads a pinned `mermaid` build bundled into
+`dist/` like the viewer, so the package gains no runtime dependency. The result
+records each pair as an observation with both commits, the file path, the
+mermaid version as the producer version, and an SVG and PNG for each side that has the block. A block
+that does not parse renders as unavailable on that side, with mermaid's error.
+A block with no partner was added or removed: the result renders the side that
+has it and marks the other side absent, which is not an error.
+
+Diagrams render whether or not the file is in `source.paths`, since docs
+usually sit outside it. They never enter the change scope, a check, or the
+verdict. The comment shows each pair under the scope line, labeled
+"Observation", and a pull request whose diagrams did not change shows nothing
+for them.
+
+Prior art read on 2026-10-05. GitHub renders `mermaid` blocks in Markdown
+([creating diagrams](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams))
+and highlights prose changes in its rendered diff, without saying whether that
+diff renders diagrams
+([non-code files](https://docs.github.com/en/repositories/working-with-files/using-files/working-with-non-code-files)).
+[Read the Docs visual diff](https://docs.readthedocs.com/platform/stable/visual-diff.html)
+highlights changed sections without gating, on its hosted service.
+[CodeBoarding](https://github.com/CodeBoarding/CodeBoarding-action) posts a
+before-and-after architecture diagram but needs a model.
+[mermaid-cli](https://github.com/mermaid-js/mermaid-cli) renders through an
+existing Chrome given its path, which is the approach here. A renderer without
+a browser, such as
+[beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid), lays the
+graph out differently from GitHub, so its picture would not match what
+reviewers see.
+
 The planned `/observed` trigger runs only for a comment from a user with write access on a pull request from the same repository. Untrusted pull request code must never run where the GitHub App key or Slack token can be read. If one workflow cannot guarantee that, split it: an unprivileged capture uploads the result, and a privileged delivery started by `workflow_run` reads only that upload. Never use `pull_request_target`. If neither design is safe, fall back to a label trigger on `pull_request`.
 
 ## Code, skills, and AI

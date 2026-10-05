@@ -10,15 +10,70 @@ Observed shows the result of a code change in the running application, alone
 or beside an earlier version. Each result traces one path: code change →
 runtime behavior → evidence.
 
-Observed is a proof-check, not a review bot. Measurements and named checks set
-the verdict. A suggested cause or fix is labeled as interpretation and never
-changes a verdict or a count. Observed does not walk through the diff or guess
-severity.
+Observed is not a review bot. It does not walk through the diff or guess
+severity. It proves a few named things and shows the rest, and every surface
+keeps the two apart.
 
 The person's own coding agent prepares the configuration, runs captures, and
 covers what a change touched. The person opens the result and decides only
 what is uncertain, risky, or needs permission. Test whether this saves people
 work before adding more features.
+
+## Proving and showing
+
+A proof is a named check. It judges evidence from a separate run of each
+revision against the expectation the base revision holds, except for the
+added and imported checks that [altered checks](#altered-checks) lists. Only
+named checks set a pass, a failure, a regression and the check counts.
+Whether a capture completed and its evidence can be compared sets
+"unavailable". Together they set the run conclusion, the exit code and the
+job's check. A proof covers its expectation on the path the journey
+exercised. The change scope says which changed files that path reached.
+
+An observation is everything else that Observed captures or renders:
+screenshots and their difference, the change map and repository map, the
+scene and its GIF, replay, and rendered diagrams. It shows what a revision
+rendered or did under recorded conditions. It never sets a verdict, a count or
+an exit code, and it never reads as a pass or a failure. A changed observation
+is not a regression, and an unchanged one is not a pass.
+
+Interpretation is a third kind: agent descriptions, suggested causes, and the
+agent handoff. It appears in the inference color with its label and changes
+nothing above.
+
+| Surface | May claim | May not claim |
+| --- | --- | --- |
+| Job check and exit code | The run conclusion from named checks and capture availability | Anything from an observation |
+| Headline and count line, in the comment, report and chat | Names of failed or unknown checks, their counts, the change scope line | That the change is correct, complete or safe to merge |
+| Images in the comment and chat: crops, scene GIF, diagrams | What each revision rendered, labeled as an observation | A pass or a failure. The scene shows red only for a failed check or a recorded browser error, as DESIGN.md says |
+| Report and viewer | Both, in separate sections | That an observation is a check |
+| Change map and repository map | Each file's relation with its basis, in the relation colors | That an exercised file works |
+| Self-observation | That Observed's viewer renders its saved journeys | That Observed's comparator, collectors or delivery are correct |
+| Agent descriptions and handoff | Interpretation, labeled | A measurement or a verdict |
+
+An observation that is identical on every pull request tells the reader
+nothing. A surface that would show one says that nothing changed instead.
+
+### Changes that do not run
+
+A file outside `source.paths` is in neither snapshot, so no journey runs it.
+Docs usually sit there. Observed proves nothing about such a change. When no
+captured file changed, gate 7 holds: the result says so and claims nothing
+about the change. Docs inside `source.paths`, such as the pages of a
+documentation site, are part of the application, and the journeys cover them
+like any other file. Either way, Observed can show the change:
+
+| Change | What the result shows |
+| --- | --- |
+| A Markdown file whose `mermaid` block changed | Planned. Each changed diagram rendered from base and candidate, side by side, labeled as an observation. A diagram that does not render shows its error on that side |
+| Other Markdown | The file and a link to the code host's rendered diff. Observed does not render prose again |
+| `observed.json` | The [altered checks](#altered-checks) rules, which are proof |
+| Configuration inside `source.paths` | Covered by the journeys that build and run it. No collector reads it, so its relation is "not observed" with that reason |
+| Configuration outside `source.paths` | The file in the outside count. No claim |
+
+A rendered diagram uses the capture browser and needs no model or service.
+Link checks and prose linters belong to the project's own CI. Observed does
+not run them.
 
 ## First release
 
@@ -52,7 +107,9 @@ Connecting another application requires no edits to Observed.
 | React, optional | Relevant subtree, render changes, source references | Instrumentation does not reveal all data flow |
 | API operations | Status, schema match, readback | Only the specified operation and controlled data |
 | Imported tests | Each Playwright test as a check | Observed did not run the assertions |
-| Phase 3a: replay | Base and candidate recordings side by side, with step captions from the action timeline | One recorded run. Not timing evidence |
+| Scene | Base and candidate drawn from recorded steps, requests, errors and the deciding check, also exported as a GIF for a failed check | Restates recorded values. An observation, except the check it shows |
+| Planned: replay | Base and candidate recordings side by side, with step captions from the action timeline | One recorded run. Not timing evidence |
+| Planned: rendered diagrams | A changed `mermaid` block rendered from base and candidate | Shows the drawing. Says nothing about the system it draws |
 | Later: database, jobs, traces | Fixture readback, event sequence, linked spans | Schedules and traces do not prove causation |
 | Later: formal checks | Property, checker result, assumptions, implementation connection | A proved model is not proof of the application |
 

@@ -11,7 +11,7 @@ contracts, and this file owns sequence, status and decisions.
 | 1. See a real project | One command opens a captured page or a version comparison. Two separate applications, one non-React, use the same runner without core edits. Checks distinguish failed expectations from visual changes, and missing requested captures stay visible | Complete |
 | 2. Repeatable use | Executed recipes, isolated runs, one CI trigger, export. Fresh-checkout runs need no recurring setup help, and stale or failed captures never pass | Complete. An agent set up an unfamiliar app from the README. No person has |
 | 3. Extensions | Several checks and journeys, React renders, browser timing, accessibility, browser errors, API operations, Playwright import. The plan was one extension chosen from pilot demand | Shipped in #26 to #33, before any pilot |
-| 3a. MVP | Change scope drawn as a change map and a repository map, protected expectations, generated journeys, agent descriptions, replay, the writing rules, and the independent gate corpus, in the [order below](#phase-3a-order). Every [MVP release gate](#mvp-release-gates) holds | Next. The writing rules are built. Protected expectations are built for journeys and checks; fields outside the journeys are not |
+| 3a. MVP | Change scope drawn as a change map and a repository map, protected expectations, generated journeys, agent descriptions, replay, the writing rules, and the independent gate corpus, in the [order below](#phase-3a-order). Every [MVP release gate](#mvp-release-gates) holds | In progress. Built: change scope, browser coverage, protected expectations for journeys and checks (not fields outside the journeys), the change map, generated journeys run locally, and the writing rules. Not built: the repository map, agent descriptions, replay. Gates 3 and 8 have no runnable pair |
 | 4. Verification harness | `observed loop`, Stop hooks and `observed mcp` around the user's own agent, in the [order below](#phase-4-order). Observed runs the change, judges it by the base's expectations, reruns it and decides when a loop stops. The agent owns the model loop. Each stop condition holds on the gate corpus, and the loop improves on handing the evidence to the user's agent | Starts once gates 1 to 8 hold |
 | Later | Database, jobs, traces, more frameworks, proof adapters, each tied to a recurring workflow | Not started |
 
@@ -36,6 +36,10 @@ people find Observed useful, so the pilot stays a separate step.
 5. Generated journeys
 6. The repository map and agent descriptions
 7. Replay
+
+Items 1 to 5 are built. On 2026-10-05 the order of the remaining work
+became: runnable pairs for every gate an agent can pass, then the gate 9 and
+10 kits, then item 6, then replay. See [what waits](#what-waits).
 
 Gate 7 needs item 1, gate 1 needs items 1 and 2, gate 5 needs item 3, gate 3
 needs items 1, 2 and 5, and gate 10 needs items 1 to 5. Generated journeys
@@ -71,7 +75,7 @@ producer output, without importing the comparator.
 | --- | --- | --- | --- |
 | 1. Correct change | A change inside a saved journey that keeps its expectation | No regression, exit 0, and the scope lists the changed file as checked or exercised | Local `correct-change` pair passes, including exercised scope. Raw coverage cross-check pending |
 | 2. Seeded fault | One fault per shipped evidence kind, inside a saved journey | Regression, values equal to the raw producer output, exit 2 | Local request and text pairs pass against raw output. Other kinds still need pairs |
-| 3. Change outside saved journeys | Two faults in captured source that no saved journey exercises: one that raises an error, one that returns wrong data | Without an agent, the scope lists the file as not observed. With one, a generated journey runs the changed lines. A baseline check reports the error. The wrong data is listed as a difference and sets no verdict | Probe at `ad28490` failed: "No regression". New corpus pair pending |
+| 3. Change outside saved journeys | Two faults in captured source that no saved journey exercises: one that raises an error, one that returns wrong data | Without an agent, the scope lists the file as not observed. With one, a generated journey runs the changed lines. A baseline check reports the error. The wrong data is listed as a difference and sets no verdict | Generated journeys shipped in #91. Trial PRs #17 and #18, captured by hand, gave the required results. The corpus runner has no pair yet |
 | 4. Missing evidence | Failed base capture, deleted artifact, stale revision, older schema, unsupported collector | Unavailable or unknown, never a pass, exit 1 | Five copied-capture probes pass. Unknown collector kind, stale revision identity and a real startup failure still need pairs |
 | 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey, or changes how the app is set up or started | The result names each altered check and judges it by the base's expectation, with the proposed version beside it. A changed journey, `source`, `setup` or `start` makes every check in its scope unknown, with both versions shown | Three local pairs pass: relaxed check, removed check, rewritten journey. Remaining cases in the corpus table |
 | 6. Intentional change | A visual or copy change with passing checks | An observation, not a regression | Local intentional-copy pair passes; result reports visual change with passing checks |
@@ -87,8 +91,30 @@ pull request and decides none of these gates.
 The probes behind the status column are kept in the maintainer's checkout
 under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The
 [gate corpus](GATE-CORPUS.md) adds runnable pairs and lists the remaining checks.
-Local results above come from the clean `65d347e` corpus runs; they do not
-establish all of a gate's requirements.
+Local results above come from corpus runs at `65d347e`, a commit on the
+gate corpus branch before #90 was squashed, so it is on no branch now. They do
+not establish all of a gate's requirements.
+
+## What waits
+
+On 2026-10-05 the maintainer asked whether Observed still knew what it was.
+Work that week had shipped more ways to show evidence, such as the scene, its
+GIF and Discord, while gates 3 and 8 still had no runnable pair. The
+[line between proving and showing](PRODUCT.md#proving-and-showing) now decides
+order: work that lets a gate hold comes before work that shows more.
+
+| Work | State |
+| --- | --- |
+| The remaining work for gates 1 to 8 in [GATE-CORPUS.md](GATE-CORPUS.md#pairs-and-limits): gate 3 and 8 pairs first, then gate 7 wording, gate 4 and 2 pairs, gate 5's removed journey and expectation text, gate 1's raw coverage cross-check, gate 6's screenshot inspection, and the corpus in CI | Next |
+| Self-observation that differs only when the viewer changed | Next. An identical comment on every pull request proves nothing |
+| Rendered diagrams for docs changes | After the gate 3 and 8 pairs. Small and show-only, and it gives gate 7 pull requests something to show |
+| Gate 9 and 10 kits | After rendered diagrams. Gate 10 needs items 1 to 5, all built |
+| Repository map and agent descriptions | After the kits. No gate needs them |
+| Replay | After the repository map, and still in the first release as the maintainer decided on 2026-10-03. The scene already plays the recorded steps, so gate 10 readers can shape what replay adds |
+| More scene and GIF work, narration | Waits for a gate 10 reader to need it |
+| Phase 4 verification harness | Plan only until gates 1 to 8 hold |
+| GitLab, Azure DevOps, posting modes, line delivery | After gates 1 to 8, as already decided |
+| Checks on docs, such as links or prose lint | Not Observed's work. The project's own CI runs them |
 
 ## Delivery platforms
 
@@ -144,6 +170,9 @@ release, like `observed-trial-express` for GitHub.
 | 2026-10-05 | GitLab, then Azure DevOps, follow the MVP gates. The GitHub code moves behind a host interface when GitLab starts | No gate needs them. GitLab needs a paid tier for project access tokens on GitLab.com, and Azure's attachment visibility is undocumented, so both need a trial before a design is final |
 | 2026-10-05 | A comparison journey with recorded steps on both sides opens with a scene drawn from its evidence, after Kit Langton's PR explainers. The viewer has it first; the GIF for the comment and Slack follows | [Karpathy's scale](https://x.com/karpathy/status/2105819303471976479), which the maintainer adopted on 2026-10-03, puts explainer videos above text and diagrams. A scene built from result.json needs no model and claims nothing the evidence does not hold |
 | 2026-10-05 | The scene ships to the comment and Slack as a GIF that agent-browser screenshots frame by frame and `src/gif.ts` encodes. Remotion and HyperFrames stay out | Remotion bills each organization that renders in CI. HyperFrames adds 141 MB, Node 22 and FFmpeg for formats GitHub cannot show inline from a URL. See [scene export](ARCHITECTURE.md#scene-export) |
+| 2026-10-05 | Observed proves with named checks and shows everything else as observations. Only named checks and capture availability set the verdict, counts and exit code. The rule and each surface's limits live in [PRODUCT.md](PRODUCT.md#proving-and-showing), not in a fourth plan file | The maintainer: "it feels like Observed is more like an observation tool and report tool than a proof check". The prove-versus-show line was implied by the writing rules but never stated, so each new view had to argue its own limits |
+| 2026-10-05 | A docs change gets each changed `mermaid` diagram rendered from base and candidate, labeled as an observation, with no model or service. Gate 7 still claims nothing about the change | The maintainer's example: an architecture change shows its diagram before and after. The first research chat, on 2026-09-11, already named it: "visual does not necessarily mean recording, but can be sometimes rendering interactive mermaid diagrams". No tool found on 2026-10-05 does this without a model or a hosted service. See [rendered diagrams](ARCHITECTURE.md#rendered-diagrams) |
+| 2026-10-05 | Work that lets a gate hold comes before work that shows more. Replay moves after the repository map and stays in the first release | The week's first day shipped the scene, its GIF and Discord before gate 3 and 8 pairs. See [what waits](#what-waits) |
 | 2026-10-05 | Narration waits. When built, it is optional, uses a stock or user-supplied voice, never a clone of someone else, and labels an agent-written script as interpretation | A GIF carries no sound, and a video in a comment needs a user's upload. Captions already carry every fact |
 | 2026-10-05 | Observed is a verification harness, not an agent harness. It runs the change, records it, judges it by the base revision's expectations, reruns it and decides when a loop stops. Claude Code, Codex, opencode or another agent owns the prompts, tool calls and edits. This rules out a model loop inside Observed, a model provider call from the loop or the hooks, prompts beyond the deterministic handoff, and any result that rests on the agent's word | The maintainer agreed with the direction on 2026-10-05, pending research, and this row and the three below record that research. Playwright MCP, Chrome DevTools MCP and agent-browser already show agents the running app, and Stop-hook plugins and Aider's `--auto-test` already keep an agent going. Storybook's MCP server runs story tests for the agent to fix and rerun, with the tests in the agent's tree ([Storybook MCP](https://storybook.js.org/docs/ai/mcp/overview)). None of these judges runtime evidence by expectations the agent cannot edit, with a rerun the tool owns. [Harbor](https://docs.harborframework.com/tasks/verifier), from the Terminal-Bench team, and [SWE-bench](https://github.com/SWE-bench/SWE-bench/blob/main/swebench/harness/run_evaluation.py) grade this way, after the agent finishes, on benchmark tasks rather than as a loop around a person's change |
 | 2026-10-05 | The MCP server offers tools only, over stdio, on protocol revisions 2025-11-25 and 2025-06-18, built on Effect's `McpServer`. Resources, prompts and the Tasks extension wait for client support | opencode documents only tools, Codex documents neither resources nor prompts, and the MCP client matrix does not list Tasks. A probe served a tool from the pinned `effect` under Bun. See [ARCHITECTURE.md](ARCHITECTURE.md#mcp-server) |
