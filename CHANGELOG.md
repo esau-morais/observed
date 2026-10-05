@@ -13,22 +13,27 @@ schema version 9; generated journeys add optional fields.
 
 - **A before-and-after scene.** A comparison journey with recorded steps on
   both sides opens with a scene drawn from its evidence, after Kit Langton's
-  PR explainers: the browser, the page, each request route, browser errors
-  and the deciding check, a step clock, the failing check in red, and a
-  closing code frame at the source line the evidence points at. It opens
-  still on the result; Play, Pause, Previous and Next run it, and so do
-  Space and the arrow keys.
-- **The scene in the comment and Slack.** When a check fails, the comment
-  shows the scene as a GIF under the verdict, and `slack-images` posts it in
-  the failing thread. It is stored and pruned with the screenshot crops, so
-  it needs `contents: write` too.
+  PR explainers. It shows the browser, the page, the request routes (extra
+  routes share one box), browser errors and the deciding check, with a step
+  clock and the failing check in red. When the evidence points at a source
+  line, the scene closes on that code. It opens still on the result; Play,
+  Pause, Previous and Next run it, and so do Space and the arrow keys.
+- **The scene in the comment and Slack.** When a check fails and its journey
+  has a scene, the comment shows the scene as a GIF under the verdict. It is
+  stored and pruned with the screenshot crops, so it needs `contents: write`
+  too, and pull requests from forks get none. With `slack-images`, a new
+  failing Slack message gets the GIF in its thread.
 - **Discord delivery.** With a bot token and a channel ID, failing results go
   to Discord the way they go to Slack, with the screenshot crops attached
   when `discord-images` is on.
-- **Generated journeys.** `observed observe --generated <file>` runs up to
-  three journeys an agent proposes for files no saved journey reaches. They
-  run fixed baseline checks for browser errors, serious accessibility
-  violations and server errors, and never change `observed.json`.
+- **Generated journeys.** `observed schema --generated` prints the proposal
+  file format, and `observed observe --base <revision> --generated <file>`
+  runs up to three journeys an agent proposes for files no saved journey
+  reaches. They run fixed baseline checks for browser errors, serious
+  accessibility violations and server errors, and never change
+  `observed.json`. Text read from their `textSelectors` shows as a
+  difference that sets no verdict. When coverage shows the changed lines
+  ran, the report proposes saving the journey.
 
 ## 0.2.0-alpha.5 (2026-10-04)
 
