@@ -382,9 +382,12 @@ A configured agent command can handle model choice and authentication. Add direc
 Observed's own pull requests run two observations. One captures the Request lab
 example with the pull request's build of Observed: one journey and one
 `request-count` check. The other uses the previous release to capture the
-report viewer on three journeys with six checks, rendered from one stored
-fixture. [tests/fixtures/self-observe](../tests/fixtures/self-observe) explains
-how to regenerate it. That job pins the previous release by commit SHA and
+report viewer on three saved journeys with six protected checks and three
+generated journeys with nine baseline checks, rendered from one stored fixture.
+The generated journeys select a file on the map, operate the scene controls,
+and open each evidence section present in the fixture.
+[tests/fixtures/self-observe](../tests/fixtures/self-observe) explains how to
+regenerate it. That job pins the previous release by commit SHA and
 never `./`, so the pull request's code is only ever the observed side. After
 each release, bump the pin.
 

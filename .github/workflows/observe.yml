@@ -64,6 +64,7 @@ jobs:
         if: steps.base.outputs.ready == 'true'
         with:
           project: .
+          generated: tests/fixtures/self-observe/generated.json
           base: ${{ github.event.pull_request.base.sha }}
           timeout: '600000'
           artifact-name: observed-self

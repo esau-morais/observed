@@ -35,6 +35,14 @@ that revision's built viewer and comparison code. Setup fails unless the
 fixture concludes a regression. The export program is inline so the
 candidate's setup also works on a base revision that predates this fix.
 
+`generated.json` adds three journeys through the released action's `generated`
+input: a selected file on the map, the scene controls, and the evidence sections
+this fixture has. They keep `observed.json` and its six protected checks intact.
+Each generated journey gets the three baseline checks for browser errors,
+serious accessibility violations, and server errors. The evidence-section
+journey visits every section and takes its final screenshot at Limits; it does
+not take a separate screenshot of every section.
+
 Regenerate it when a capture or evidence schema change makes it unreadable, or
 when the evidence the self-observe checks read has changed:
 

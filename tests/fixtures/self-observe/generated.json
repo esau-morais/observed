@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "journeys": [
+    {
+      "name": "Inspect the changed file on the map",
+      "path": "/",
+      "ready": [
+        {
+          "kind": "wait-selector",
+          "selector": "#report-title"
+        }
+      ],
+      "steps": [
+        {
+          "kind": "click-role",
+          "role": "button",
+          "name": "Files"
+        },
+        {
+          "kind": "wait-selector",
+          "selector": "[aria-label=\"File tree\"]"
+        },
+        {
+          "kind": "click-role",
+          "role": "button",
+          "name": "Map"
+        },
+        {
+          "kind": "click",
+          "selector": "button[aria-label^=\"file App.tsx,\"]"
+        },
+        {
+          "kind": "wait-selector",
+          "selector": "[aria-label=\"Selection\"]"
+        },
+        {
+          "kind": "network-idle"
+        }
+      ],
+      "targets": ["src/viewer/change-map.tsx"],
+      "reason": "Saved journeys do not select a file in the change map."
+    },
+    {
+      "name": "Step through the before and after scene",
+      "path": "/",
+      "ready": [
+        {
+          "kind": "wait-selector",
+          "selector": "#report-title"
+        }
+      ],
+      "steps": [
+        {
+          "kind": "click",
+          "selector": "[aria-label=\"Previous step\"]"
+        },
+        {
+          "kind": "click",
+          "selector": "[aria-label=\"Next step\"]"
+        },
+        {
+          "kind": "press",
+          "key": "Shift+Tab"
+        },
+        {
+          "kind": "press",
+          "key": "Shift+Tab"
+        },
+        {
+          "kind": "press",
+          "key": "Shift+Tab"
+        },
+        {
+          "kind": "press",
+          "key": "Shift+Tab"
+        },
+        {
+          "kind": "press",
+          "key": "Tab"
+        },
+        {
+          "kind": "press",
+          "key": "ArrowUp"
+        },
+        {
+          "kind": "press",
+          "key": "Shift+Tab"
+        },
+        {
+          "kind": "press",
+          "key": "Home"
+        },
+        {
+          "kind": "press",
+          "key": "End"
+        },
+        {
+          "kind": "network-idle"
+        }
+      ],
+      "targets": ["src/viewer/scene.tsx"],
+      "reason": "Saved journeys do not operate scene controls or frame the full scene."
+    },
+    {
+      "name": "Inspect each recorded evidence view",
+      "path": "/",
+      "ready": [
+        {
+          "kind": "wait-selector",
+          "selector": "#report-title"
+        }
+      ],
+      "steps": [
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#requests\"]"
+        },
+        {
+          "kind": "wait-selector",
+          "selector": "[aria-label=\"Request ledger diff\"]"
+        },
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#checks\"]"
+        },
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#screenshots\"]"
+        },
+        {
+          "kind": "wait-selector",
+          "selector": "#screenshots img"
+        },
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#evidence-accessibility\"]"
+        },
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#evidence-timeline\"]"
+        },
+        {
+          "kind": "wait-selector",
+          "selector": "section[aria-label=\"After steps\"]"
+        },
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#provenance\"]"
+        },
+        {
+          "kind": "click",
+          "selector": ":not(details) > nav[aria-label=\"Report sections\"] a[href=\"#limits\"]"
+        },
+        {
+          "kind": "network-idle"
+        }
+      ],
+      "targets": ["src/viewer/report.tsx", "src/viewer/evidence.tsx"],
+      "reason": "Saved journeys do not open every evidence section present in the fixture."
+    }
+  ]
+}
