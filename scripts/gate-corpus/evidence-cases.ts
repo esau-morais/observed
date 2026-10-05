@@ -66,13 +66,12 @@ export const evidencePairs: readonly Pair[] = [
         ...counts('saved-errors', 'errors.json', ['data', 'errors', 'length']),
         {
           label: 'candidate raw error identity',
-          actual: raw('candidate', 'errors.json', [
-            'data',
-            'errors',
-            0,
-            'text',
-          ]),
-          expected: errorMessage,
+          actual: {
+            kind: 'text',
+            file: 'journey-1/candidate/errors.json',
+            includes: `Error: ${errorMessage}`,
+          },
+          expected: true,
         },
         ...(['base', 'candidate'] as const).map((side) => ({
           label: `${side} no console messages`,

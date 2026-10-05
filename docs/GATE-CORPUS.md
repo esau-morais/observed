@@ -78,6 +78,13 @@ A green corpus summary does not mean every release gate holds. The table names
 the parts these pairs do not cover.
 Gates 9 and 10 need people and have no automated pass.
 
+Gate 2 distinguishes check-capable evidence from observations, following
+[the product contract](PRODUCT.md#proving-and-showing). Request counts, text,
+accessibility, browser errors, performance, React render counts, API operations
+and imported Playwright tests can fail named expectations. Screenshots, timelines
+and coverage cannot create a regression; their changed-output pairs must keep
+passing checks and exit 0. A changed observation alone never passes a check.
+
 At `1bb17d7`, the local gate 7 pair and a fresh run of
 [observed-trial-express#28](https://github.com/esau-morais/observed-trial-express/pull/28)
 pass their data and report wording checks. Trial expectations were committed
