@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { expect, test } from 'vitest';
 import { captureDiagrams } from '../../src/diagrams/capture';
 import { json, sha256 } from '../../src/encoding';
+import { decodePng } from '../../src/png';
 
 test.each([
   {
@@ -15,6 +16,11 @@ test.each([
     theme: '  sequence:\n    theme: dark\n  wrap: true',
     source:
       'sequenceDiagram\nAlice->>Bob: A message that wraps across multiple lines for the reader',
+  },
+  {
+    name: 'custom background',
+    theme: '  theme: dark\n  themeVariables:\n    background: "#123456"',
+    source: 'sequenceDiagram\nAlice->>Bob: Read this message',
   },
   {
     name: 'root flowchart',
@@ -122,6 +128,26 @@ test.each([
         expect(side.conditions.configurationHash).toBe(
           sha256(json(side.conditions.configuration)),
         );
+        const png = decodePng(
+          await readFile(path.join(directory, side.png.path)),
+        );
+        if (png.kind !== 'decoded') {
+          throw new Error('Expected a decoded diagram PNG');
+        }
+
+        const candidateBackground =
+          name === 'custom background' ? [18, 52, 86] : [51, 51, 51];
+        const background =
+          side === pair.base ? [255, 255, 255] : candidateBackground;
+        expect(Array.from(png.image.rgba.slice(0, 4))).toEqual([
+          ...background,
+          255,
+        ]);
+        const color =
+          side === pair.base ? 'white' : `rgb(${background.join(', ')})`;
+        expect(
+          await readFile(path.join(directory, side.svg.path), 'utf8'),
+        ).toContain(`background-color: ${color}`);
       }
 
       expect(pair.base.conditions.configurationHash).not.toBe(

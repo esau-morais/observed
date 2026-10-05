@@ -359,6 +359,8 @@ both identities and verifies the PNG before publishing it. Rendering conditions
 record the browser, platform, viewport, scale, locale, timezone, browser arguments,
 and renderer hash. Each rendered side records its effective Mermaid configuration
 and hash, theme, and computed SVG font family, including frontmatter overrides.
+The SVG and PNG canvas use the effective theme's background color, with white
+as the fallback when no valid color is provided.
 The adapter snapshots configuration as drawing begins, after Mermaid's diagram
 initializer runs and before its rendering scope clears. It temporarily wraps
 the writable renderer slot in the pinned build's diagram registry, restoring
