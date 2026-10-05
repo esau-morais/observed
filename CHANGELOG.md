@@ -4,6 +4,32 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.6 (2026-10-05)
+
+Seventh alpha of 0.2.0, published under the npm dist-tags `alpha` and `latest`.
+The action gains the `discord-bot-token`, `discord-channel` and
+`discord-images` inputs. The `v0` tag stays on 0.1.0. `result.json` stays at
+schema version 9; generated journeys add optional fields.
+
+- **A before-and-after scene.** A comparison journey with recorded steps on
+  both sides opens with a scene drawn from its evidence, after Kit Langton's
+  PR explainers: the browser, the page, each request route, browser errors
+  and the deciding check, a step clock, the failing check in red, and a
+  closing code frame at the source line the evidence points at. It opens
+  still on the result; Play, Pause, Previous and Next run it, and so do
+  Space and the arrow keys.
+- **The scene in the comment and Slack.** When a check fails, the comment
+  shows the scene as a GIF under the verdict, and `slack-images` posts it in
+  the failing thread. It is stored and pruned with the screenshot crops, so
+  it needs `contents: write` too.
+- **Discord delivery.** With a bot token and a channel ID, failing results go
+  to Discord the way they go to Slack, with the screenshot crops attached
+  when `discord-images` is on.
+- **Generated journeys.** `observed observe --generated <file>` runs up to
+  three journeys an agent proposes for files no saved journey reaches. They
+  run fixed baseline checks for browser errors, serious accessibility
+  violations and server errors, and never change `observed.json`.
+
 ## 0.2.0-alpha.5 (2026-10-04)
 
 Sixth alpha of 0.2.0, published under the npm dist-tags `alpha` and `latest`.
