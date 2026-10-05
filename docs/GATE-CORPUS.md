@@ -2,7 +2,8 @@
 
 The corpus runs the public CLI against disposable Git repositories. Each pair
 writes and commits its required result before capture. The checker reads `result.json`,
-HAR entries, agent-browser text output, errors, and raw CDP coverage. It imports no Observed code.
+HAR entries, agent-browser text output, errors, raw CDP coverage, and the saved
+Markdown report. It imports no Observed code.
 
 ## Run
 
@@ -45,12 +46,18 @@ locally through `bun run gates`; CI execution of the full corpus is pending.
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window` | Exit 1, unavailable conclusion, unknown base evidence, exact failure reasons, candidate HAR | Unknown collector kind; stale revision identity; a real base startup failure. The current failed-base pair changes capture metadata. The stale pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text, removed-journey pair, and a pair that changes `source`, `setup` or `start` |
 | 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
-| 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR | Assert rendered wording says no captured file changed |
+| 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR; saved report says no captured file changed, lists README.md, and limits checks to their scopes | Wording assertions cover the Markdown report; other delivery surfaces are not checked by this pair |
 | 8 | Checker corruption tests only | Forged verdicts, wrong values, wrong exit, missing/malformed raw output, escaping symlink | Seed faults into disposable copies of the comparator and collector |
 
 A green corpus summary does not mean every release gate holds. The table names
 the parts these pairs do not cover.
 Gates 9 and 10 need people and have no automated pass.
+
+At `1bb17d7`, the local gate 7 pair passes its data and report wording checks.
+Its literal text assertions require the scope sentence, outside-file count and
+path, and the named-check limitation. They reject the claim that checks describe
+unchanged behavior when an outside file changed, plus the phrases "verified
+change" and "safe to merge". These assertions do not classify arbitrary prose.
 
 The trial repository has the request pair at
 [observed-trial-express#20](https://github.com/esau-morais/observed-trial-express/pull/20),
