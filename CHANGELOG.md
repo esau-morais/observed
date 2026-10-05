@@ -7,7 +7,7 @@ action's inputs.
 ## 0.2.0-alpha.6 (2026-10-05)
 
 Seventh alpha of 0.2.0, published under the npm dist-tags `alpha` and `latest`.
-The action gains the `discord-bot-token`, `discord-channel` and
+The action gains the `generated`, `discord-bot-token`, `discord-channel` and
 `discord-images` inputs. The `v0` tag stays on 0.1.0. `result.json` stays at
 schema version 9; generated journeys add optional fields.
 
@@ -33,7 +33,8 @@ schema version 9; generated journeys add optional fields.
   reaches. They run fixed baseline checks for browser errors, serious
   accessibility violations and server errors, and never change
   `observed.json`. When coverage shows the changed lines ran, the report
-  proposes saving the journey.
+  proposes saving the journey. In the action, the `generated` input names a
+  proposal file written by an earlier step; the action calls no agent.
 - **Text differences.** When a journey records text, saved through its
   `collectors` or generated through `textSelectors`, the report, viewer and
   comment list the text that changed between the two sides. A text
