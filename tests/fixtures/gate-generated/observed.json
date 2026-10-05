@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "name": "Invoice summary gate 3",
+  "source": {
+    "entry": "server.ts",
+    "paths": ["server.ts", "public"]
+  },
+  "setup": [],
+  "start": ["bun", "server.ts"],
+  "ready": {
+    "path": "/gate-3.html",
+    "status": 200
+  },
+  "capture": {
+    "name": "Open invoice summary",
+    "path": "/gate-3.html",
+    "ready": [
+      {
+        "kind": "wait-text",
+        "text": "One invoice is ready"
+      }
+    ],
+    "steps": [
+      {
+        "kind": "network-idle"
+      }
+    ],
+    "check": {
+      "kind": "text",
+      "id": "summary",
+      "name": "One invoice is ready",
+      "scope": "The invoice summary page",
+      "selector": "#saved",
+      "expectedText": "One invoice is ready"
+    },
+    "browserArguments": ["--no-sandbox"]
+  }
+}

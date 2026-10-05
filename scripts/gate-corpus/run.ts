@@ -1,8 +1,9 @@
 import { Effect } from 'effect';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { checkRun } from './check';
+import { checkRun, type Expectation } from './check';
 import { pairs, project } from './cases';
+import { generatedPairs } from './generated-cases';
 import { provenance } from './provenance';
 
 const tool = path.resolve(import.meta.dirname, '../..');
@@ -37,10 +38,11 @@ await Effect.runPromise(
       throw new Error('Usage: bun run gates NEW_OUTPUT_DIRECTORY [PAIR_ID]');
     }
 
+    const available = [...pairs, ...generatedPairs];
     const chosen =
       selected === undefined
-        ? pairs
-        : pairs.filter((pair) => pair.expectation.id === selected);
+        ? available
+        : available.filter((pair) => pair.expectation.id === selected);
 
     if (chosen.length === 0) {
       throw new Error(`Unknown pair: ${selected ?? ''}`);
@@ -71,10 +73,17 @@ await Effect.runPromise(
         json(pair.expectation),
         { flag: 'wx' },
       );
-      await cp(path.join(tool, 'tests/fixtures/gate-app'), fixture, {
-        recursive: true,
-      });
-      await writeFile(path.join(fixture, 'observed.json'), json(project));
+      await cp(
+        path.join(tool, 'tests/fixtures', pair.fixture ?? 'gate-app'),
+        fixture,
+        {
+          recursive: true,
+        },
+      );
+      if (pair.fixture === undefined) {
+        await writeFile(path.join(fixture, 'observed.json'), json(project));
+      }
+
       await writeFile(
         path.join(fixture, 'README.md'),
         'Original documentation.\n',
@@ -116,6 +125,57 @@ await Effect.runPromise(
         path.join(directory, 'revisions.json'),
         json({ base, candidate }),
       );
+      const assertions: [
+        Expectation['assertions'][number],
+        ...Expectation['assertions'][number][],
+      ] = [...pair.expectation.assertions];
+      const expectation = {
+        ...pair.expectation,
+        assertions,
+      };
+      for (const [side, revision] of [
+        ['base', base],
+        ['candidate', candidate],
+      ] as const) {
+        for (const journey of pair.generated === undefined ? [0] : [0, 1]) {
+          expectation.assertions.push({
+            label: `${side} journey ${journey + 1} pinned revision`,
+            actual: {
+              kind: 'json',
+              file: 'result.json',
+              path: [
+                'journeys',
+                journey,
+                side,
+                'capture',
+                'manifest',
+                'source',
+                'revision',
+                'commit',
+              ],
+            },
+            expected: revision,
+            raw: {
+              kind: 'json',
+              file: `journey-${journey + 1}/${side}/capture.json`,
+              path: ['source', 'revision', 'commit'],
+            },
+          });
+        }
+      }
+
+      await writeFile(path.join(directory, 'expected.json'), json(expectation));
+      await writeFile(
+        path.join(fixture, 'gate-expectation.json'),
+        json(expectation),
+      );
+      await git(fixture, 'add', 'gate-expectation.json');
+      await git(
+        fixture,
+        'commit',
+        '-m',
+        'test: pin expectations before capture',
+      );
       console.log(
         `Running ${pair.expectation.id}: expected exit ${pair.expectation.exitCode}`,
       );
@@ -132,6 +192,9 @@ await Effect.runPromise(
           '--output',
           path.join(directory, 'run'),
           '--headless',
+          ...(pair.generated === undefined
+            ? []
+            : ['--generated', path.join(fixture, pair.generated)]),
         ],
         tool,
       );
@@ -143,7 +206,7 @@ await Effect.runPromise(
       );
       const checked = await checkRun(
         path.join(directory, 'run', 'report'),
-        pair.expectation,
+        expectation,
         execution.exitCode,
       );
 

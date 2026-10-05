@@ -1,0 +1,1 @@
+{"version": 3, "file": "gate-3-data.js", "sources": ["public/gate-3-data.js"], "sourcesContent": ["document.querySelector('#amount').addEventListener('click', () => {\n  document.querySelector('#output').textContent = '$120.00';\n});\n//# sourceMappingURL=gate-3-data.js.map\n"], "names": [], "mappings": "AAAA;AACA;AACA;AACA"}

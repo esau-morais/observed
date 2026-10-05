@@ -113,6 +113,8 @@ function measurement(
 type Edit = { file: string; from: string; to: string };
 export type Pair = {
   expectation: Expectation;
+  fixture?: string;
+  generated?: string;
   edits: readonly Edit[];
   candidateProject?: Project;
 };

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "journeys": [
+    {
+      "name": "Show invoice amount",
+      "path": "/gate-3.html",
+      "ready": [
+        {
+          "kind": "wait-selector",
+          "selector": "#amount"
+        }
+      ],
+      "steps": [
+        {
+          "kind": "click",
+          "selector": "#amount"
+        },
+        {
+          "kind": "network-idle"
+        }
+      ],
+      "targets": ["public/gate-3-data.js"],
+      "reason": "The saved summary journey does not use this action.",
+      "textSelectors": ["#output"]
+    }
+  ]
+}

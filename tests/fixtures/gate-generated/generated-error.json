@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "journeys": [
+    {
+      "name": "Open invoice detail",
+      "path": "/gate-3.html",
+      "ready": [
+        {
+          "kind": "wait-selector",
+          "selector": "#error"
+        }
+      ],
+      "steps": [
+        {
+          "kind": "click",
+          "selector": "#error"
+        },
+        {
+          "kind": "network-idle"
+        }
+      ],
+      "targets": ["public/gate-3-error.js"],
+      "reason": "The saved summary journey does not use this action.",
+      "textSelectors": ["#output"]
+    }
+  ]
+}

@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       'evidence/**',
+      'tests/fixtures/gate-generated/public/**',
       '.agents/**',
       '.claude/**',
     ],

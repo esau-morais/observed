@@ -1,0 +1,1 @@
+{"version": 3, "file": "gate-3-error.js", "sources": ["public/gate-3-error.js"], "sourcesContent": ["document.querySelector('#error').addEventListener('click', () => {\n  document.querySelector('#output').textContent = 'Invoice detail is ready';\n});\n//# sourceMappingURL=gate-3-error.js.map\n"], "names": [], "mappings": "AAAA;AACA;AACA;AACA"}

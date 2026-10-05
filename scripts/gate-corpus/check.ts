@@ -9,7 +9,18 @@ const selectSchema = Schema.Union([
   Schema.Struct({ key: Schema.String, equals: Schema.Json }),
 ]);
 
+const natural = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const positive = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+
 const readingSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('coverage'),
+    file: Schema.String,
+    pathname: Schema.String,
+    source: Schema.String,
+    line: positive,
+    column: natural,
+  }),
   Schema.Struct({
     kind: Schema.Literal('json'),
     file: Schema.String,
@@ -95,7 +106,7 @@ export function select(
   return current;
 }
 
-async function readContained(root: string, filename: string) {
+async function readContainedText(root: string, filename: string) {
   const directory = await realpath(root);
   const resolved = await realpath(path.resolve(directory, filename));
   const relative = path.relative(directory, resolved);
@@ -104,7 +115,7 @@ async function readContained(root: string, filename: string) {
     throw new Error(`Reading outside the run is forbidden: ${filename}`);
   }
 
-  return decodeJson(await readFile(resolved, 'utf8'));
+  return readFile(resolved, 'utf8');
 }
 
 const harSchema = Schema.Struct({
@@ -118,8 +129,94 @@ const harSchema = Schema.Struct({
   }),
 });
 
+const coverageSchema = Schema.Struct({
+  result: Schema.Array(
+    Schema.Struct({
+      url: Schema.String,
+      functions: Schema.Array(
+        Schema.Struct({
+          ranges: Schema.Array(
+            Schema.Struct({
+              startOffset: natural,
+              endOffset: natural,
+              count: natural,
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+
+function covered(
+  value: Schema.Json,
+  source: string,
+  reading: Extract<Reading, { kind: 'coverage' }>,
+) {
+  const scripts = Schema.decodeUnknownSync(coverageSchema)(value).result.filter(
+    (script) => {
+      try {
+        return new URL(script.url).pathname === reading.pathname;
+      } catch {
+        return false;
+      }
+    },
+  );
+  const script = scripts[0];
+  if (scripts.length !== 1 || script === undefined) {
+    throw new Error(
+      `Expected one coverage script for ${reading.pathname}, found ${scripts.length}`,
+    );
+  }
+
+  const lines = source.split('\n');
+  const line = lines[reading.line - 1];
+  if (line === undefined || reading.column >= line.length) {
+    throw new Error('Coverage position is outside the captured source');
+  }
+
+  const offset =
+    lines
+      .slice(0, reading.line - 1)
+      .reduce((sum, text) => sum + text.length + 1, 0) + reading.column;
+  const ranges = script.functions.flatMap((fn) => fn.ranges);
+  if (
+    ranges.some(
+      (range) =>
+        range.endOffset <= range.startOffset || range.endOffset > source.length,
+    )
+  ) {
+    throw new Error('Invalid producer coverage range');
+  }
+
+  const covering = ranges.filter(
+    (range) => range.startOffset <= offset && offset < range.endOffset,
+  );
+  const inner = covering.filter(
+    (range) =>
+      !covering.some(
+        (other) =>
+          other.startOffset >= range.startOffset &&
+          other.endOffset <= range.endOffset &&
+          (other.startOffset > range.startOffset ||
+            other.endOffset < range.endOffset),
+      ),
+  );
+  if (inner.length !== 1 || inner[0] === undefined) {
+    throw new Error('Missing or ambiguous innermost coverage range');
+  }
+
+  return inner[0].count > 0;
+}
+
 async function read(root: string, reading: Reading) {
-  const value = await readContained(root, reading.file);
+  const value = decodeJson(await readContainedText(root, reading.file));
+
+  if (reading.kind === 'coverage') {
+    const source = await readContainedText(root, reading.source);
+
+    return covered(value, source, reading);
+  }
 
   if (reading.kind === 'json') {
     return select(value, reading.path);
