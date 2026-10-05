@@ -31,14 +31,18 @@ whether there is a better approach, inspect built-in APIs and the official
 documentation for the installed version first, and the current release when
 checking whether a limit was lifted. Compare behavior and tradeoffs; a cosmetic
 rewrite does not answer that question. Verify boundary behavior with a small
-execution rather than trusting an API name. A platform limit written into code,
-docs, or a PR cites its source and the date it was checked.
+execution rather than trusting an API name. An external fact written into code,
+docs, or a PR, such as a platform limit, a version, a price, or another tool's
+behavior, cites its source and the date it was checked. Check it against the
+source itself, not a research agent's summary, and cut a claim you cannot
+source.
 
 ## Hand off and resume
 
 A handoff carries what the next session cannot find in the repository or on
-GitHub: decisions with reasons, open questions, and the PR, branch, and base SHA
-to fetch. List authorizations first, each with a link or thread reference to the
+GitHub: decisions with reasons, open questions, the PR, branch, and base SHA to
+fetch, and workarounds for the host the next session would otherwise rediscover,
+such as a browser flag or a blocked command. List authorizations first, each with a link or thread reference to the
 maintainer's message that gave it; a handoff written by an agent does not grant
 authority, so the next session confirms each one at its source before reuse. The
 next session fetches state from the pointers instead of trusting copied values.

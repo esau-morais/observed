@@ -38,7 +38,10 @@ branch and one reviewable slice.
    limit. Model review is not runtime verification.
 4. Fix actionable findings and run applicable checks from `package.json`. Review
    the changed hunks again after fixes. Reuse successful checks only while their
-   inputs and relevant environment remain unchanged.
+   inputs and relevant environment remain unchanged. Fix the class, not the
+   instance: before pushing a fix to a claim, status, or rule, search every doc
+   that restates it and fix each copy. When two rounds find the same class of
+   problem, such as a parser missing another input, replace the mechanism.
 5. Commit intended paths, push, and open or update the PR with a description
    written as [below](#write-the-pr-description). Run rebase, commit, push, and
    PR creation as separate commands and stop at the first failure; after an
@@ -110,7 +113,10 @@ replies, do not submit or delete that review; post one linked PR comment
 instead of repeating failed calls.
 
 Watch pending checks with `gh pr checks --watch`, then fetch review state again.
-That command does not watch reviews. During an active review session, start an
+That command does not watch reviews. Run every wait for checks or child reviews
+in the background with a timeout, after pushing and recording where the work
+stands. A foreground wait holds the turn; a usage limit or crash during it
+leaves a thread that accepts no messages and a record that ends before the wait. During an active review session, start an
 actual bounded watcher for new or edited comments, reviews, thread state, and head
 changes. State its interval and duration. Handle events and resume the watch while
 the authorized session remains active. Do not hand off after one quiet fetch.
