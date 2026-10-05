@@ -6,15 +6,15 @@ action's inputs.
 
 ## 0.2.0-alpha.7 (2026-10-05)
 
-Eighth alpha of 0.2.0, published under the npm dist-tags `alpha` and `latest`.
+Eighth alpha of 0.2.0.
 The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
 `result.json` stays at schema version 9.
 
 - **Unsupported evidence stays unavailable.** A comparison with an unknown
-  collector kind on either revision now reports unavailable and exits 1,
-  instead of potentially reporting no regression. Named candidate checks
-  still report their own measured outcomes; they do not establish a comparison
-  against the unsupported evidence.
+  collector kind on either revision is now unavailable, instead of potentially
+  establishing no regression. Named candidate checks still report their own
+  measured outcomes; they do not establish a comparison against the unsupported
+  evidence.
 
 ## 0.2.0-alpha.6 (2026-10-05)
 
