@@ -1,31 +1,22 @@
 import mermaid from 'mermaid';
+import { setDiagramConfigScope } from 'mermaid/dist/chunks/mermaid.core/chunk-VPRB5NB3.mjs';
 import { diagramConfiguration } from './configuration';
 
 async function renderWithConfiguration(source: string) {
-  await mermaid.parse(source);
-  const diagram = await mermaid.mermaidAPI.getDiagramFromText(source);
-  const draw = diagram.renderer.draw;
-  const conditions = { configuration: '', theme: '' };
-  // Mermaid 12.1.0 clears diagram-scoped appearance before render() returns.
-  // Capture it inside draw and restore the shared renderer even on failure.
-  // https://github.com/mermaid-js/mermaid/blob/mermaid%4012.1.0/packages/mermaid/src/mermaidAPI.ts
-  diagram.renderer.draw = (...args) => {
-    const configuration = mermaid.mermaidAPI.getConfig();
-    conditions.configuration = JSON.stringify(configuration);
-    conditions.theme = configuration.theme ?? '';
-
-    return draw.apply(diagram.renderer, args);
-  };
-
+  const result = await mermaid.render('observed-diagram', source);
+  // Mermaid 12.1.0 clears scope before returning; restore it only for this read.
+  // This pinned internal export preserves Mermaid's own appearance resolution.
   try {
-    const result = await mermaid.render('observed-diagram', source);
-    if (conditions.configuration === '' || conditions.theme === '') {
-      throw new Error('The diagram rendering configuration is unavailable');
-    }
+    setDiagramConfigScope(result.diagramType);
+    const configuration = mermaid.mermaidAPI.getConfig();
 
-    return { ...result, ...conditions };
+    return {
+      ...result,
+      configuration: JSON.stringify(configuration),
+      theme: configuration.theme,
+    };
   } finally {
-    diagram.renderer.draw = draw;
+    setDiagramConfigScope();
   }
 }
 

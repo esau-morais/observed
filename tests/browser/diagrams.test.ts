@@ -9,9 +9,31 @@ import { expect, test } from 'vitest';
 import { captureDiagrams } from '../../src/diagrams/capture';
 import { json, sha256 } from '../../src/encoding';
 
-test.each(['  theme: dark', '  flowchart:\n    theme: dark'])(
-  'records effective configuration and SVG font for %s',
-  async (theme) => {
+test.each([
+  {
+    name: 'root flowchart',
+    theme: '  theme: dark',
+    source: 'flowchart LR\nA-->B',
+  },
+  {
+    name: 'scoped flowchart',
+    theme: '  flowchart:\n    theme: dark',
+    source: 'flowchart LR\nA-->B',
+  },
+  {
+    name: 'ER',
+    theme: '  er:\n    theme: dark',
+    source: 'erDiagram\nCUSTOMER ||--o{ ORDER : places',
+  },
+  {
+    name: 'requirement',
+    theme: '  requirement:\n    theme: dark',
+    source:
+      'requirementDiagram\nrequirement test_req {\n id: 1\n text: "test"\n risk: low\n verifymethod: test\n}',
+  },
+])(
+  'records effective configuration and SVG font for $name',
+  async ({ theme, source }) => {
     const root = await mkdtemp(path.join(tmpdir(), 'observed-diagram-config-'));
     const projectRoot = path.join(root, 'repo');
     const directory = path.join(root, 'report');
@@ -27,14 +49,14 @@ test.each(['  theme: dark', '  flowchart:\n    theme: dark'])(
       await git('config', 'user.email', 'observed@example.test');
       await writeFile(
         path.join(projectRoot, 'flow.md'),
-        '```mermaid\nflowchart LR\nA-->B\n```',
+        ['```mermaid', source, '```'].join('\n'),
       );
       await git('add', 'flow.md');
       await git('commit', '-m', 'base');
       const baseCommit = await git('rev-parse', 'HEAD');
       await writeFile(
         path.join(projectRoot, 'flow.md'),
-        `\`\`\`mermaid\n---\nconfig:\n${theme}\n  fontFamily: monospace\n---\nflowchart LR\nA-->B\n\`\`\``,
+        `\`\`\`mermaid\n---\nconfig:\n${theme}\n  fontFamily: monospace\n---\n${source}\n\`\`\``,
       );
       await git('add', 'flow.md');
       await git('commit', '-m', 'candidate');
@@ -49,7 +71,7 @@ test.each(['  theme: dark', '  flowchart:\n    theme: dark'])(
           browserArguments: ['--no-sandbox'],
         }).pipe(Effect.provide(BunServices.layer)),
       );
-      expect(manifest.observation).toMatchObject({
+      expect(manifest.observation, json(manifest.observation)).toMatchObject({
         kind: 'complete',
         pairs: [
           {
