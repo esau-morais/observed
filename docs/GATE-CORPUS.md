@@ -74,7 +74,7 @@ after 15 minutes, with a 10-second termination grace period.
 | 2 | Eight [fault pairs](#seeded-evidence-kinds) and `observation-change` | Regression and exit 2 for each fault, measurements against raw output; changed observations keep two passing checks and exit 0 | One bounded fault per check-capable kind, not every check option. Corpus CI and independent visual inspection remain pending |
 | 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity`, `startup-failure` | Exit 1, unavailable comparison, unknown missing evidence, exact failure reasons, candidate HAR; real startup log and process exit; preserved selection hash rejects an older revision | The identity pair covers saved-report revalidation, not GitHub event freshness. The age pair asserts both age and interval errors; it does not isolate age detection |
-| 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text, removed-journey pair, and a pair that changes `source`, `setup` or `start` |
+| 5 | `relaxed-check`, `removed-check`, `rewritten-journey`, `removed-journey` | Raw HAR counts, protected/proposed expectation text and saved Markdown, both changed step definitions; removed journey retains two unknown checks alongside two passing checks | A pair that changes `source`, `setup` or `start`; corpus CI |
 | 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
 | 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR; saved report says no captured file changed, lists README.md, and limits checks to their scopes | Wording assertions cover the Markdown report; other delivery surfaces are not checked by this pair |
 | 8 | `passing-above-unavailable`, `unavailable-as-passing`, `regression-as-passed`, `collector-drops-requests` | Each source mutation makes the corpus red; both availability faults fail with missing and failed bases. Unmutated corpus passes on the same commit; raw HAR corroborates the request faults | These four known faults are covered, not arbitrary comparator or collector defects. Checker corruption tests are separate safeguards |
@@ -105,6 +105,31 @@ from `trial/gate-corpus-base` to `trial/gate-corpus-request`. Its base commits t
 expectation before the candidate changes the request count. Do not merge the
 seeded fault. The local fixture needs no credentials, framework, or package
 installation.
+
+## Altered expectations
+
+At `932b010`, all four gate 5 pairs pass locally and on published refs in
+[trial #40](https://github.com/esau-morais/observed-trial-express/pull/40)
+(relaxed check),
+[#41](https://github.com/esau-morais/observed-trial-express/pull/41)
+(removed check),
+[#42](https://github.com/esau-morais/observed-trial-express/pull/42)
+(rewritten journey) and
+[#43](https://github.com/esau-morais/observed-trial-express/pull/43)
+(removed journey). Expectations and both source identities were committed before
+capture. A deliberately wrong protected expectation makes the checker exit 1.
+
+The first two pairs retain a regression and exit 2 under the base's one-request
+expectation; raw HAR contains one base request and two candidate requests. The
+relaxed proposal expects two and passes without replacing that verdict. Saved
+Markdown shows the base expectation and the proposal separately. Rewritten
+steps leave both checks unknown and show the base and proposed step definitions.
+The removed journey has no capture: its two checks stay unknown while the
+retained journey's two checks pass. Both journey changes exit 1.
+
+These are local CLI runs of published trial refs, not GitHub workflow delivery
+checks. No rendered output changed in this corpus update. Changes to `source`,
+`setup` or `start` remain uncovered, as does CI execution of these pairs.
 
 ## Seeded evidence kinds
 
