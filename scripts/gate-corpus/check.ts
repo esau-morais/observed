@@ -14,6 +14,18 @@ const positive = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 const readingSchema = Schema.Union([
   Schema.Struct({
+    kind: Schema.Literal('load-budget'),
+    file: Schema.String,
+    side: Schema.Literals(['base', 'candidate']),
+    check: Schema.NonEmptyString,
+    max: Schema.Number.check(
+      Schema.isFinite(),
+      Schema.isGreaterThanOrEqualTo(0),
+    ),
+    samples: positive,
+    warmup: positive,
+  }),
+  Schema.Struct({
     kind: Schema.Literal('text'),
     file: Schema.String,
     includes: Schema.NonEmptyString,
@@ -241,6 +253,10 @@ async function read(root: string, reading: Reading) {
 
   const value = decodeJson(await readContainedText(root, reading.file));
 
+  if (reading.kind === 'load-budget') {
+    return loadBudget(root, value, reading);
+  }
+
   if (reading.kind === 'coverage') {
     const source = await readContainedText(root, reading.source);
 
@@ -263,6 +279,97 @@ async function read(root: string, reading: Reading) {
   }
 
   return requests.length;
+}
+
+async function loadBudget(
+  root: string,
+  result: Schema.Json,
+  reading: Extract<Reading, { kind: 'load-budget' }>,
+) {
+  const side = select(result, ['journeys', 0, reading.side]);
+  const evidence = select(side, [
+    'evidence',
+    { key: 'kind', equals: 'performance' },
+    'value',
+  ]);
+  const samples = Schema.decodeUnknownSync(Schema.Array(Schema.Json))(
+    select(evidence, ['samples']),
+  );
+  if (
+    samples.length !== reading.samples + reading.warmup ||
+    select(evidence, ['conditions', 'samples']) !== reading.samples ||
+    select(evidence, ['conditions', 'warmup']) !== reading.warmup
+  ) {
+    throw new Error(
+      'Timing sample counts differ from the protected expectation',
+    );
+  }
+
+  const measured: number[] = [];
+  const origins = new Set<number>();
+  const numeric = Schema.Number.check(
+    Schema.isFinite(),
+    Schema.isGreaterThanOrEqualTo(0),
+  );
+  const producer = Schema.Struct({
+    success: Schema.Literal(true),
+    data: Schema.Struct({
+      result: Schema.fromJsonString(
+        Schema.Struct({
+          observer: Schema.Literal(true),
+          timeOrigin: numeric,
+          document: Schema.Literal('/'),
+          load: numeric,
+        }),
+      ),
+    }),
+  });
+  for (const [index, sample] of samples.entries()) {
+    const run = index + 1;
+    const rawFile = `journey-1/${reading.side}/performance/run-${String(run).padStart(2, '0')}.json`;
+    const raw = Schema.decodeUnknownSync(Schema.fromJsonString(producer))(
+      await readContainedText(root, rawFile),
+    ).data.result;
+    if (origins.has(raw.timeOrigin)) {
+      throw new Error('Timing runs reused a document');
+    }
+
+    origins.add(raw.timeOrigin);
+    if (
+      select(sample, ['run']) !== run ||
+      select(sample, ['warmup']) !== index < reading.warmup ||
+      select(sample, ['document']) !== raw.document ||
+      select(sample, ['metrics', 'load']) !== raw.load
+    ) {
+      throw new Error(`Load sample ${run} disagrees with raw producer output`);
+    }
+
+    if (index >= reading.warmup) {
+      measured.push(raw.load);
+    }
+  }
+
+  measured.sort((a, b) => a - b);
+  const upper = measured[Math.floor(measured.length / 2)];
+  const lower = measured[Math.floor((measured.length - 1) / 2)];
+  if (upper === undefined || lower === undefined) {
+    throw new Error('No measured timing samples');
+  }
+
+  const median = (lower + upper) / 2;
+  const actual = select(side, [
+    'checks',
+    { key: 'id', equals: reading.check },
+    'actual',
+  ]);
+  const format = (value: number) =>
+    `${value < 10 ? value.toFixed(1) : Math.round(value)} ms`;
+  const summary = `median ${format(median)} over ${measured.length} samples, range ${format(measured[0] ?? median)} to ${format(measured.at(-1) ?? median)}`;
+  if (actual !== summary) {
+    throw new Error('Check measurement disagrees with the raw load samples');
+  }
+
+  return median <= reading.max;
 }
 
 export async function checkRun(

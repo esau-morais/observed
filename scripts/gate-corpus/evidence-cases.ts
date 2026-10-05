@@ -56,6 +56,63 @@ const input = [
 export const evidencePairs: readonly Pair[] = [
   {
     expectation: {
+      id: 'performance-fault',
+      gate: 2,
+      reason:
+        'The candidate blocks document loading for two seconds, beyond the protected one-second median load budget.',
+      exitCode: 2,
+      assertions: [
+        ...faultAssertions('saved-load'),
+        ...(['base', 'candidate'] as const).map((side) => ({
+          label: `${side} raw load samples, check measurement and budget agree`,
+          actual: {
+            kind: 'load-budget',
+            file: 'result.json',
+            side,
+            check: 'saved-load',
+            max: 1000,
+            samples: 3,
+            warmup: 1,
+          } as const,
+          expected: side === 'base',
+        })),
+      ],
+    },
+    baseProject: {
+      ...project,
+      capture: {
+        ...project.capture,
+        collectors: [{ kind: 'performance', samples: 3, warmup: 1 }],
+        checks: [
+          ...project.capture.checks,
+          {
+            kind: 'performance',
+            id: 'saved-load',
+            name: 'Page loads within its local budget',
+            scope: 'Three local navigation samples after one warmup.',
+            metric: 'load',
+            max: 1000,
+          },
+        ],
+      },
+    },
+    baseEdits: [
+      {
+        file: 'index.html',
+        from: '    <title>Gate corpus</title>',
+        to: '    <title>Gate corpus</title>\n    <script>const loadDelay = 0; const started = performance.now(); while (performance.now() - started < loadDelay) {}</script>',
+      },
+    ],
+    edits: [
+      {
+        file: 'index.html',
+        from: 'const loadDelay = 0;',
+        to: 'const loadDelay = 2000;',
+      },
+    ],
+  },
+  {
+    expectation: {
       id: 'api-status-fault',
       gate: 2,
       reason:
