@@ -42,8 +42,7 @@ type Layout = {
   page: Box;
   clock: Box;
   caption: Box;
-  // The caption under the code frame.
-  sourceCaption: Box;
+  codeCaption: Box;
   footer: number;
   code: Box;
   callout: Box | null;
@@ -83,7 +82,7 @@ function wideLayout(scene: Scene): Layout {
     page: { x: 380, y: 200, w: 200, h: 136 },
     clock: { x: 56, y: 182, w: 188, h: 28 },
     caption: { x: 56, y: 432, w: 848, h: 66 },
-    sourceCaption: { x: 56, y: 428, w: 848, h: 66 },
+    codeCaption: { x: 56, y: 428, w: 848, h: 66 },
     footer: 506,
     code: { x: 96, y: 84, w: 768, h: 304 },
     callout: { x: 56, y: 104, w: 286, h: 24 },
@@ -115,7 +114,7 @@ function narrowLayout(scene: Scene): Layout {
     page: { x: 90, y: 222, w: 180, h: 124 },
     clock: { x: 20, y: 94, w: 200, h: 28 },
     caption: { x: 20, y: y + 16, w: 320, h: 104 },
-    sourceCaption: { x: 20, y: 430, w: 320, h: 104 },
+    codeCaption: { x: 20, y: 430, w: 320, h: 104 },
     footer: y + 132,
     code: { x: 12, y: 96, w: 336, h: 300 },
     callout: null,
@@ -196,8 +195,7 @@ function phaseText(scene: Scene, beat: Beat): string {
     : `${phaseLabels[beat.phase]} · ${beat.phase} ${shortRevision(scene.revisions[beat.phase])}`;
 }
 
-// The beat the scene rests on before anyone presses Play: the after side's
-// verdict, the moment the scene exists to show.
+// The after side's result, where the scene opens.
 function restingBeat(scene: Scene): number {
   const index = scene.beats.findLastIndex((beat) => beat.phase === 'candidate');
 
@@ -441,7 +439,18 @@ function useSource(scene: Scene): SourceText {
   return text;
 }
 
-const codeSigns = { added: '+', removed: '−', same: ' ' } as const;
+// Drawn as generated content: axe-core cannot judge the contrast of a lone
+// sign, and the band and strikethrough already carry the change.
+function signStyle(change: CodeLine['change']) {
+  switch (change) {
+    case 'added':
+      return styles.signAdded;
+    case 'removed':
+      return styles.signRemoved;
+    case 'same':
+      return null;
+  }
+}
 
 function CodeFrame({
   scene,
@@ -482,13 +491,18 @@ function CodeFrame({
               <span {...stylex.props(!line.anchor && styles.lineQuiet)}>
                 {line.number ?? ''}
               </span>
-              <span {...stylex.props(!line.anchor && styles.lineQuiet)}>
-                {codeSigns[line.change]}
-              </span>
+              <span
+                aria-hidden="true"
+                {...stylex.props(
+                  !line.anchor && styles.lineQuiet,
+                  signStyle(line.change),
+                )}
+              />
               <span
                 {...stylex.props(
                   styles.codeText,
-                  line.change === 'removed' && styles.removed,
+                  line.change === 'removed' &&
+                    (line.anchor ? styles.struck : styles.removed),
                 )}
               >
                 {line.text}
@@ -513,9 +527,11 @@ function CodeFrame({
         </p>
       )}
       <p {...stylex.props(styles.small, styles.below)}>
-        {wide
-          ? 'condensed for display · common indentation removed'
-          : 'condensed for display'}
+        <span {...stylex.props(styles.onCanvas)}>
+          {wide
+            ? 'condensed for display · common indentation removed'
+            : 'condensed for display'}
+        </span>
       </p>
     </Placed>
   );
@@ -751,7 +767,7 @@ function SceneStage({
           </>
         )}
         <Placed
-          box={sourcePhase ? layout.sourceCaption : layout.caption}
+          box={sourcePhase ? layout.codeCaption : layout.caption}
           xstyle={[
             styles.caption,
             !wide && styles.captionNarrow,
@@ -842,6 +858,7 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
     time: transition,
   });
   const [playing, setPlaying] = useState(false);
+  const [resting, setResting] = useState(true);
   const [announce, setAnnounce] = useState('');
   const source = useSource(scene);
   const last = scene.beats.length - 1;
@@ -925,17 +942,18 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
     }
 
     setPlaying(false);
+    setResting(false);
     setHead({ index: target, time: reduced ? transition : 0 });
     setAnnounce(scene.beats[target]?.caption ?? '');
   };
 
   const playFromStart = () => {
+    setResting(false);
     setAnnounce('');
     setHead({ index: 0, time: reduced ? transition : 0 });
     setPlaying(true);
   };
 
-  // Play from the resting beat or the end starts the scene over.
   const toggle = () => {
     if (playing) {
       setPlaying(false);
@@ -943,7 +961,7 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
       return;
     }
 
-    if (head.index === last || head.index === rest) {
+    if (resting || head.index === last) {
       playFromStart();
 
       return;
@@ -972,7 +990,9 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
 
   const narrow = width !== null && width < narrowBelow;
   const layout = narrow ? narrowLayout(scene) : wideLayout(scene);
-  const shown = narrow ? Math.min(width, narrowMax) : (width ?? layout.width);
+  // The figure's 1px border sits inside the measured width.
+  const shown =
+    (narrow ? Math.min(width, narrowMax) : (width ?? layout.width + 2)) - 2;
   const progress = reduced ? 1 : Math.min(1, head.time / transition);
 
   return (
@@ -981,9 +1001,9 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
         Before and after
       </Heading>
       <p {...stylex.props(styles.text)}>
-        Each box shows a value the run recorded. The scene rests on the verdict;
-        Play runs it from the start. The clock shows recorded time, and playback
-        holds each step so it can be read.
+        Each box shows a value the run recorded. The scene opens on the after
+        side's result; Play runs it from the start. The clock shows recorded
+        time, and playback holds each step so it can be read.
       </p>
       <div ref={figure} {...stylex.props(styles.measure)}>
         <div
@@ -1296,6 +1316,9 @@ const styles = stylex.create({
     whiteSpace: 'pre',
   },
   removed: { color: colors.textMuted, textDecoration: 'line-through' },
+  struck: { textDecoration: 'line-through' },
+  signAdded: { '::before': { content: '"+"' } },
+  signRemoved: { '::before': { content: '"−"' } },
   changeBand: { backgroundColor: colors.surfaceMuted },
   anchor: {
     boxShadow: `inset 3px 0 0 ${colors.text}`,

@@ -88,6 +88,8 @@ export const renderReportPage = Effect.fn('renderReportPage')(function* (
     `style-src ${hashSource(style)}`,
     'font-src data:',
     'img-src data: blob:',
+    // The scene's code frame reads embedded source files from blob: URLs.
+    'connect-src blob:',
     "base-uri 'none'",
     "object-src 'none'",
     "form-action 'none'",
