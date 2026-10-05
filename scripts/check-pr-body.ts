@@ -45,6 +45,7 @@ function narratesFile(item: string) {
 
 function parse(body: string) {
   const headings: string[] = [];
+  const labels: string[] = [];
   const items: string[] = [];
   const block = (kind: string, content: string) =>
     `${open}${kind}${split}${content}${close}`;
@@ -74,7 +75,19 @@ function parse(body: string) {
     hr: () => block('hr', ''),
     code: (_children, meta) =>
       block(meta?.language === 'mermaid' ? 'mermaid' : 'code', ''),
-    html: (children) => block('html', children),
+    html: (children) => {
+      for (const [, level, label = ''] of children.matchAll(
+        /<(h[1-6]|summary)\b[^>]*>([\s\S]*?)<\/\1>/gi,
+      )) {
+        (level?.toLowerCase() === 'summary' ? labels : headings).push(
+          text(label),
+        );
+      }
+
+      return /^\s*(<!--[\s\S]*?-->\s*)+$/.test(children)
+        ? ''
+        : block('html', children);
+    },
     image: (_children, meta) => (meta.src.trim() === '' ? '' : imageMark),
     codespan: (children) => children.replace(/\s+/g, '_'),
     link: (children) => children,
@@ -87,6 +100,7 @@ function parse(body: string) {
   return {
     first: { kind: first?.[1] ?? '', content: first?.[2] ?? '' },
     headings,
+    labels,
     items,
     words: text(output)
       .split(/\s+/)
@@ -142,8 +156,8 @@ export function checkPrBody(body: string, options: { visual: boolean }) {
 
   for (const section of processSections) {
     if (
-      parsed.headings.some((heading) =>
-        new RegExp(`^${section}\\b`, 'i').test(heading),
+      [...parsed.headings, ...parsed.labels].some((label) =>
+        new RegExp(`^${section}\\b`, 'i').test(label),
       )
     ) {
       problems.push(

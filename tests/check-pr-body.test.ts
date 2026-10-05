@@ -16,6 +16,7 @@ test('a short body that opens with a screenshot, a mermaid flow or a before | af
     '[![the comment](https://example.test/c.png)](https://example.test/pr/1)',
     '<p align="center"><img width="600" src="https://github.com/user-attachments/assets/x"></p>',
     '![the change][shot]\n\n[shot]: https://example.test/after.png',
+    `<!-- a template comment -->\n\n${screenshot}`,
   ]) {
     expect(
       checkPrBody(
@@ -73,10 +74,10 @@ test('prose over 150 words fails, counting table cells but not code, images or l
   ).toEqual([expect.stringMatching(/^prose is 153 words/)]);
 });
 
-test('more than two headings fails, indented or underlined ones included, but not lines in code', () => {
+test('more than two headings fails, indented, underlined and HTML ones included, but not lines in code', () => {
   expect(
     checkPrBody(
-      `${screenshot}\n\n  ## what\n\nchecks\n------\n\nnot verified\n===\n\n\`\`\`sh\n# a shell comment\n\`\`\``,
+      `${screenshot}\n\n  ## what\n\nchecks\n------\n\n<h2>not verified</h2>\n\n\`\`\`sh\n# a shell comment\n\`\`\``,
       visual,
     ).problems,
   ).toEqual(['3 headings; use at most 2 (checks, not verified)']);
@@ -94,11 +95,12 @@ test('lines that narrate files fail', () => {
 test('review and process sections fail', () => {
   expect(
     checkPrBody(
-      `${screenshot}\n\nreview\n---\n\nfixed two findings\n\n## **process**\n\n\`\`\`\`md\n## rounds\n\`\`\`\``,
+      `${screenshot}\n\nreview\n---\n\nfixed two findings\n\n## **process**\n\n\`\`\`\`md\n## rounds\n\`\`\`\`\n\n<details><summary>rounds of fixes</summary>`,
       visual,
     ).problems,
   ).toEqual([
     'drop the "review" section; keep declined or open findings, one line each',
     'drop the "process" section; keep declined or open findings, one line each',
+    'drop the "rounds" section; keep declined or open findings, one line each',
   ]);
 });
