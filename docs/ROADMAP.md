@@ -49,15 +49,15 @@ and candidate pair with an outcome written before the run. Gates 1 to 7 run on
 trial repositories. A checker judges them by reading `result.json` and the raw
 producer output, without importing the comparator.
 
-| Gate | Pair | Required result | Status at `ad28490` |
+| Gate | Pair | Required result | Corpus status, 2026-10-05 |
 | --- | --- | --- | --- |
-| 1. Correct change | A change inside a saved journey that keeps its expectation | No regression, exit 0, and the scope lists the changed file as checked or exercised | Verdict holds. No change scope |
-| 2. Seeded fault | One fault per shipped evidence kind, inside a saved journey | Regression, values equal to the raw producer output, exit 2 | Holds for request count in #26's trial. Other kinds need pairs |
+| 1. Correct change | A change inside a saved journey that keeps its expectation | No regression, exit 0, and the scope lists the changed file as checked or exercised | Local `correct-change` pair passes, including exercised scope. Raw coverage cross-check pending |
+| 2. Seeded fault | One fault per shipped evidence kind, inside a saved journey | Regression, values equal to the raw producer output, exit 2 | Local request and text pairs pass against raw output. Other kinds still need pairs |
 | 3. Change outside saved journeys | Two faults in captured source that no saved journey exercises: one that raises an error, one that returns wrong data | Without an agent, the scope lists the file as not observed. With one, a generated journey runs the changed lines. A baseline check reports the error. The wrong data is listed as a difference and sets no verdict | Fails. The probe read "No regression" |
-| 4. Missing evidence | Failed base capture, deleted artifact, stale revision, older schema, unsupported collector | Unavailable or unknown, never a pass, exit 1 | Covered by unit tests. Needs pairs |
-| 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey | The result names each altered check and judges it by the base's expectation, with the proposed version beside it | Fails. The probe read "No regression" |
-| 6. Intentional change | A visual or copy change with passing checks | An observation, not a regression | Holds in tests. Needs a pair |
-| 7. No captured change | A change to docs or to files outside `source.paths` | Says no captured file changed, lists the outside files, and claims nothing about the change | Fails. Nothing states it |
+| 4. Missing evidence | Failed base capture, deleted artifact, stale revision, older schema, unsupported collector | Unavailable or unknown, never a pass, exit 1 | Five copied-capture probes pass. Stale revision identity and a real startup failure still need pairs |
+| 5. Altered expectations | The change relaxes, removes, or rewrites a check or its journey | The result names each altered check and judges it by the base's expectation, with the proposed version beside it | Three local pairs pass: relaxed check, removed check, rewritten journey. Remaining cases in the corpus table |
+| 6. Intentional change | A visual or copy change with passing checks | An observation, not a regression | Local intentional-copy pair passes; changed pixels with passing checks |
+| 7. No captured change | A change to docs or to files outside `source.paths` | Says no captured file changed, lists the outside files, and claims nothing about the change | Local outside-source pair passes its data checks. Rendered wording assertion pending |
 | 8. Observed's own faults | Known faults seeded into copies of the comparator and collector | Unit tests or the gate corpus fail on each fault | Fails for the one fault tried. With "no regression" ranked above "unavailable", all 360 unit tests passed |
 | 9. Unfamiliar project | Three projects the maintainers did not write, one non-React, set up by a person with their own agent from the README | A first report without help. Record time and every stall | Not run with people |
 | 10. Reading the result | At least three developers outside the project read reports for gates 3 and 5 | From the change map, each names what was checked and what was not, without explanation | Not run |
@@ -67,8 +67,9 @@ agent can prepare them and cannot pass them. Self-observation runs on every
 pull request and decides none of these gates.
 
 The probes behind the status column are kept in the maintainer's checkout
-under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The gate
-corpus replaces them with pairs anyone can run.
+under `evidence/mvp-reconciliation-2026-09-29/`, which Git ignores. The [gate corpus](GATE-CORPUS.md) adds runnable pairs and lists the remaining
+checks. Local results above come from its 2026-10-05 runs on `e160172` with
+the corpus worktree changes; they do not establish all of a gate's requirements.
 
 ## Delivery platforms
 

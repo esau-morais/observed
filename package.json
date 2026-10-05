@@ -53,7 +53,10 @@
     "lint:fix": "bun run --bun eslint --fix",
     "format": "bun run --bun prettier --write .",
     "test": "bun run --bun vitest run",
-    "build": "bun scripts/build.ts"
+    "build": "bun scripts/build.ts",
+    "gates": "bun scripts/gate-corpus/run.ts",
+    "gates:check": "bun scripts/gate-corpus/check.ts",
+    "gates:missing": "bun scripts/gate-corpus/missing.ts"
   },
   "dependencies": {
     "agent-browser": "0.38.1"

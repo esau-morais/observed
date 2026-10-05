@@ -1,0 +1,363 @@
+import type { Project } from '../../src/project';
+import type { Expectation, Reading } from './check';
+
+const requestCheck = {
+  kind: 'request-count',
+  id: 'one-request',
+  name: 'Each Load items click sends one request',
+  scope: 'One click through completion.',
+  method: 'GET',
+  path: '/api/items',
+  expectedCount: 1,
+  status: 200,
+} as const;
+const textCheck = {
+  kind: 'text',
+  id: 'loaded-text',
+  name: 'Loading items shows the saved result',
+  scope: 'Result after one click.',
+  selector: '#result',
+  expectedText: 'Items loaded',
+} as const;
+
+export const project = {
+  schemaVersion: 1,
+  name: 'Gate corpus',
+  source: { entry: 'server.ts', paths: ['server.ts', 'app.ts', 'index.html'] },
+  setup: [
+    [
+      'bun',
+      'build',
+      'app.ts',
+      '--outdir',
+      'dist',
+      '--target',
+      'browser',
+      '--sourcemap=linked',
+    ],
+  ],
+  start: ['bun', 'server.ts'],
+  ready: { path: '/', status: 200 },
+  capture: {
+    name: 'Load items',
+    path: '/',
+    ready: [{ kind: 'wait-text', text: 'Load items' }],
+    steps: [
+      { kind: 'click-role', role: 'button', name: 'Load items' },
+      { kind: 'wait-selector', selector: 'body[data-done="true"]' },
+      { kind: 'network-idle' },
+    ],
+    checks: [requestCheck, textCheck],
+    viewport: { width: 800, height: 600, scale: 1 },
+    browserArguments: ['--no-sandbox'],
+  },
+} satisfies Project;
+
+type Assertion = Expectation['assertions'][number];
+type Selectors = Extract<Reading, { kind: 'json' }>['path'];
+
+export const resultReading = (path: Selectors): Reading => ({
+  kind: 'json',
+  file: 'result.json',
+  path,
+});
+export const atCheck = (id: string, ...fields: string[]): Selectors => [
+  'journeys',
+  0,
+  'checks',
+  { key: 'id', equals: id },
+  ...fields,
+];
+
+function verdict(id: string, expected: string): Assertion {
+  return {
+    label: `${id} verdict`,
+    actual: resultReading(atCheck(id, 'verdict')),
+    expected,
+  };
+}
+
+function measurement(
+  side: 'base' | 'candidate',
+  id: string,
+  expected: string | number,
+): Assertion {
+  return {
+    label: `${side} ${id} matches raw output`,
+    actual: resultReading([
+      'journeys',
+      0,
+      side,
+      'checks',
+      { key: 'id', equals: id },
+      'actual',
+    ]),
+    expected,
+    raw:
+      id === 'one-request'
+        ? {
+            kind: 'requests',
+            file: `journey-1/${side}/requests.har`,
+            method: 'GET',
+            pathname: '/api/items',
+            status: 200,
+          }
+        : {
+            kind: 'json',
+            file: `journey-1/${side}/text-1.json`,
+            path: ['data', 'text'],
+          },
+  };
+}
+
+type Edit = { file: string; from: string; to: string };
+export type Pair = {
+  expectation: Expectation;
+  edits: readonly Edit[];
+  candidateProject?: Project;
+};
+
+const duplicate = {
+  file: 'app.ts',
+  from: 'const requestCount = 1;',
+  to: 'const requestCount = 2;',
+};
+const correct = {
+  file: 'app.ts',
+  from: 'const requestCount = 1;',
+  to: 'const requestCount = Number("1");',
+};
+
+function pair(
+  id: string,
+  gate: number,
+  reason: string,
+  conclusion: string,
+  exitCode: 0 | 1 | 2,
+  edits: readonly Edit[],
+  assertions: readonly Assertion[],
+  candidateProject?: Project,
+): Pair {
+  return {
+    expectation: {
+      id,
+      gate,
+      reason,
+      exitCode,
+      assertions: [
+        {
+          label: 'conclusion',
+          actual: resultReading(['conclusion', 'kind']),
+          expected: conclusion,
+        },
+        ...assertions,
+      ],
+    },
+    edits,
+    ...(candidateProject === undefined ? {} : { candidateProject }),
+  };
+}
+
+const rawPassing = [
+  measurement('base', 'one-request', 1),
+  measurement('candidate', 'one-request', 1),
+];
+const rawFault = [
+  measurement('base', 'one-request', 1),
+  measurement('candidate', 'one-request', 2),
+];
+
+export const pairs: readonly Pair[] = [
+  pair(
+    'correct-change',
+    1,
+    'Equivalent request count expression executes in the saved journey.',
+    'no-regression',
+    0,
+    [correct],
+    [
+      verdict('one-request', 'passed'),
+      verdict('loaded-text', 'passed'),
+      ...rawPassing,
+      {
+        label: 'changed code ran',
+        actual: resultReading([
+          'changeScope',
+          'files',
+          { key: 'path', equals: 'app.ts' },
+          'relation',
+        ]),
+        expected: 'exercised',
+      },
+    ],
+  ),
+  pair(
+    'request-fault',
+    2,
+    'One click sends two requests instead of one.',
+    'regression',
+    2,
+    [duplicate],
+    [
+      verdict('one-request', 'regression'),
+      verdict('loaded-text', 'passed'),
+      ...rawFault,
+    ],
+  ),
+  pair(
+    'text-fault',
+    2,
+    'The saved result text is wrong after the click.',
+    'regression',
+    2,
+    [
+      {
+        file: 'app.ts',
+        from: "const resultText = 'Items loaded';",
+        to: "const resultText = 'Wrong items';",
+      },
+    ],
+    [
+      verdict('loaded-text', 'regression'),
+      ...rawPassing,
+      measurement('base', 'loaded-text', 'Items loaded'),
+      measurement('candidate', 'loaded-text', 'Wrong items'),
+    ],
+  ),
+  pair(
+    'relaxed-check',
+    5,
+    'The candidate hides the duplicate request by raising its expectation to two.',
+    'regression',
+    2,
+    [duplicate],
+    [
+      verdict('one-request', 'regression'),
+      ...rawFault,
+      {
+        label: 'altered check named',
+        actual: resultReading(atCheck('one-request', 'recipe', 'change')),
+        expected: 'altered',
+      },
+      {
+        label: 'proposal passes without setting verdict',
+        actual: resultReading(
+          atCheck('one-request', 'recipe', 'proposed', 'outcome'),
+        ),
+        expected: 'passed',
+      },
+    ],
+    {
+      ...project,
+      capture: {
+        ...project.capture,
+        checks: [{ ...requestCheck, expectedCount: 2 }, textCheck],
+      },
+    },
+  ),
+  pair(
+    'removed-check',
+    5,
+    'The candidate removes the check while doubling requests.',
+    'regression',
+    2,
+    [duplicate],
+    [
+      verdict('one-request', 'regression'),
+      ...rawFault,
+      {
+        label: 'removed check named',
+        actual: resultReading(atCheck('one-request', 'recipe', 'change')),
+        expected: 'removed',
+      },
+    ],
+    { ...project, capture: { ...project.capture, checks: [textCheck] } },
+  ),
+  pair(
+    'rewritten-journey',
+    5,
+    'A changed journey cannot claim the original expectation passed.',
+    'unavailable',
+    1,
+    [correct],
+    [
+      verdict('one-request', 'unknown'),
+      verdict('loaded-text', 'unknown'),
+      {
+        label: 'altered journey named',
+        actual: resultReading(atCheck('one-request', 'recipe', 'change')),
+        expected: 'journey-altered',
+      },
+      {
+        label: 'candidate proposal retained',
+        actual: resultReading(
+          atCheck('one-request', 'recipe', 'proposed', 'outcome'),
+        ),
+        expected: 'passed',
+      },
+    ],
+    {
+      ...project,
+      capture: {
+        ...project.capture,
+        steps: [...project.capture.steps, { kind: 'network-idle' }],
+      },
+    },
+  ),
+  pair(
+    'intentional-copy',
+    6,
+    'Description copy changes while both named checks still pass.',
+    'no-regression',
+    0,
+    [
+      {
+        file: 'index.html',
+        from: 'Load the saved items.',
+        to: 'Load your saved item list.',
+      },
+    ],
+    [
+      verdict('one-request', 'passed'),
+      verdict('loaded-text', 'passed'),
+      ...rawPassing,
+      {
+        label: 'visual difference remains an observation',
+        actual: resultReading(['journeys', 0, 'comparison', 'visual', 'kind']),
+        expected: 'changed',
+      },
+    ],
+  ),
+  pair(
+    'outside-source',
+    7,
+    'Only README.md changes, outside source.paths.',
+    'no-regression',
+    0,
+    [
+      {
+        file: 'README.md',
+        from: 'Original documentation.',
+        to: 'Updated documentation.',
+      },
+    ],
+    [
+      ...rawPassing,
+      {
+        label: 'only the outside file changed',
+        actual: resultReading(['changeScope', 'files', 'length']),
+        expected: 1,
+      },
+      {
+        label: 'outside file listed',
+        actual: resultReading([
+          'changeScope',
+          'files',
+          { key: 'path', equals: 'README.md' },
+          'relation',
+        ]),
+        expected: 'outside-captured-source',
+      },
+    ],
+  ),
+];
