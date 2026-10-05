@@ -109,7 +109,7 @@ order: work that lets a gate hold comes before work that shows more.
 | The remaining work for gates 1 to 8 in [GATE-CORPUS.md](GATE-CORPUS.md#pairs-and-limits): gate 3 and 8 pairs first, then gate 7 wording, gate 4 and 2 pairs, gate 5's removed journey and expectation text, gate 1's raw coverage cross-check, gate 6's screenshot inspection, and the corpus in CI | Next |
 | Self-observation that differs only when the viewer changed | Next. An identical comment on every pull request proves nothing |
 | Rendered diagrams for docs changes | After the gate 3 and 8 pairs. Small and show-only, and it gives gate 7 pull requests something to show |
-| Gate 9 and 10 kits | After rendered diagrams. Gate 10 needs items 1 to 5, all built |
+| Gate 9 and 10 kits | Written in [GATE-KITS.md](GATE-KITS.md). No person has run them |
 | Repository map and agent descriptions | After the kits. No gate needs them |
 | Replay | After the repository map, and still in the first release as the maintainer decided on 2026-10-03. The scene already plays the recorded steps, so gate 10 readers can shape what replay adds |
 | More scene and GIF work, narration | Waits for a gate 10 reader to need it |

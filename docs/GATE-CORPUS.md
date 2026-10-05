@@ -81,7 +81,8 @@ after 15 minutes, with a 10-second termination grace period.
 
 A green corpus summary does not mean every release gate holds. The table names
 the parts these pairs do not cover.
-Gates 9 and 10 need people and have no automated pass.
+Gates 9 and 10 need people and have no automated pass. Their session kits
+are in [GATE-KITS.md](GATE-KITS.md).
 
 Gate 2 distinguishes check-capable evidence from observations, following
 [the product contract](PRODUCT.md#proving-and-showing). Request counts, text,
