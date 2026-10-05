@@ -8,6 +8,10 @@ export const browserPairs: readonly Pair[] = [
     fixture: 'gate-react',
     baseProject: {
       ...project,
+      source: {
+        ...project.source,
+        paths: [...project.source.paths, 'package.json', 'bun.lock'],
+      },
       setup: [['bun', 'install', '--frozen-lockfile'], ...project.setup],
       capture: {
         ...project.capture,
@@ -84,6 +88,17 @@ export const browserPairs: readonly Pair[] = [
     fixture: 'gate-playwright',
     baseProject: {
       ...project,
+      source: {
+        ...project.source,
+        paths: [
+          ...project.source.paths,
+          'package.json',
+          'bun.lock',
+          'tsconfig.json',
+          'playwright.config.ts',
+          'saved.spec.ts.txt',
+        ],
+      },
       setup: [
         ['bun', 'install', '--frozen-lockfile'],
         [
