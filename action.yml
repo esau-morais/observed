@@ -277,6 +277,7 @@ runs:
         OBSERVED_IMAGE: ${{ steps.deliver.outputs.image }}
         OBSERVED_IMAGE_NOTE: ${{ steps.deliver.outputs.image-note }}
         OBSERVED_SCENE_IMAGE: ${{ steps.deliver.outputs.scene-image }}
+        OBSERVED_SCENE_NOTE: ${{ steps.deliver.outputs.scene-note }}
         OBSERVED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         OBSERVED_PULL_REQUEST: ${{ github.event.pull_request.number }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}

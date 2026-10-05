@@ -1030,8 +1030,7 @@ export type SummaryOptions = {
   repository?: string | null;
   delivery?: string | null;
   screenshots?: Screenshots | null;
-  // The stored scene GIF.
-  scene?: string | null;
+  scene?: SceneImage | null;
   run?: string | null;
   download?: string | null;
   sourceBuild?: { commit: string | null } | null;
@@ -1136,7 +1135,7 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
-    ...extra(sceneSection(result, options.scene)),
+    ...extra(sceneSection(result, options.scene?.image)),
     ...result.journeys.flatMap((journey) =>
       journey.generated === undefined
         ? []
@@ -1192,6 +1191,11 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
           ...(failures.length > 0 && !allFailed ? unavailableReasons : []),
           ...extra(unchanged(result)),
           ...extra(cropsNote === null ? null : inlineText(cropsNote)),
+          ...extra(
+            options.scene?.note === undefined || options.scene.note === null
+              ? null
+              : inlineText(options.scene.note),
+          ),
           ...conditionsLines(result).map(inlineText),
           ...limitations.map(inlineText),
           ...(page === null
@@ -1701,7 +1705,13 @@ function imageRefusal(error: unknown, userToken: boolean): string {
     : `The comment links the screenshot crops. ${error.message}.`;
 }
 
-export type SceneImage = { image: string | null; note: string | null };
+export type SceneImage = {
+  image: string | null;
+  note: string | null;
+  // A fork or a token without contents: write leaves the scene out by
+  // choice, so its note is a notice rather than a warning.
+  expected?: boolean;
+};
 
 // The scene GIF goes where the crops go: a ref outside refs/heads with the
 // workflow token, or an upload as the user. It has no artifact link to fall
@@ -1725,6 +1735,7 @@ export async function deliveredScene(options: {
     return {
       image: null,
       note: 'The comment has no scene: Observed stores no images from pull requests from forks.',
+      expected: true,
     };
   }
 
@@ -1775,12 +1786,25 @@ export async function deliveredScene(options: {
     }
   }
 
+  if (!(refused instanceof DeliveryError)) {
+    process.stderr.write(
+      `Observed: the scene was not stored: ${describeError(refused)}\n`,
+    );
+
+    return {
+      image: null,
+      note: 'The comment has no scene. Storing it failed unexpectedly; the job log has details.',
+    };
+  }
+
+  const readOnly = options.userToken === '' && refused.status === 403;
+
   return {
     image: null,
-    note:
-      refused instanceof DeliveryError
-        ? `The comment has no scene. ${refused.message}.`
-        : 'The comment has no scene. Storing it failed unexpectedly; the job log has details.',
+    note: readOnly
+      ? "The comment has no scene because the workflow token cannot write to this repository. Add contents: write to the workflow's permissions to show it."
+      : `The comment has no scene. ${refused.message}.`,
+    expected: readOnly,
   };
 }
 
@@ -2172,7 +2196,7 @@ if (import.meta.main) {
 
     if (scene?.note !== null && scene?.note !== undefined) {
       process.stdout.write(
-        `::notice title=Observed::${escapeCommand(scene.note)}\n`,
+        `::${scene.expected === true ? 'notice' : 'warning'} title=Observed::${escapeCommand(scene.note)}\n`,
       );
       notes.push(scene.note);
     } else if (scene?.image !== null && scene?.image !== undefined) {
@@ -2180,12 +2204,13 @@ if (import.meta.main) {
     }
 
     await writeOutput('scene-image', scene?.image ?? '');
+    await writeOutput('scene-note', scene?.note ?? '');
 
     const summary = summarize({
       output,
       ...context,
       screenshots,
-      scene: scene?.image ?? null,
+      scene,
       surface: { kind: 'comment' },
     });
 
@@ -2481,7 +2506,7 @@ if (import.meta.main) {
               output,
               ...context,
               screenshots,
-              scene: scene?.image ?? null,
+              scene,
               surface: { kind: 'check' },
               delivery: deliveryLine(
                 titled({ kind: 'posted', url: null }),
@@ -2557,7 +2582,10 @@ if (import.meta.main) {
               link: emptyAsNull(environment('OBSERVED_CROPS_URL')),
               note: emptyAsNull(environment('OBSERVED_IMAGE_NOTE')),
             },
-      scene: emptyAsNull(environment('OBSERVED_SCENE_IMAGE')),
+      scene: {
+        image: emptyAsNull(environment('OBSERVED_SCENE_IMAGE')),
+        note: emptyAsNull(environment('OBSERVED_SCENE_NOTE')),
+      },
       surface: { kind: 'job' },
       delivery: jobDelivery(environment('OBSERVED_DELIVERY_NOTE')),
     });

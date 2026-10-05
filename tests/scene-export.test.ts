@@ -28,7 +28,7 @@ function comment(result: Comparison) {
     artifact: 'observed-bundle',
     page: 'https://github.com/o/r/actions/runs/1/artifacts/2',
     repository: 'https://github.com/o/r',
-    scene: image,
+    scene: { image, note: null },
     surface: { kind: 'comment' },
   }).markdown;
 }
@@ -85,6 +85,7 @@ test('a scene from a fork is never stored', async () => {
   ).toEqual({
     image: null,
     note: 'The comment has no scene: Observed stores no images from pull requests from forks.',
+    expected: true,
   });
   expect(fetch).not.toHaveBeenCalled();
 });
