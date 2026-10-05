@@ -1,7 +1,9 @@
 import { Effect, Schema } from 'effect';
+import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkRun, type Expectation } from './check';
+import { provenance } from './provenance';
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 const objectSchema = Schema.Record(Schema.String, Schema.Json);
@@ -11,17 +13,54 @@ const faults = [
   'failed-base',
   'deleted-artifact',
   'old-schema',
-  'unsupported-collector',
-  'stale-capture',
+  'unsupported-evidence-version',
+  'stale-capture-and-window',
 ] as const;
 
-function expectation(id: string): Expectation {
+type Fault = (typeof faults)[number];
+
+const reasons = {
+  'failed-base': ['Capture failed (application): Seeded base startup failure'],
+  'deleted-artifact': ['evidence-text: Artifact could not be read (ENOENT)'],
+  'old-schema': [
+    'Baseline unavailable: Capture manifest schema version 3 is unsupported. This Observed reads version 5. Capture this revision again.',
+  ],
+  'unsupported-evidence-version': [],
+  'stale-capture-and-window': [
+    'Capture is stale: older than 86400000 ms',
+    'Observation window is inverted or outside the capture interval',
+  ],
+} satisfies Record<Fault, readonly string[]>;
+
+function expectation(id: Fault): Expectation {
   return {
     id,
     gate: 4,
     reason: `A ${id} leaves the comparison unavailable.`,
     exitCode: 1,
     assertions: [
+      {
+        label: 'specific unavailability reason',
+        actual: {
+          kind: 'json',
+          file: 'result.json',
+          path:
+            id === 'unsupported-evidence-version'
+              ? [
+                  'journeys',
+                  0,
+                  'base',
+                  'evidence',
+                  { key: 'kind', equals: 'text' },
+                  'reason',
+                ]
+              : ['journeys', 0, 'base', 'unresolved'],
+        },
+        expected:
+          id === 'unsupported-evidence-version'
+            ? 'Evidence schema version 999 is unsupported'
+            : reasons[id],
+      },
       {
         label: 'unavailable conclusion',
         actual: {
@@ -83,6 +122,18 @@ await Effect.runPromise(
       json(faults.map(expectation)),
       { flag: 'wx' },
     );
+    await writeFile(
+      path.join(output, 'tool.json'),
+      json({
+        ...(await provenance(path.resolve(import.meta.dirname, '../..'))),
+        source: {
+          report: source,
+          resultSha256: createHash('sha256')
+            .update(await readFile(path.join(source, 'result.json')))
+            .digest('hex'),
+        },
+      }),
+    );
     const results = [];
 
     for (const fault of faults) {
@@ -116,7 +167,7 @@ await Effect.runPromise(
         case 'old-schema':
           manifest.schemaVersion = 3;
           break;
-        case 'unsupported-collector': {
+        case 'unsupported-evidence-version': {
           const entries = Schema.decodeUnknownSync(Schema.Array(objectSchema))(
             manifest.evidence,
           );
@@ -125,7 +176,7 @@ await Effect.runPromise(
           );
           break;
         }
-        case 'stale-capture':
+        case 'stale-capture-and-window':
           manifest.startedAt = '2020-01-01T00:00:00.000Z';
           manifest.finishedAt = '2020-01-01T00:00:01.000Z';
           break;

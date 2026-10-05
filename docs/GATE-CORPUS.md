@@ -26,8 +26,9 @@ bun run gates:check evidence/gates-01/request-fault/run/report \
 ```
 
 The runner saves each fixture's commits, command output, exit code, raw captures,
-exported report, and checker result. `summary.json` lists failures. A failed
-assertion or unreadable artifact makes the checker exit 1. Capture directories
+exported report, and checker result. `summary.json` lists completed pair results.
+Setup or Git errors stop the run with a nonzero exit before the summary is
+written. A failed assertion or unreadable artifact makes the checker exit 1. Capture directories
 are retained, including failed runs. The missing-evidence runner modifies only
 copies of a completed pair.
 
@@ -40,16 +41,16 @@ locally through `bun run gates`; CI execution of the full corpus is pending.
 | --- | --- | --- | --- |
 | 1 | `correct-change` | Exit 0, passing checks, HAR count 1 on each side, exercised `app.ts` | Check changed-line mapping against raw coverage |
 | 2 | `request-fault`, `text-fault` | Exit 2, regression, exact HAR counts or raw element text on both sides | Accessibility, browser errors, performance, React, API operations, imported Playwright; observation-only kinds need separate expectations |
-| 3 | Reserved for session F | Two generated-journey pairs, one error and one wrong-data change | Integrate F's pairs and checker readings; no pass claimed here |
-| 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-collector`, `stale-capture` | Exit 1, unavailable conclusion, unknown base evidence, candidate HAR | Stale revision identity; a real base startup failure. The current failed-base pair changes capture metadata. The stale pair also invalidates the observation interval |
+| 3 | Reserved for the generated-journeys slice | No readings yet | Add one error pair and one wrong-data pair; no pass claimed here |
+| 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window` | Exit 1, unavailable conclusion, unknown base evidence, exact failure reasons, candidate HAR | Unknown collector kind; stale revision identity; a real base startup failure. The current failed-base pair changes capture metadata. The stale pair asserts both age and interval errors; it does not isolate age detection |
 | 5 | `relaxed-check`, `removed-check`, `rewritten-journey` | Base request count 1, candidate 2, protected regression, proposed outcome; altered journey stays unknown | Explicit base/proposed expectation text and removed-journey pair |
-| 6 | `intentional-copy` | Changed pixels, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
+| 6 | `intentional-copy` | Reported visual-change status, passing checks, exit 0, unchanged HAR count | Independently inspect screenshot difference |
 | 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR | Assert rendered wording says no captured file changed |
 | 8 | Checker corruption tests only | Forged verdicts, wrong values, wrong exit, missing/malformed raw output, escaping symlink | Seed faults into disposable copies of the comparator and collector |
 
-No green corpus summary means every release gate holds. The table names the
-parts these pairs do not cover. Gate 3 belongs to session F; gates 9 and 10 need
-people and have no automated pass.
+A green corpus summary does not mean every release gate holds. The table names
+the parts these pairs do not cover. Gate 3 follows the generated-journeys slice.
+Gates 9 and 10 need people and have no automated pass.
 
 The trial repository has the request pair at
 [observed-trial-express#20](https://github.com/esau-morais/observed-trial-express/pull/20),

@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkRun } from './check';
 import { pairs, project } from './cases';
+import { provenance } from './provenance';
 
 const tool = path.resolve(import.meta.dirname, '../..');
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
@@ -55,12 +56,7 @@ await Effect.runPromise(
     );
     await writeFile(
       path.join(output, 'tool.json'),
-      json({
-        commit: await git(tool, 'rev-parse', 'HEAD'),
-        diff: await git(tool, 'diff', 'HEAD'),
-        status: await git(tool, 'status', '--short'),
-        bun: Bun.version,
-      }),
+      json(await provenance(tool)),
     );
 
     const results = [];
@@ -84,6 +80,8 @@ await Effect.runPromise(
         'Original documentation.\n',
       );
       await git(fixture, 'init', '-b', 'main');
+      await git(fixture, 'config', 'commit.gpgsign', 'false');
+      await git(fixture, 'config', 'core.hooksPath', '/dev/null');
       await git(fixture, 'config', 'user.name', 'Observed gate corpus');
       await git(fixture, 'config', 'user.email', 'gate-corpus@example.invalid');
       await git(fixture, 'add', '.');
