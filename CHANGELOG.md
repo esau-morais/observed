@@ -7,22 +7,26 @@ action's inputs.
 ## 0.2.0-alpha.5 (2026-10-04)
 
 Sixth alpha of 0.2.0, published under the npm dist-tags `alpha` and `latest`.
-The action gains the `comment` and `image-upload-token` inputs, and `github-token`
-now also stores screenshot crops, which needs `contents: write`. The `v0` tag
-stays on 0.1.0. `result.json` moves to schema version 9, for paths from the
-repository root: the viewer and the action reject a version 8 result and ask
-you to capture both revisions again.
+The action gains the `comment` and `image-upload-token` inputs, and
+`github-token` now also stores screenshot crops, which needs `contents: write`.
+The `v0` tag stays on 0.1.0. `result.json` moves to schema version 9, because
+paths now start at the repository root: the viewer and the action reject a
+version 8 result and ask you to capture both revisions again.
 
-- **One short pull request comment.** Above the fold: the verdict, the
-  before, after and changed-pixel crops, a table of changed files grouped by
-  the evidence that touched them, and the report link. Everything else sits in
-  one collapsed block, and a reason several files share is said once. Paths
+- **One short pull request comment.** Visible without expanding: the verdict,
+  the before, after and changed-pixel crops, a table of changed files grouped
+  by the evidence that touched them, and the report link. Everything else sits
+  in one collapsed block, and files with the same reason share one line. Paths
   start at the repository root and link to the file's diff. `comment: off`
   turns the comment off; the check and job summary still carry the result.
+  Slack keeps its message ID in the comment, so without one it posts a new
+  message for each failing run.
 - **Screenshot crops inline with the workflow token.** With `contents: write`,
   `github-token` commits the crops to a ref under `refs/observed/crops/`,
-  outside `refs/heads`, and the comment loads them by commit. Later runs delete
-  refs older than `retention-days`. Without the permission, or on a fork, the
+  outside `refs/heads`, and the comment loads the image from that commit's SHA.
+  `slack-images` posts the same crops in place of one region. Later runs delete
+  refs older than `retention-days`. The workflow that `observed` writes grants
+  the permission. Without it, or on a fork, the
   comment links the crops and a notice says why. `image-upload-token`, a
   user's token, is a fallback. Storing an image never changes the verdict.
 - **report.md leads with the conclusion.** The conclusion, the screen
@@ -34,8 +38,8 @@ you to capture both revisions again.
   JavaScript drops from 585 KB to 161 KB gzipped.
 - **A view per evidence type.** Screenshots open in a before and after
   comparator with side by side, diff, slider and onion skin modes. React shows
-  before and after component trees with render counts, requests a ledger diff,
-  and performance every sample with its median and range.
+  before and after component trees with render counts, requests show a ledger
+  diff, and performance shows every sample with its median and range.
 
 ## 0.2.0-alpha.4 (2026-10-03)
 
