@@ -157,6 +157,38 @@ function measurement(
   };
 }
 
+const protectedRequest = 'Exactly 1 GET /api/items request(s) with status 200.';
+const proposedRequest = 'Exactly 2 GET /api/items request(s) with status 200.';
+
+function reportText(includes: string): Assertion {
+  return {
+    label: `report: ${includes}`,
+    actual: { kind: 'text', file: 'report.md', includes },
+    expected: true,
+  };
+}
+
+function protectedText(proposed?: string): Assertion[] {
+  return [
+    {
+      label: 'protected expectation retained',
+      actual: resultReading(atCheck('one-request', 'expectation')),
+      expected: protectedRequest,
+    },
+    ...(proposed === undefined
+      ? []
+      : [
+          {
+            label: 'proposed expectation retained separately',
+            actual: resultReading(
+              atCheck('one-request', 'recipe', 'proposed', 'expectation'),
+            ),
+            expected: proposed,
+          },
+        ]),
+  ];
+}
+
 type Edit = { file: string; from: string; to: string };
 export type Pair = {
   expectation: Expectation;
@@ -287,7 +319,17 @@ export const pairs: readonly Pair[] = [
     [duplicate],
     [
       verdict('one-request', 'regression'),
+      verdict('loaded-text', 'passed'),
+      ...measuredAssertions({ id: 'one-request' }),
       ...rawFault,
+      ...protectedText(proposedRequest),
+      reportText(
+        'Base expectation, regression: Exactly 1 GET /api/items request\\(s\\) with status 200\\.',
+      ),
+      reportText(
+        'Proposed, passed: Exactly 2 GET /api/items request\\(s\\) with status 200\\.',
+      ),
+      reportText('The proposal sets no verdict\\.'),
       {
         label: 'altered check named',
         actual: resultReading(atCheck('one-request', 'recipe', 'change')),
@@ -318,7 +360,13 @@ export const pairs: readonly Pair[] = [
     [duplicate],
     [
       verdict('one-request', 'regression'),
+      verdict('loaded-text', 'passed'),
+      ...measuredAssertions({ id: 'one-request' }),
       ...rawFault,
+      ...protectedText(),
+      reportText(
+        'Removed by this change: Each Load items click sends one request\\. Base expectation, regression: Exactly 1 GET /api/items request\\(s\\) with status 200\\.',
+      ),
       {
         label: 'removed check named',
         actual: resultReading(atCheck('one-request', 'recipe', 'change')),
@@ -337,6 +385,55 @@ export const pairs: readonly Pair[] = [
     [
       verdict('one-request', 'unknown'),
       verdict('loaded-text', 'unknown'),
+      ...protectedText(protectedRequest),
+      ...(['base', 'candidate'] as const).flatMap((side): Assertion[] => [
+        {
+          label: `${side} rewritten journey completed`,
+          actual: resultReading(['journeys', 0, side, 'execution']),
+          expected: 'complete',
+        },
+        {
+          label: `${side} changed steps still sent one request`,
+          actual: {
+            kind: 'requests',
+            file: `journey-1/${side}/requests.har`,
+            method: 'GET',
+            pathname: '/api/items',
+            status: 200,
+          },
+          expected: 1,
+        },
+        ...['one-request', 'loaded-text'].map((id) => ({
+          label: `${side} ${id} stays unknown after step changes`,
+          actual: resultReading([
+            'journeys',
+            0,
+            side,
+            'checks',
+            { key: 'id', equals: id },
+            'outcome',
+          ]),
+          expected: 'unknown',
+        })),
+      ]),
+      {
+        label: 'protected steps and proposed steps shown',
+        actual: resultReading([
+          'changeScope',
+          'recipe',
+          'differences',
+          { key: 'journey', equals: 'Load items' },
+          'fields',
+        ]),
+        expected: [
+          {
+            field: 'steps',
+            base: project.capture.steps,
+            candidate: [...project.capture.steps, { kind: 'network-idle' }],
+          },
+        ],
+      },
+      reportText('Every check in it is unknown\\.'),
       {
         label: 'altered journey named',
         actual: resultReading(atCheck('one-request', 'recipe', 'change')),
@@ -358,6 +455,75 @@ export const pairs: readonly Pair[] = [
       },
     },
   ),
+  {
+    ...pair(
+      'removed-journey',
+      5,
+      'Removing a saved journey leaves its protected checks unknown even when the remaining journey passes.',
+      'unavailable',
+      1,
+      [],
+      [
+        verdict('one-request', 'passed'),
+        verdict('loaded-text', 'passed'),
+        ...measuredAssertions(),
+        ...rawPassing,
+        {
+          label: 'only the retained journey ran',
+          actual: resultReading(['journeys', 'length']),
+          expected: 1,
+        },
+        {
+          label: 'removed journey keeps both unknown protected checks',
+          actual: resultReading(['removedJourneys']),
+          expected: [
+            {
+              journey: 'Reload items',
+              checks: [
+                { ...requestCheck, expectation: protectedRequest },
+                {
+                  ...textCheck,
+                  expectation:
+                    'Exactly one #result element with text "Items loaded".',
+                },
+              ].map(({ id, name, scope, expectation }) => ({
+                id,
+                name,
+                scope,
+                expectation,
+                verdict: 'unknown',
+                detail:
+                  'This change removes the journey, so no capture ran this check.',
+                recipe: { change: 'removed' },
+              })),
+            },
+          ],
+        },
+        {
+          label: 'unknown checks remain in the total',
+          actual: resultReading(['summary']),
+          expected: { passed: 2, total: 4 },
+        },
+        {
+          label: 'removed journey named in recipe differences',
+          actual: resultReading(['changeScope', 'recipe', 'differences']),
+          expected: [{ journey: 'Reload items', change: 'removed' }],
+        },
+        reportText(
+          'Removed by this change: journey Reload items\\. No capture ran its checks, so they are unknown: Each Load items click sends one request, Loading items shows the saved result\\.',
+        ),
+      ],
+      project,
+    ),
+    baseProject: (() => {
+      const { capture, ...settings } = project;
+
+      return {
+        ...settings,
+        journeys: [capture, { ...capture, name: 'Reload items' }],
+      };
+    })(),
+  },
   pair(
     'intentional-copy',
     6,
