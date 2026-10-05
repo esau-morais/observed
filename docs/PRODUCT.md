@@ -65,7 +65,7 @@ like any other file. Either way, Observed can show the change:
 
 | Change | What the result shows |
 | --- | --- |
-| A Markdown file whose `mermaid` block changed | Planned. Each changed diagram rendered from base and candidate, side by side, labeled as an observation. A diagram that does not render shows its error on that side |
+| A Markdown file whose `mermaid` block changed | Each changed diagram rendered from base and candidate, side by side, labeled as an observation. A diagram that does not render shows its error on that side |
 | Other Markdown | The file and a link to the code host's rendered diff. Observed does not render prose again |
 | `observed.json` | The [altered checks](#altered-checks) rules, which are proof |
 | Configuration inside `source.paths` | Covered by the journeys that build and run it. No collector reads it, so its relation is "not observed" with that reason |

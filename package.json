@@ -27,6 +27,7 @@
     "dist/observed.js",
     "dist/github-action.js",
     "dist/viewer/",
+    "dist/diagrams/",
     "dist/THIRD-PARTY-NOTICES.txt",
     "CHANGELOG.md"
   ],
@@ -81,6 +82,8 @@
     "effect": "4.0.0-rc.117",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
+    "mdast-util-from-markdown": "2.1.0",
+    "mermaid": "12.1.0",
     "prettier": "3.9.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",

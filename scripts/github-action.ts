@@ -36,6 +36,11 @@ import {
   writeComment,
 } from './github-delivery';
 import { sceneGif } from './scene-gif';
+import {
+  deliverDiagrams,
+  diagramSection,
+  type DiagramDelivery,
+} from './diagram-delivery';
 import { screenshotCrops } from './screenshot-crops';
 import { exportedScene } from '../src/viewer/scene-model';
 import { statusWords } from '../src/status-words';
@@ -1032,6 +1037,7 @@ export type SummaryOptions = {
   delivery?: string | null;
   screenshots?: Screenshots | null;
   scene?: SceneImage | null;
+  diagrams?: DiagramDelivery | null;
   run?: string | null;
   download?: string | null;
   sourceBuild?: { commit: string | null } | null;
@@ -1136,6 +1142,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
         : [inlineText(scopeLine(result.changeScope))]),
       ...extra(recipeSummary === null ? null : inlineText(recipeSummary)),
     ]),
+    ...extra(
+      scoped === null ? diagramSection(options.diagrams, inlineText) : null,
+    ),
     ...extra(sceneSection(result, options.scene?.image)),
     ...result.journeys.flatMap((journey) =>
       journey.generated === undefined
@@ -1161,6 +1170,9 @@ function resultSummary(frame: Frame, result: Comparison): Summary {
     ...extra(reasons.length === 0 ? null : reasons.join('\n')),
     ...extra(screenshotSection(result, options.screenshots ?? null)),
     ...extra(scoped?.table),
+    ...extra(
+      scoped === null ? null : diagramSection(options.diagrams, inlineText),
+    ),
     page === null
       ? `No report page was uploaded. ${bundle}`
       : `**[Open the report](${page})**`,
@@ -2219,11 +2231,54 @@ if (import.meta.main) {
     await writeOutput('scene-image', scene?.image ?? '');
     await writeOutput('scene-note', scene?.note ?? '');
 
+    const diagrams =
+      Option.isNone(decoded) ||
+      context.exitCode !==
+        conclusionExitCodes[decoded.value.result.conclusion.kind]
+        ? null
+        : await deliverDiagrams({
+            directory: path.join(path.dirname(resultFile), 'run/report'),
+            result: decoded.value.result,
+            publish:
+              !commenting || source === 'fork'
+                ? null
+                : async (file, bytes) => {
+                    const name = path.basename(file);
+                    try {
+                      return await commitImage(workflow, {
+                        server: environment('GITHUB_SERVER_URL'),
+                        ref: `${imageRef(now, { run: environment('GITHUB_RUN_ID'), attempt: environment('GITHUB_RUN_ATTEMPT'), artifact })}-diagram-${name}`,
+                        name,
+                        bytes,
+                      });
+                    } catch (error) {
+                      const token = environment('OBSERVED_IMAGE_TOKEN');
+                      if (token === '') {
+                        throw error;
+                      }
+
+                      return await uploadImage({
+                        server: environment('GITHUB_SERVER_URL'),
+                        token,
+                        repositoryId: environment('GITHUB_REPOSITORY_ID'),
+                        name,
+                        bytes,
+                        contentType: 'image/png',
+                      });
+                    }
+                  },
+            skipReason:
+              source === 'fork'
+                ? 'Rendered diagram in the evidence bundle; images from forks are not stored.'
+                : 'Rendered diagram in the evidence bundle; comment delivery is off.',
+          });
+
     const summary = summarize({
       output,
       ...context,
       screenshots,
       scene,
+      diagrams,
       surface: { kind: 'comment' },
     });
 

@@ -3,7 +3,8 @@ import path from 'node:path';
 import { gitChanges } from './capture/changed-files';
 import { captureApplication } from './capture/coordinator';
 import { processOutput } from './capture/process';
-import { json } from './encoding';
+import { json, sha256 } from './encoding';
+import { captureDiagrams } from './diagrams/capture';
 import { exportComparison } from './export';
 import { packaged } from './installation';
 import { readBaseJourneys } from './capture/base-project';
@@ -198,7 +199,7 @@ export const runProject = Effect.fn('runProject')(function* (options: {
       path.join(directory, 'viewer-build.jsonl'),
     );
 
-    return yield* exportComparison({
+    const exported = yield* exportComparison({
       viewerDirectory,
       journeys: [first, ...rest],
       directory: path.join(directory, 'report'),
@@ -206,5 +207,25 @@ export const runProject = Effect.fn('runProject')(function* (options: {
       ...(changes === undefined ? {} : { changes }),
       ...(sources === undefined ? {} : { recipes: sources }),
     });
+    if (options.baseRevision !== null && changes !== undefined) {
+      yield* captureDiagrams({
+        projectRoot: root,
+        toolRoot: options.toolRoot,
+        directory: exported.directory,
+        baseRevision: options.baseRevision,
+        candidateRevision: options.candidateRevision,
+        changes,
+        resultHash: sha256(json(exported.result)),
+        browserArguments: savedRecipes[0]?.browserArguments ?? [],
+      }).pipe(
+        Effect.catch((error) =>
+          Console.warn(
+            `Diagram observations could not be saved: ${String(error)}`,
+          ),
+        ),
+      );
+    }
+
+    return exported;
   }).pipe(Effect.scoped);
 });

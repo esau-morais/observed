@@ -91,6 +91,21 @@ for (const [entry, name] of [
   addPackages(Object.keys(output.metafile?.inputs ?? {}));
 }
 
+const diagrams = await Bun.build({
+  entrypoints: [path.join(root, 'src/diagrams/browser.ts')],
+  target: 'browser',
+  format: 'iife',
+  minify: true,
+  naming: 'renderer.js',
+  outdir: path.join(root, 'dist/diagrams'),
+  metafile: true,
+});
+if (!diagrams.success) {
+  throw new Error('The Mermaid renderer could not be bundled');
+}
+
+addPackages(Object.keys(diagrams.metafile?.inputs ?? {}));
+
 const collectModules: Plugin = {
   name: 'observed-collect-modules',
   generateBundle() {
