@@ -41,8 +41,9 @@ branch and one reviewable slice.
    inputs and relevant environment remain unchanged. Before pushing a fix to a
    claim, status, or rule, search every doc that restates it and fix each copy.
    When two rounds find the same kind of problem, such as a parser missing
-   another input, find the shared cause and add a check that catches the next
-   case; change the approach only when it cannot meet the contract.
+   another input, fix their shared cause with the smallest change that covers
+   it and add a check that catches the next case. Change the approach only when
+   it cannot meet the contract.
 5. Commit intended paths, push, and open or update the PR with a description
    written as [below](#write-the-pr-description). Run rebase, commit, push, and
    PR creation as separate commands and stop at the first failure; after an
@@ -113,16 +114,16 @@ placeholder replies. If a shared account's pending review blocks inline
 replies, do not submit or delete that review; post one linked PR comment
 instead of repeating failed calls.
 
-Watch pending checks with `gh pr checks --watch` as a background command with
-a timeout, then fetch review state again. That command does not watch reviews.
+Watch pending checks with `gh pr checks --watch` as a background command with a
+timeout, then fetch review state again. That command does not watch reviews.
 Wait for child reviews the same way, or end the turn and let their completion
-resume it. Record where the work stands before any wait. A foreground wait
-holds the turn, so nothing reaches the session until it ends. During an active review session, start an
-actual bounded watcher for new or edited comments, reviews, thread state, and head
-changes. State its interval and duration. Handle events and resume the watch while
-the authorized session remains active. Do not hand off after one quiet fetch.
-If the watch expires, access fails, or the user pauses work, report that it stopped.
-No completed agent or skill keeps watching on its own.
+resume it. Record where the work stands before any wait. During an active review
+session, start an actual bounded watcher for new or edited comments, reviews,
+thread state, and head changes. State its interval and duration. Handle events
+and resume the watch while the authorized session remains active. Do not hand
+off after one quiet fetch. If the watch expires, access fails, or the user
+pauses work, report that it stopped. No completed agent or skill keeps watching
+on its own.
 
 Limit repeated fix/push cycles for the same unresolved failure to three. Report
 the concrete blocker rather than retrying indefinitely or weakening checks.
