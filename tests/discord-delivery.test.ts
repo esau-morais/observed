@@ -124,9 +124,7 @@ test('captured names cannot mention anyone or format the Discord message, and ca
     'Order total \\@everyone \\<\\@123\\> \\[x\\]\\(https://evil.test\\) \\*\\*',
   );
   expect(payload.content).toMatch(/^⚠️ /);
-  expect(payload.content).toContain(
-    '[o/r#7](<https://github.com/o/r/pull/7>)',
-  );
+  expect(payload.content).toContain('[o/r#7](<https://github.com/o/r/pull/7>)');
   expect(text).toContain('1 of 1 check unknown');
   expect(text).not.toContain('Captured');
 });
