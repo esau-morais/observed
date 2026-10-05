@@ -39,8 +39,13 @@ written. A failed assertion or unreadable artifact makes the checker exit 1. Cap
 are retained, including failed runs. The missing-evidence runner commits its expectations in the output directory
 before modifying copies of a completed pair.
 
-The checker tests run in `bun run test` and CI. Browser pairs currently run
-locally through `bun run gates`; CI execution of the full corpus is pending.
+The checker tests run in `bun run test` and CI. The
+[Corpus workflow](../.github/workflows/corpus.yml) runs `gates:faults`, which
+covers every pair, the missing-evidence probes and the seeded faults, on pull
+requests that change `src`, the corpus scripts, gate fixtures or dependencies,
+and on every push to main. It takes about seven minutes, so other pull requests
+skip it. It is not a required check. Each run uploads its evidence as the
+`gate-corpus` artifact for seven days.
 
 ### Seeded source faults
 
@@ -70,12 +75,12 @@ after 15 minutes, with a 10-second termination grace period.
 
 | Gate | Runnable pairs | What the checker reads | Remaining work |
 | --- | --- | --- | --- |
-| 1 | `correct-change`, `correct-mapped-change` | Exit 0, passing checks, raw HAR and text; fixed shifted source map cross-checked against raw CDP, with one changed line executed and one untouched | Arbitrary bundler maps are not covered; corpus CI remains pending |
-| 2 | Eight [fault pairs](#seeded-evidence-kinds) and `observation-change` | Regression and exit 2 for each fault, measurements against raw output; changed observations keep two passing checks and exit 0 | One bounded fault per check-capable kind, not every check option. Corpus CI and independent visual inspection remain pending |
-| 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys. CI execution remains pending |
+| 1 | `correct-change`, `correct-mapped-change` | Exit 0, passing checks, raw HAR and text; fixed shifted source map cross-checked against raw CDP, with one changed line executed and one untouched | Arbitrary bundler maps are not covered |
+| 2 | Eight [fault pairs](#seeded-evidence-kinds) and `observation-change` | Regression and exit 2 for each fault, measurements against raw output; changed observations keep two passing checks and exit 0 | One bounded fault per check-capable kind, not every check option. Independent visual inspection remains pending |
+| 3 | `outside-error-saved`, `outside-error-generated`, `outside-data-saved`, `outside-data-generated` | Saved summary passes while the changed line does not run; generated line execution matches innermost raw CDP ranges; browser errors 0 → 1 regress with exit 2; text $120.00 → $12.00 is an observation with exit 0; revision and proposal identities | Authored proposals test execution, not a model's ability to discover journeys |
 | 4 | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity`, `startup-failure` | Exit 1, unavailable comparison, unknown missing evidence, exact failure reasons, candidate HAR; real startup log and process exit; preserved selection hash rejects an older revision | The identity pair covers saved-report revalidation, not GitHub event freshness. The age pair asserts both age and interval errors; it does not isolate age detection |
-| 5 | `relaxed-check`, `removed-check`, `rewritten-journey`, `removed-journey` | Raw HAR counts, protected/proposed expectation text and saved Markdown, both changed step definitions; removed journey retains two unknown checks alongside two passing checks | A pair that changes `source`, `setup` or `start`; corpus CI |
-| 6 | `intentional-copy` | Passing checks, exit 0, unchanged HAR count; [raw screenshots decoded by the checker](#screenshot-inspection) change only on the description line; the reported size and differing-pixel count match, and the reported regions lie inside the box around the raw difference | Pixel bands assume the fixture's plain background; corpus CI remains pending |
+| 5 | `relaxed-check`, `removed-check`, `rewritten-journey`, `removed-journey` | Raw HAR counts, protected/proposed expectation text and saved Markdown, both changed step definitions; removed journey retains two unknown checks alongside two passing checks | A pair that changes `source`, `setup` or `start` |
+| 6 | `intentional-copy` | Passing checks, exit 0, unchanged HAR count; [raw screenshots decoded by the checker](#screenshot-inspection) change only on the description line; the reported size and differing-pixel count match, and the reported regions lie inside the box around the raw difference | Pixel bands assume the fixture's plain background |
 | 7 | `outside-source` | Only README.md changed, outside-captured-source relation, unchanged HAR; saved report says no captured file changed, lists README.md, and limits checks to their scopes | Wording assertions cover the Markdown report; other delivery surfaces are not checked by this pair |
 | 8 | `passing-above-unavailable`, `unavailable-as-passing`, `regression-as-passed`, `collector-drops-requests` | Each source mutation makes the corpus red; both availability faults fail with missing and failed bases. Unmutated corpus passes on the same commit; raw HAR corroborates the request faults | These four known faults are covered, not arbitrary comparator or collector defects. Checker corruption tests are separate safeguards |
 
@@ -130,7 +135,7 @@ can substitute for the mapped function's execution.
 
 This is a local CLI run of published refs, not GitHub workflow delivery.
 It verifies one authored shifted map, not every bundler. The original
-`correct-change` pair remains a separate smoke check. Corpus CI is pending.
+`correct-change` pair remains a separate smoke check.
 
 ## Screenshot inspection
 
@@ -155,7 +160,7 @@ depend on the comparator's threshold.
 
 This is a local CLI run of published refs, not GitHub workflow delivery. The
 band rule relies on the fixture's plain background and is not a general
-layout check. Corpus CI is pending.
+layout check.
 
 ## Altered expectations
 
@@ -180,7 +185,7 @@ retained journey's two checks pass. Both journey changes exit 1.
 
 These are local CLI runs of published trial refs, not GitHub workflow delivery
 checks. No rendered output changed in this corpus update. Changes to `source`,
-`setup` or `start` remain uncovered, as does CI execution of these pairs.
+`setup` or `start` remain uncovered.
 
 ## Seeded evidence kinds
 
