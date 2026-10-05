@@ -546,7 +546,7 @@ test('shifted mapping expectations reject forged lines and absent raw execution'
   expect(await result([[2, 2]], [[6, 6]])).toBe(false);
 });
 
-test('shifted mapping rejects unavailable mapped coverage despite retained scope claims', async () => {
+test('shifted mapping requires recorded coverage on both sides and for the saved journey', async () => {
   const root = await fixture();
   const labels = [
     'scope recorded',
@@ -580,9 +580,7 @@ test('shifted mapping rejects unavailable mapped coverage despite retained scope
   const replacements = (recorded: object, field: string) => [
     [],
     [recorded, recorded],
-    ...['unknown', 'incomplete', 'not-run', 'none'].map((state) => [
-      { ...recorded, [field]: state },
-    ]),
+    [{ ...recorded, [field]: 'unavailable', reason: 'Coverage not available' }],
   ];
   const run = async (value: unknown) => {
     await writeFile(path.join(root, 'result.json'), JSON.stringify(value));
