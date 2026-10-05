@@ -113,3 +113,19 @@ missing handler coverage.
 It also checks the generated journey's change-map connection. An error can
 make the file's relation checked through a stack frame; that relation alone
 does not establish execution coverage.
+
+## Missing evidence
+
+The startup pair requires a real base process to exit before readiness. Its
+base checks are unknown and the comparison is unavailable with exit 1. Candidate
+checks still report their own measured outcomes; a candidate pass does not
+establish a passing comparison against missing base evidence. Expectations must
+read both dimensions.
+
+The unknown-collector probe replaces a copied text evidence entry with an
+unsupported kind. It must retain the unsupported reason, unknown base text check,
+and unavailable conclusion. The stale-revision probe substitutes the older base
+capture for the selected candidate in a copied report without changing selection
+hashes. It invokes the saved viewer's revalidation boundary and maps that result
+to the documented conclusion exit code. This is a saved-report identity check,
+not a new `compare` CLI option or a GitHub event freshness check.

@@ -1982,6 +1982,47 @@ test('evidence recorded under different conditions is not comparable', async () 
   expect(result.conclusion.kind).toBe('unavailable');
 });
 
+test.each(['base', 'candidate', 'both'] as const)(
+  'unsupported collector on %s cannot establish no regression',
+  async (side) => {
+    const base = await syntheticBundle({
+      contract: twoChecks,
+      text: statusText('Saved'),
+    });
+    const candidate = await syntheticBundle({
+      contract: twoChecks,
+      text: statusText('Saved'),
+    });
+    const bundles =
+      side === 'both'
+        ? [base, candidate]
+        : [side === 'base' ? base : candidate];
+    for (const bundle of bundles) {
+      await saveManifest(bundle.directory, {
+        ...bundle.capture,
+        evidence: bundle.capture.evidence.map((entry) =>
+          entry.kind === 'text'
+            ? { ...entry, kind: 'future-collector' }
+            : entry,
+        ),
+      });
+    }
+
+    const { journey } = await Effect.runPromise(
+      inspectJourney({
+        baseDirectory: base.directory,
+        candidateDirectory: candidate.directory,
+        evaluatedAt,
+      }),
+    );
+    expect(journey.conclusion.kind).toBe('unavailable');
+    expect(journey.comparison).toMatchObject({ kind: 'unavailable' });
+    expect(
+      journey.checks.find((check) => check.id === requestCheck.id)?.verdict,
+    ).toBe('passed');
+  },
+);
+
 test('evidence whose file changed after capture leaves its check unknown, not passed', async () => {
   const bundle = await syntheticBundle({
     contract: twoChecks,

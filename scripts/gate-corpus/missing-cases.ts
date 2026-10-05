@@ -1,5 +1,5 @@
 import type { Pair } from './cases';
-import { atCheck, resultReading } from './cases';
+import { resultReading } from './cases';
 
 const startupError = "throw new Error('Gate corpus startup failure');\n";
 const reason = 'Application exited before readiness; see application.log';
@@ -15,6 +15,11 @@ export const startupFailurePair: Pair = {
       {
         label: 'unavailable conclusion',
         actual: resultReading(['conclusion', 'kind']),
+        expected: 'unavailable',
+      },
+      {
+        label: 'failed base prevents comparison',
+        actual: resultReading(['journeys', 0, 'comparison', 'kind']),
         expected: 'unavailable',
       },
       {
@@ -72,11 +77,6 @@ export const startupFailurePair: Pair = {
             { key: 'id', equals: id },
             'outcome',
           ]),
-          expected: 'unknown',
-        },
-        {
-          label: `${id} cannot establish a regression or pass`,
-          actual: resultReading(atCheck(id, 'verdict')),
           expected: 'unknown',
         },
         {

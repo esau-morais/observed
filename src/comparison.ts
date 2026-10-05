@@ -1160,6 +1160,17 @@ function comparisonProblems(base: Side, candidate: Side): string[] {
     const before = base.capture.manifest;
     const after = candidate.capture.manifest;
 
+    for (const [name, capture] of [
+      ['Base', before],
+      ['Candidate', after],
+    ] as const) {
+      for (const entry of capture.evidence) {
+        if (!isEvidenceKind(entry.kind)) {
+          reasons.push(`${name} evidence kind ${entry.kind} is unsupported`);
+        }
+      }
+    }
+
     if (before.application !== after.application) {
       reasons.push('Captures belong to different applications');
     }
