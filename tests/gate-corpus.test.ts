@@ -558,3 +558,47 @@ test('fault expectations reject retained measurements on unknown or not-run side
     }
   }
 });
+
+test.each([
+  ['relaxed-check', 1, 2],
+  ['removed-check', 1, 2],
+  ['rewritten-journey', 0, 2],
+  ['removed-journey', 2, 4],
+] as const)(
+  '%s rejects inflated pass counts and missing checks',
+  async (id, passed, total) => {
+    const pair = pairs.find((item) => item.expectation.id === id);
+    if (pair === undefined) {
+      throw new Error('Missing altered-expectation pair');
+    }
+
+    const [first, ...rest] = pair.expectation.assertions.filter(
+      ({ actual }) =>
+        actual.kind === 'json' &&
+        actual.file === 'result.json' &&
+        (actual.path[0] === 'conclusion' || actual.path[0] === 'summary'),
+    );
+    if (first === undefined) {
+      throw new Error('Missing result assertions');
+    }
+
+    const root = await fixture();
+    const expected = {
+      ...pair.expectation,
+      assertions: [first, ...rest],
+    } satisfies Expectation;
+    const conclusion = id.endsWith('journey') ? 'unavailable' : 'regression';
+    const run = async (summary: { passed: number; total: number }) => {
+      await writeFile(
+        path.join(root, 'result.json'),
+        JSON.stringify({ conclusion: { kind: conclusion }, summary }),
+      );
+
+      return (await checkRun(root, expected, pair.expectation.exitCode)).passed;
+    };
+
+    expect(await run({ passed, total })).toBe(true);
+    expect(await run({ passed: total, total })).toBe(false);
+    expect(await run({ passed, total: passed })).toBe(false);
+  },
+);

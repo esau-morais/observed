@@ -318,6 +318,11 @@ export const pairs: readonly Pair[] = [
     2,
     [duplicate],
     [
+      {
+        label: 'only protected passes count in the complete summary',
+        actual: resultReading(['summary']),
+        expected: { passed: 1, total: 2 },
+      },
       verdict('one-request', 'regression'),
       verdict('loaded-text', 'passed'),
       ...measuredAssertions({ id: 'one-request' }),
@@ -359,6 +364,11 @@ export const pairs: readonly Pair[] = [
     2,
     [duplicate],
     [
+      {
+        label: 'only protected passes count in the complete summary',
+        actual: resultReading(['summary']),
+        expected: { passed: 1, total: 2 },
+      },
       verdict('one-request', 'regression'),
       verdict('loaded-text', 'passed'),
       ...measuredAssertions({ id: 'one-request' }),
@@ -383,6 +393,11 @@ export const pairs: readonly Pair[] = [
     1,
     [correct],
     [
+      {
+        label: 'only protected passes count in the complete summary',
+        actual: resultReading(['summary']),
+        expected: { passed: 0, total: 2 },
+      },
       verdict('one-request', 'unknown'),
       verdict('loaded-text', 'unknown'),
       ...protectedText(protectedRequest),
