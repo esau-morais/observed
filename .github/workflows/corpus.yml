@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'src/**'
+      - 'viewer/**'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
       - 'scripts/gate-corpus/**'
       - 'tests/fixtures/gate-*/**'
       - 'package.json'
