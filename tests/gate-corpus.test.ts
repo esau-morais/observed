@@ -7,6 +7,7 @@ import {
   select,
   type Expectation,
 } from '../scripts/gate-corpus/check';
+import { pairs } from '../scripts/gate-corpus/cases';
 
 const roots: string[] = [];
 
@@ -118,6 +119,63 @@ test('does not silently choose a duplicate check or treat a missing field as nul
     ]),
   ).toThrow('found 2');
   expect(() => select({}, ['missing'])).toThrow('Missing field');
+});
+
+test('outside-source wording rejects missing scope, outside paths, and broader claims', async () => {
+  const root = await fixture();
+  const pair = pairs.find((item) => item.expectation.id === 'outside-source');
+  if (pair === undefined) {
+    throw new Error('Missing outside-source pair');
+  }
+
+  const assertions = pair.expectation.assertions.filter(
+    (assertion) => assertion.actual.kind === 'text',
+  );
+  const [first, ...rest] = assertions;
+  if (first === undefined) {
+    throw new Error('Missing wording expectations');
+  }
+
+  const wording: Expectation = {
+    ...pair.expectation,
+    assertions: [first, ...rest],
+  };
+  const report = [
+    'No captured file changed\\. 1 file changed outside the captured source\\.',
+    '- README\\.md \\(modified\\)',
+    'Checks cover only their stated expectations and scopes\\.',
+  ].join('\n');
+  await writeFile(path.join(root, 'report.md'), report);
+  expect((await checkRun(root, wording, 0)).passed).toBe(true);
+
+  for (const text of [
+    '',
+    'unknown',
+    'incomplete',
+    'not run',
+    'none',
+    ...assertions.flatMap((assertion) =>
+      assertion.actual.kind !== 'text'
+        ? []
+        : [
+            assertion.expected === true
+              ? report.replace(assertion.actual.includes, '')
+              : `${report}\n${assertion.actual.includes}`,
+          ],
+    ),
+  ]) {
+    await writeFile(path.join(root, 'report.md'), text);
+    expect((await checkRun(root, wording, 0)).passed).toBe(false);
+  }
+
+  await rm(path.join(root, 'report.md'));
+  expect((await checkRun(root, wording, 0)).passed).toBe(false);
+  const other = await fixture();
+  await writeFile(path.join(other, 'report.md'), report);
+  await symlink(path.join(other, 'report.md'), path.join(root, 'report.md'));
+  expect((await checkRun(root, wording, 0)).failures.join(' ')).toContain(
+    'outside the run',
+  );
 });
 
 test('requires innermost execution even when the result forges an exercised relation', async () => {

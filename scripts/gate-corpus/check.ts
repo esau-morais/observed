@@ -14,6 +14,11 @@ const positive = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 const readingSchema = Schema.Union([
   Schema.Struct({
+    kind: Schema.Literal('text'),
+    file: Schema.String,
+    includes: Schema.NonEmptyString,
+  }),
+  Schema.Struct({
     kind: Schema.Literal('coverage'),
     file: Schema.String,
     pathname: Schema.String,
@@ -228,6 +233,12 @@ function covered(
 }
 
 async function read(root: string, reading: Reading) {
+  if (reading.kind === 'text') {
+    return (await readContainedText(root, reading.file)).includes(
+      reading.includes,
+    );
+  }
+
   const value = decodeJson(await readContainedText(root, reading.file));
 
   if (reading.kind === 'coverage') {
