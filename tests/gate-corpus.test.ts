@@ -149,6 +149,7 @@ test('requires innermost execution even when the result forges an exercised rela
     source: 'source.js',
     line: 2,
     column: 2,
+    functionRange: { startOffset: 59, endOffset: 119 },
   };
   const execution: Expectation = {
     id: 'raw-coverage',
@@ -166,6 +167,14 @@ test('requires innermost execution even when the result forges an exercised rela
     ],
   };
   expect((await checkRun(root, execution, 0)).passed).toBe(false);
+  await writeFile(
+    path.join(root, 'coverage.json'),
+    JSON.stringify({
+      result: [{ ...script, functions: script.functions.slice(0, 1) }],
+    }),
+  );
+  expect((await checkRun(root, execution, 0)).passed).toBe(false);
+  await writeFile(path.join(root, 'coverage.json'), JSON.stringify(raw));
   const saved: Expectation = {
     ...execution,
     assertions: [{ label: 'saved line', actual: coverage, expected: false }],

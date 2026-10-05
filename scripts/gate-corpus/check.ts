@@ -20,6 +20,7 @@ const readingSchema = Schema.Union([
     source: Schema.String,
     line: positive,
     column: natural,
+    functionRange: Schema.Struct({ startOffset: natural, endOffset: positive }),
   }),
   Schema.Struct({
     kind: Schema.Literal('json'),
@@ -179,7 +180,24 @@ function covered(
     lines
       .slice(0, reading.line - 1)
       .reduce((sum, text) => sum + text.length + 1, 0) + reading.column;
-  const ranges = script.functions.flatMap((fn) => fn.ranges);
+  const functions = script.functions.filter((fn) =>
+    fn.ranges.some(
+      (range) =>
+        range.startOffset === reading.functionRange.startOffset &&
+        range.endOffset === reading.functionRange.endOffset,
+    ),
+  );
+  const handler = functions[0];
+  if (
+    functions.length !== 1 ||
+    handler === undefined ||
+    offset < reading.functionRange.startOffset ||
+    offset >= reading.functionRange.endOffset
+  ) {
+    throw new Error('Missing or ambiguous protected function coverage');
+  }
+
+  const ranges = handler.ranges;
   if (
     ranges.some(
       (range) =>

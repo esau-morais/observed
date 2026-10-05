@@ -77,6 +77,11 @@ function generatedPair(fault: 'error' | 'data', generated: boolean): Pair {
       expected: 'One invoice is ready',
       raw: json(`journey-1/${side}/text-1.json`, ['data', 'text']),
     });
+    // Boundaries of the retained fixture's () => { ... } handler, in UTF-16 units.
+    const functionRange =
+      fault === 'error'
+        ? { startOffset: 59, endOffset: side === 'base' ? 145 : 119 }
+        : { startOffset: 60, endOffset: side === 'base' ? 130 : 129 };
     for (const journey of generated ? [1, 2] : [1]) {
       assertions.push({
         label: `${side} journey ${journey} innermost changed-line execution`,
@@ -87,6 +92,7 @@ function generatedPair(fault: 'error' | 'data', generated: boolean): Pair {
           source: `journey-${journey}/${side}/source/${file}`,
           line: 2,
           column: 2,
+          functionRange,
         },
         expected: journey === 2,
       });

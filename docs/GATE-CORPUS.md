@@ -72,7 +72,9 @@ At `979f990`, all four local pairs and fresh runs of both original trial PRs in
 both modes met expectations committed before capture. A deliberately wrong
 regression expectation for the saved-only error run failed with checker exit 1.
 The source maps remain not observed. The checker reads the innermost CDP range
-at line 2, column 2 of both revisions and rejects absent or ambiguous ranges.
+at line 2, column 2 of both revisions, requires the protected handler boundary,
+and rejects absent or ambiguous ranges. Outer script execution cannot replace
+missing handler coverage.
 It also checks the generated journey's change-map connection. An error can
 make the file's relation checked through a stack frame; that relation alone
 does not establish execution coverage.
