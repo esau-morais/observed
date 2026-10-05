@@ -56,7 +56,8 @@
     "build": "bun scripts/build.ts",
     "gates": "bun scripts/gate-corpus/run.ts",
     "gates:check": "bun scripts/gate-corpus/check.ts",
-    "gates:missing": "bun scripts/gate-corpus/missing.ts"
+    "gates:missing": "bun scripts/gate-corpus/missing.ts",
+    "gates:faults": "bun scripts/gate-corpus/faults.ts"
   },
   "dependencies": {
     "agent-browser": "0.38.1"
