@@ -2,6 +2,7 @@ import type {
   Anchor,
   ChangeScope,
   CheckVerdict,
+  Comparison,
   Journey,
   Side,
 } from '../comparison-model';
@@ -800,4 +801,52 @@ export function sourceWindow(input: {
     ...line,
     text: line.text.slice(Number.isFinite(indent) ? indent : 0),
   }));
+}
+
+// The scene the comment and Slack show: the first journey whose deciding
+// check failed. A passing run has nothing to explain there.
+export function exportedScene(
+  result: Comparison,
+): { journey: number; scene: Scene } | null {
+  const scope = result.mode === 'comparison' ? result.changeScope : undefined;
+
+  for (const [journey, item] of result.journeys.entries()) {
+    const scene = sceneOf(item, scope);
+
+    if (
+      scene?.check?.verdict === 'regression' ||
+      scene?.check?.verdict === 'failed'
+    ) {
+      return { journey, scene };
+    }
+  }
+
+  return null;
+}
+
+export const transitionMs = 520;
+
+const tweens = [0.25, 0.5, 0.75];
+
+// The frames a still export draws: each beat's transition in a few steps,
+// then the beat held for the rest of its time.
+export function exportFrames(
+  scene: Scene,
+): { beat: number; progress: number; delay: number }[] {
+  return scene.beats.flatMap((beat, index) => {
+    if (index === 0) {
+      return [{ beat: index, progress: 1, delay: beat.hold }];
+    }
+
+    const step = transitionMs / (tweens.length + 1);
+
+    return [
+      ...tweens.map((progress) => ({ beat: index, progress, delay: step })),
+      {
+        beat: index,
+        progress: 1,
+        delay: beat.hold - step * tweens.length,
+      },
+    ];
+  });
 }

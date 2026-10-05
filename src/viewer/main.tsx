@@ -13,6 +13,7 @@ import {
 } from './embedded';
 import { EvidenceUrls } from './evidence';
 import { ComparisonReport, ReportState } from './report';
+import { SceneFrame, sceneFrameHash } from './scene';
 
 const container = document.getElementById('root');
 
@@ -57,7 +58,11 @@ async function loadReport() {
 
   root.render(
     <EvidenceUrls value={resolve}>
-      <ComparisonReport result={result} />
+      {location.hash.startsWith(sceneFrameHash) ? (
+        <SceneFrame result={result} />
+      ) : (
+        <ComparisonReport result={result} />
+      )}
     </EvidenceUrls>,
   );
 }

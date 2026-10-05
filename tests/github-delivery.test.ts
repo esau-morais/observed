@@ -522,6 +522,7 @@ test('a refused store keeps the crops link and says why, falls back to a user to
       repositoryId: '42',
       name: 'a.png',
       bytes: new Uint8Array([1]),
+      contentType: 'image/png',
     }),
   ).rejects.toBeInstanceOf(DeliveryError);
   expect(fetch).toHaveBeenCalledTimes(3);

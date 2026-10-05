@@ -162,6 +162,12 @@ comment then links the crops.
 The action stores no image for a pull request from a fork: GitHub gives it a
 read-only token, and its pixels come from code the repository didn't accept.
 
+When a check fails, the comment also shows a GIF of the
+[scene](../DESIGN.md#evidence-viewer) the report opens with, stored the same
+way. It plays once and stops on the source line the evidence points at. With
+`contents: read` and no `image-upload-token`, the comment has no scene and its
+run details say why.
+
 If `github-token` cannot store the crops, `image-upload-token` is a fallback.
 GitHub has no documented API that adds an image to a comment. `gh` 2.99.0 and
 later upload one for `--attach` through an endpoint that accepts only a user's
@@ -230,7 +236,7 @@ failing: a regression, a failed check, or unavailable evidence.
 - The report link needs a GitHub account that can read the repository.
 
 `slack-images: true` with the `files:write` scope posts the screenshot crops
-in the thread. The image includes any text around the change. Without the
+and, for a failed check, the scene GIF in the thread. The image includes any text around the change. Without the
 scope, the message goes out without the image and the job summary says why.
 
 1. Create a Slack app at https://api.slack.com/apps with **From a manifest**

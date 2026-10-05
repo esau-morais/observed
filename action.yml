@@ -165,6 +165,22 @@ runs:
         archive: false
         retention-days: ${{ inputs.retention-days }}
 
+    # The report page in its frame mode, one screenshot per frame, joined into
+    # a GIF. Nothing is drawn unless a check failed.
+    - name: Draw the scene
+      id: scene
+      if: always() && steps.page.outputs.path != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        OBSERVED_BUNDLE: ${{ steps.observe.outputs.bundle }}
+        OBSERVED_ARTIFACT: ${{ inputs.artifact-name }}
+        OBSERVED_PAGE: ${{ steps.page.outputs.path }}
+        OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
+      run: |
+        scene="$(mktemp -d "$RUNNER_TEMP/observed-scene-XXXXXX")/$OBSERVED_ARTIFACT-scene.gif"
+        bun "$OBSERVED_SCRIPT" scene "$OBSERVED_PAGE" "$OBSERVED_BUNDLE/result.json" "$scene"
+
     - name: Crop the changed screenshots
       id: crops
       if: always() && steps.observe.outputs.bundle != ''
@@ -240,6 +256,7 @@ runs:
         OBSERVED_COMMENT: ${{ inputs.comment }}
         OBSERVED_CROPS_PATH: ${{ steps.crops.outputs.path }}
         OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}
+        OBSERVED_SCENE_PATH: ${{ steps.scene.outputs.path }}
         OBSERVED_IMAGE_TOKEN: ${{ inputs.image-upload-token }}
         OBSERVED_RETENTION_DAYS: ${{ inputs.retention-days }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}
@@ -259,6 +276,7 @@ runs:
         OBSERVED_CROPS_URL: ${{ steps.upload-crops.outputs.artifact-url }}
         OBSERVED_IMAGE: ${{ steps.deliver.outputs.image }}
         OBSERVED_IMAGE_NOTE: ${{ steps.deliver.outputs.image-note }}
+        OBSERVED_SCENE_IMAGE: ${{ steps.deliver.outputs.scene-image }}
         OBSERVED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         OBSERVED_PULL_REQUEST: ${{ github.event.pull_request.number }}
         OBSERVED_SCRIPT: ${{ steps.install.outputs.script }}

@@ -233,6 +233,7 @@ export async function uploadImage(image: {
   repositoryId: string;
   name: string;
   bytes: Uint8Array;
+  contentType: 'image/png' | 'image/gif';
 }): Promise<string> {
   const fail = (message: string, status: number | null) =>
     new DeliveryError({ message, status, permissions: null });
@@ -248,7 +249,7 @@ export async function uploadImage(image: {
   const url = new URL('https://uploads.github.com/user-attachments/assets');
 
   url.searchParams.set('name', image.name);
-  url.searchParams.set('content_type', 'image/png');
+  url.searchParams.set('content_type', image.contentType);
   url.searchParams.set('repository_id', image.repositoryId);
 
   let response: Response;

@@ -9,12 +9,16 @@ import {
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
+  useMemo,
 } from 'react';
 import { fonts, geometry, media } from './constants.stylex';
 import { EvidenceUrls } from './evidence';
+import type { Comparison } from '../comparison-model';
 import {
   edgeId,
+  exportedScene,
   sourceWindow,
+  transitionMs,
   type Beat,
   type CodeLine,
   type Edge,
@@ -23,6 +27,7 @@ import {
   type Scene,
   type Tone,
 } from './scene-model';
+import { darkColors, darkEffects } from './themes';
 import { colors } from './tokens.stylex';
 
 const credit = {
@@ -30,7 +35,7 @@ const credit = {
   href: 'https://x.com/kitlangton/status/2106623769146233112',
 };
 
-const transition = 520;
+const transition = transitionMs;
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -799,6 +804,62 @@ function SceneStage({
   );
 }
 
+export const sceneFrameHash = '#scene-frame=';
+
+function frameFromHash(hash: string): { beat: number; progress: number } {
+  const [beat = '0', progress = '1'] = hash
+    .slice(sceneFrameHash.length)
+    .split('/');
+  const index = Number.parseInt(beat, 10);
+  const amount = Number.parseFloat(progress);
+
+  return {
+    beat: Number.isNaN(index) ? 0 : index,
+    progress: Number.isNaN(amount) ? 1 : Math.min(1, Math.max(0, amount)),
+  };
+}
+
+function subscribeHash(listener: () => void) {
+  addEventListener('hashchange', listener);
+
+  return () => removeEventListener('hashchange', listener);
+}
+
+// One still of the exported scene, chosen by the URL hash, in the dark theme
+// at its own size. The export step steps the hash and screenshots each still.
+export function SceneFrame({ result }: { result: Comparison }) {
+  const exported = useMemo(() => exportedScene(result), [result]);
+  const hash = useSyncExternalStore(subscribeHash, () => location.hash);
+
+  if (exported === null) {
+    return <p data-scene-frame="none">No scene to export.</p>;
+  }
+
+  return <FrameStill scene={exported.scene} hash={hash} />;
+}
+
+function FrameStill({ scene, hash }: { scene: Scene; hash: string }) {
+  const source = useSource(scene);
+  const { beat, progress } = frameFromHash(hash);
+
+  return (
+    <div
+      data-scene-frame={`${beat}/${progress}`}
+      {...stylex.props(darkColors, darkEffects, styles.frameRoot)}
+    >
+      <SceneStage
+        scene={scene}
+        layout={wideLayout(scene)}
+        index={beat}
+        progress={progress}
+        motion
+        source={source}
+        scale={1}
+      />
+    </div>
+  );
+}
+
 const reducedQuery = '(prefers-reduced-motion: reduce)';
 
 function subscribeReduced(listener: () => void) {
@@ -1109,6 +1170,7 @@ export function SceneView({ scene, level }: { scene: Scene; level: 2 | 3 }) {
 
 const styles = stylex.create({
   section: { display: 'grid', gap: 12, minWidth: 0 },
+  frameRoot: { height: 540, overflow: 'hidden', width: 960 },
   heading: {
     fontSize: '1.25rem',
     fontWeight: 500,
