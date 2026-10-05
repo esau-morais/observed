@@ -4,6 +4,23 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.8 (2026-10-05)
+
+Ninth alpha of 0.2.0.
+The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
+`result.json` stays at schema version 9.
+
+- **Changed diagrams in the pull request comment.** Changed Mermaid blocks in
+  Markdown render from the base and candidate commits, side by side and labeled
+  as observations. Missing or failed renders stay explicit. The bundle retains
+  SVG and PNG artifacts, their hashes and the effective rendering conditions.
+  Diagrams never change named checks, the verdict or the exit code. They are not
+  displayed in the viewer or single-file report yet; uncommitted Markdown is
+  not rendered.
+- **More evidence kinds in the verification corpus.** Runnable pairs now cover
+  browser errors, accessibility, timing, Playwright and React evidence, with
+  raw producer checks and separate screenshot and DOM observations.
+
 ## 0.2.0-alpha.7 (2026-10-05)
 
 Eighth alpha of 0.2.0.
