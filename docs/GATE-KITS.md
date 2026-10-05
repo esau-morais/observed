@@ -105,8 +105,9 @@ browser download.
 
 Both first captures failed because Ubuntu 24.04 blocks Chrome's sandbox, and
 the failure said only that a `bun` process exited with code 1. Each agent found
-the reason in a transcript and the fix in `observed skill`. The failure now
-quotes the browser's error and names the setting. The other stalls belonged to
+the reason in a transcript and the fix in `observed skill`. Since
+[#113](https://github.com/esau-morais/observed/pull/113) the failure quotes
+the browser's error and names the setting. The other stalls belonged to
 the projects: both Vite configurations set `base` to a public URL, which the
 agents overrode on the command line, and `observed schema` printed about 186 KB
 for an agent that only needed the step and check shapes.
