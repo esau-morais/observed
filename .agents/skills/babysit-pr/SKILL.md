@@ -22,9 +22,10 @@ branch and one reviewable slice.
 
 ## Review before publication and handoff
 
-1. Commit the candidate, then pin the actual base SHA and candidate SHA. For
-   an existing PR, infer the base from GitHub. Inspect the complete diff and
-   commit list; uncommitted or untracked work is not reviewed.
+1. Check `git status` for untracked files that belong in the change, commit
+   the candidate, then pin the actual base SHA and candidate SHA. For an
+   existing PR, infer the base from GitHub. Inspect the complete diff and
+   commit list; reviewers see only committed work.
 2. Use the originating task or issue as acceptance criteria, and AGENTS.md and
    the skills at the base SHA as standards. Read only relevant specs. Do not
    require an unrelated tracker setup or ask for a base/spec already available
@@ -51,11 +52,11 @@ branch and one reviewable slice.
    and add one test that iterates every input of that type, such as each diagram
    type or each evidence state. Change the approach only when it cannot meet the
    contract.
-5. Commit intended paths, push, and open or update the PR with a description
-   written as [below](#write-the-pr-description). Run rebase, commit, push, and
-   PR creation as separate commands and stop at the first failure; after an
-   interruption, check HEAD and the remote before retrying. Use Conventional
-   Commit subjects and PR titles.
+5. Push the reviewed head and open or update the PR with a description written
+   as [below](#write-the-pr-description). Any later commit goes back through
+   step 4. Run rebase, push, and PR creation as separate commands and stop at
+   the first failure; after an interruption, check HEAD and the remote before
+   retrying. Use Conventional Commit subjects and PR titles.
 
 For instruction changes, review local links and run:
 
@@ -155,14 +156,13 @@ the concrete blocker rather than retrying indefinitely or weakening checks.
 
 Immediately before merging, re-fetch the current head and feedback. Require
 passing applicable checks, resolved blocking feedback, Standards and Spec
-reviews covering that head (a rebase whose `git range-diff` shows no change
-keeps them), every finding fixed or declined with a reason, no conflicts, and
-either GitHub approval for that head or explicit maintainer authorization to
-merge once stated conditions are met. A change that AGENTS.md reserves for
-maintainer approval also needs that approval. Record which authorization
-applies. A stale approval, empty review decision, model opinion, or green check
-is not authorization. Never approve your own PR or bypass repository rules with
-`--admin`.
+reviews of that head (after a rebase, of its `git range-diff`), every finding
+fixed or declined with a reason, no conflicts, and either GitHub approval for
+that head or explicit maintainer authorization to merge once stated conditions
+are met. A change that AGENTS.md reserves for maintainer approval also needs
+that approval. Record which authorization applies. A stale approval, empty
+review decision, model opinion, or green check is not authorization. Never
+approve your own PR or bypass repository rules with `--admin`.
 
 Use the checked Conventional Commit title as `SUBJECT` and the reviewed head as
 `REVIEWED_SHA`:
