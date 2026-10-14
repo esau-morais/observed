@@ -34,11 +34,12 @@ branch and one reviewable slice.
    Report the axes separately. Reviewers only report: they do not edit, merge,
    or change settings, and they receive the criteria, not the author's summary.
    Each lists the external claims in the diff and whether it checked them.
-   Reviewers read the pinned SHAs with `git diff` and `git show`, not the
-   working tree, which can move while they run. From the second round on, give
-   them the earlier rounds' findings and ask which new finding repeats an
-   earlier kind. If agents are unavailable, perform both reviews directly and
-   disclose that limit. Model review is not runtime verification.
+   Commit the candidate before pinning it. Reviewers read the pinned SHAs with
+   `git diff` and `git show`, not the working tree, which can move while they
+   run. From the second round on, give them the earlier rounds' findings and ask
+   which new finding repeats an earlier kind. If agents are unavailable, perform
+   both reviews directly and disclose that limit. Model review is not runtime
+   verification.
 4. Fix actionable findings and run applicable checks from `package.json`. Commit
    the fixes, pin the new head, and send the fix delta (`OLD_HEAD..NEW_HEAD`)
    and the full `BASE..NEW_HEAD` diff to Standards and Spec reviewers again. The
