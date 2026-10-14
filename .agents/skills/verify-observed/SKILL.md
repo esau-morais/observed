@@ -24,7 +24,7 @@ by what the diff touches:
 
 | Changed area | Evidence that can fail |
 | --- | --- |
-| Comparator, checks, change scope, result wording | `bun run gates <new dir> [pair id]` for the affected pairs, and `bun run gates:faults <new dir>`, which seeds each listed fault into a disposable copy of Observed and must report every one `detected`. A new kind of fault gets its own entry there |
+| Comparator, checks, change scope, result wording | `bun run gates <new dir> [pair id]` for the affected pairs, and `bun run gates:faults <new dir>` from a clean, committed checkout. It seeds each fault in `seededFaults` (`scripts/gate-corpus/fault-cases.ts`) into a disposable copy and must report every one `detected`; add a new kind of fault to that list. See [Seeded source faults](../../../docs/GATE-CORPUS.md#seeded-source-faults) |
 | Capture and collectors | The affected gate pairs, read against producer output (HAR, raw coverage, agent-browser text), not files Observed derives |
 | Viewer | `bun run verify`, and agent-browser screenshots of the changed component at 1440 and 390 px in both themes, with keyboard use |
 | GitHub action and comment | A workflow run on a trial pull request whose head SHA equals the result's candidate, and a screenshot of the comment it posted |
@@ -47,10 +47,11 @@ attaching screenshots of an unchanged page.
 - A standalone evidence checker counts after it has failed once on a seeded
   wrong result. Record its hash before the runs it reads. A checker written
   after reading the output is exploration, not verification.
-- A checker or expectation must also fail when any evidence it reads is
-  unknown, not run, missing, or unavailable, for every assertion it makes, not
-  only the kinds the change touched. Seed each of those states before claiming
-  it passes.
+- A checker or expectation must not count unknown, not-run, missing, or
+  unavailable evidence as meeting an assertion unless that state is the
+  expected value. This applies to every assertion it makes, including those
+  the change did not touch. Seed each state for each assertion before claiming
+  the checker works.
 
 Use expectations established independently of the renderer. Missing required
 evidence must not support a passing claim. Preserve useful failure cases in

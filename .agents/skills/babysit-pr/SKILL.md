@@ -37,19 +37,18 @@ branch and one reviewable slice.
    Reviewers read the pinned SHAs with `git diff` and `git show`, not the
    working tree, which can move while they run. From the second round on, give
    them the earlier rounds' findings and ask which new finding repeats an
-   earlier kind. If
-   agents are unavailable, perform both reviews directly and disclose that
-   limit. Model review is not runtime verification.
-4. Fix actionable findings and run applicable checks from `package.json`. Send
-   the fix delta to Standards and Spec reviewers again; the author's re-read is
-   not a review, except for typo-only changes. Reuse successful checks only while their
-   inputs and relevant environment remain unchanged. Before pushing a fix to a
-   claim, status, or rule, search every doc that restates it and fix each copy.
-   When two rounds find the same kind of problem, such as a parser missing
-   another input, fix their shared cause with the smallest change that covers
-   it and add a check that catches the next case: one test over every input of
-   that type (each diagram type, each evidence state), not one more case. Change the approach only when
-   it cannot meet the contract.
+   earlier kind. If agents are unavailable, perform both reviews directly and
+   disclose that limit. Model review is not runtime verification.
+4. Fix actionable findings and run applicable checks from `package.json`.
+   Commit the fixes, pin the new head, and send `git diff OLD_HEAD..NEW_HEAD`
+   to Standards and Spec reviewers again. The author's re-read is not a
+   review. Reuse successful checks only while their inputs and relevant
+   environment remain unchanged. Before pushing a fix to a claim, status, or
+   rule, search every doc that restates it and fix each copy. When two rounds
+   find the same kind of problem, such as a parser missing another input, fix
+   their shared cause with the smallest change that covers it and add one test
+   that iterates every input of that type, such as each diagram type or each
+   evidence state. Change the approach only when it cannot meet the contract.
 5. Commit intended paths, push, and open or update the PR with a description
    written as [below](#write-the-pr-description). Run rebase, commit, push, and
    PR creation as separate commands and stop at the first failure; after an
