@@ -51,8 +51,8 @@ attaching screenshots of an unchanged page.
   unknown, not run, missing, or unavailable fails the run, with a non-zero
   exit, unless the expectation written before the run names that state. This
   covers every assertion, including those the change did not touch. Seed each
-  of those states into evidence the expectation does not allow, and confirm the
-  run fails.
+  of those states into each assertion's evidence, one per run, wherever the
+  expectation does not allow it, and confirm each run fails.
 
 Use expectations established independently of the renderer. Missing required
 evidence must not support a passing claim. Preserve useful failure cases in
