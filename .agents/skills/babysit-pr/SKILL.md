@@ -33,16 +33,22 @@ branch and one reviewable slice.
    repository rules; Spec checks missing, incorrect, or unrequested behavior.
    Report the axes separately. Reviewers only report: they do not edit, merge,
    or change settings, and they receive the criteria, not the author's summary.
-   Each lists the external claims in the diff and whether it checked them. If
+   Each lists the external claims in the diff and whether it checked them.
+   Reviewers read the pinned SHAs with `git diff` and `git show`, not the
+   working tree, which can move while they run. From the second round on, give
+   them the earlier rounds' findings and ask which new finding repeats an
+   earlier kind. If
    agents are unavailable, perform both reviews directly and disclose that
    limit. Model review is not runtime verification.
-4. Fix actionable findings and run applicable checks from `package.json`. Review
-   the changed hunks again after fixes. Reuse successful checks only while their
+4. Fix actionable findings and run applicable checks from `package.json`. Send
+   the fix delta to Standards and Spec reviewers again; the author's re-read is
+   not a review, except for typo-only changes. Reuse successful checks only while their
    inputs and relevant environment remain unchanged. Before pushing a fix to a
    claim, status, or rule, search every doc that restates it and fix each copy.
    When two rounds find the same kind of problem, such as a parser missing
    another input, fix their shared cause with the smallest change that covers
-   it and add a check that catches the next case. Change the approach only when
+   it and add a check that catches the next case: one test over every input of
+   that type (each diagram type, each evidence state), not one more case. Change the approach only when
    it cannot meet the contract.
 5. Commit intended paths, push, and open or update the PR with a description
    written as [below](#write-the-pr-description). Run rebase, commit, push, and
@@ -218,8 +224,9 @@ To release:
 
 1. Open `chore(release): prepare <version>` with the `package.json` version and
    a `CHANGELOG.md` entry in the existing style: what changed for people using
-   Observed, and whether action inputs and the `v0` tag change. Merge it through
-   this workflow.
+   Observed, and whether action inputs and the `v0` tag change. Write each line
+   from the merged code and its tests, not from PR titles or descriptions, and
+   claim no more than they cover. Merge it through this workflow.
 2. Tag the merge commit on `main` as `v<version>`, push the tag, and watch the
    Release workflow. Confirm the npm version and dist-tag and the GitHub release.
 3. Open a PR that pins the `self-observe` job and the workflow examples in the
