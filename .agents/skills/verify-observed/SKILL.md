@@ -47,11 +47,12 @@ attaching screenshots of an unchanged page.
 - A standalone evidence checker counts after it has failed once on a seeded
   wrong result. Record its hash before the runs it reads. A checker written
   after reading the output is exploration, not verification.
-- A checker or expectation must not count unknown, not-run, missing, or
-  unavailable evidence as meeting an assertion unless that state is the
-  expected value. This applies to every assertion it makes, including those
-  the change did not touch. Seed each state for each assertion before claiming
-  the checker works.
+- When evidence a checker or expectation reads is unknown, not run, missing,
+  or unavailable, it reports that assertion as failed or unknown, never
+  passed, unless that state is the expected value written before the run. This
+  applies to every assertion it makes, including those the change did not
+  touch. Seed each state for each assertion and confirm the checker reports it
+  as failed or unknown.
 
 Use expectations established independently of the renderer. Missing required
 evidence must not support a passing claim. Preserve useful failure cases in
