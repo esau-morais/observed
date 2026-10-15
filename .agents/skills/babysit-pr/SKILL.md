@@ -164,9 +164,13 @@ local and remote branches were deleted and the local base is synchronized. If a
 worktree or unrelated work blocks deletion, preserve it and report the remaining
 cleanup. Remove a worktree this session created once its branch merges. Never
 delete unrelated branches or worktrees. A merge through another route, such as
-the GitHub web UI or an API tool without a delete option, leaves the branch:
-delete it with `git push origin --delete BRANCH`, and if that is refused, name
-the branch left behind so the maintainer can delete it.
+the GitHub web UI or an API tool without a delete option, leaves the branch
+unless the repository deletes head branches on merge. Then delete the PR's own
+head branch if its remote tip is still the merged head and no open PR targets
+it: `git push origin --delete BRANCH`, or `gh api -X DELETE
+repos/OWNER/REPO/git/refs/heads/BRANCH` if the push is refused, then `git branch
+-D BRANCH` and `git fetch --prune`. If both are refused, name the branch left
+behind so the maintainer can delete it.
 
 Report PR URL/state, reviewed head, separate review results, executed checks,
 unverified scope, and branch cleanup. If approval is pending, say so. Claim a
