@@ -1,20 +1,31 @@
 ---
 name: typescript-best-practices
-description: Apply when writing or reviewing TypeScript code, adapters, schemas, tests, and configuration in Observed.
+description: TypeScript best practices. Use when reading or editing any .ts or .tsx file.
+paths: ["**/*.ts", "**/*.tsx"]
+disable-model-invocation: true
 ---
 
-# TypeScript practices
+# TypeScript best practices
 
-Read the implementation and existing types before adding a model.
+Apply the **type-system-discipline** principle skill first.
 
-1. Accept external payloads as unknown. Parse once into a named domain type. Infer types from the existing runtime schema when available.
-2. Represent exclusive states with a shared kind discriminant. Handle every variant. Keep distinct failures when recovery differs.
-3. Use satisfies for authored configuration and as const for literal inference. Neither validates external data.
-4. Avoid assertions that conceal missing validation. Allow a narrow assertion only where its claim is established and TypeScript cannot express it. Isolate it at the boundary. Do not use as unknown as T or unchecked non-null assertions to escape model problems.
-5. Brand IDs when interchange would produce plausible but wrong evidence. Prefer object arguments when positional values are easy to swap. Keep ordinary primitives elsewhere.
-6. Use the simplest total signature. Return explicit absence or require validated non-empty input where needed. A non-empty array does not make every numeric index safe.
-7. Validate numeric constraints. A number can be negative, non-finite, or outside the meaningful range.
-8. Reuse generated or schema-derived types instead of duplicating provider shapes. Validate consumed fields and decide unknown-field handling per contract.
-9. Separate expected failures from programming errors. Keep structured context sufficient to locate a run without logging secrets. Keep CLI machine output free of diagnostic chatter.
+| Rule | Summary |
+|------|---------|
+| Discriminated unions | Model variants with a `kind` literal discriminant so impossible states can't be represented. No optional-field bags. |
+| Branded types | Brand primitives with `& { readonly __brand: "X" }` so they can't be mixed up. Validate once at the boundary. |
+| Constructive modeling | Build the shape so the illegal value can't be constructed. `[T, ...T[]]` for non-empty, `[T, T][]` for even length, `start` plus `duration` for a range. Not a runtime guard, not a wish for refinement types. |
+| Simplest total type | Keep `T[]` while every operation on it stays total. Strengthen to `NonEmpty<T>` only where the loose type forces `!`, a cast, or a "should never happen" throw. |
+| `unknown` over `any` | External data is `unknown`. |
+| Schemas before guards | Before hand-writing a property-by-property type guard, use the repository's runtime schema library and infer the type from the schema, such as `z.infer`. |
+| No `as` casts | Every `as` is a runtime crash waiting. Cast only after validation. |
+| Narrowing hierarchy | Discriminant switch > `in` operator > `typeof`/`instanceof` > user-defined type guard > `as`. |
+| Type guards | Must verify the claim. A lying guard is worse than `as` because the bug hides behind a name that says it's safe. Name them `isX` or `hasX`. |
+| Exhaustiveness | Inline `const _exhaustive: never = x;` in default arms so the compiler errors when a new variant is added. |
+| `satisfies` over `as` | Validates the value without widening literal types. |
+| Boundary validation | Parse where data crosses in, into a named domain type. `Record<string, unknown>` (however spelled) stops at that parse. Trust types inside. See the **boundary-discipline** principle skill. |
+| Schema-derived types | Reach for `Pick`/`Omit`/`Parameters`/`ReturnType`/`Awaited`/`typeof` before declaring a new interface. |
+| Object args | Pass objects, not positional, so argument order is self-documenting. Skip on hot paths (per-frame render, tokenizers, parsers). |
+| Real tests | Don't mock what you can run. Prefer the framework's real test primitives with leak/disposable checks, and verify UI in a running build. Mock only what you can't run locally. |
+| Structured telemetry | Prefer structured logger diagnostics with enough context to debug from an id. No `console.log` in shipped code. |
 
-Read [patterns.md](references/patterns.md) for examples. AGENTS.md owns test policy and configuration requirements.
+Examples: `references/patterns.md`.

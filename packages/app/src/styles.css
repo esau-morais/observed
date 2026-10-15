@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource/geist-pixel';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --paper: #eceef1;
+  --ink: #0f1218;
+  --blue: #296ff0;
+  --amber: #c98a1b;
+  --gray: #8a909b;
+  --red: #d8432c;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --primary: var(--blue);
+  --primary-foreground: #ffffff;
+  --muted: color-mix(in oklab, var(--ink) 6%, var(--paper));
+  --muted-foreground: color-mix(in oklab, var(--ink) 60%, var(--paper));
+  --border: color-mix(in oklab, var(--ink) 14%, var(--paper));
+  --ring: var(--blue);
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: var(--ink);
+  --foreground: var(--paper);
+  --muted: color-mix(in oklab, var(--paper) 8%, var(--ink));
+  --muted-foreground: color-mix(in oklab, var(--paper) 60%, var(--ink));
+  --border: color-mix(in oklab, var(--paper) 16%, var(--ink));
+}
+
+@theme inline {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-pixel: 'Geist Pixel', ui-monospace, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-changed: var(--amber);
+  --color-unchecked: var(--gray);
+  --color-stamp: var(--red);
+  --radius-md: var(--radius);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+}

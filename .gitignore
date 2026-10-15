@@ -1,9 +1,6 @@
-/evidence/
-/node_modules/
-/dist/
-/examples/*/node_modules/
-/examples/*/dist/
-/self-observe/
-/self-observe.json
-/tests/fixtures/self-observe/base/
-/tests/fixtures/self-observe/candidate/
+node_modules/
+dist/
+.output/
+.tanstack/
+.source/
+*.tsbuildinfo

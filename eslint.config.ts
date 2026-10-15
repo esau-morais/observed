@@ -1,54 +1,21 @@
 import js from '@eslint/js';
-import stylistic from '@stylistic/eslint-plugin';
-import stylex from '@stylexjs/eslint-plugin';
 import reactHooks from 'eslint-plugin-react-hooks';
+import { defineConfig, globalIgnores } from 'eslint/config';
 import tseslint from 'typescript-eslint';
 
-export default tseslint.config(
-  {
-    ignores: [
-      '**/dist/**',
-      '**/node_modules/**',
-      'evidence/**',
-      'tests/fixtures/gate-generated/public/**',
-      '.agents/**',
-      '.claude/**',
-    ],
-  },
+export default defineConfig(
+  globalIgnores([
+    '**/dist/',
+    '**/.output/',
+    '**/.tanstack/',
+    '**/.source/',
+    '**/routeTree.gen.ts',
+    '.agents/',
+    '.claude/',
+  ]),
   js.configs.recommended,
-  tseslint.configs.recommendedTypeChecked,
+  tseslint.configs.strictTypeChecked,
   {
-    files: ['**/*.{ts,tsx}'],
-    plugins: {
-      '@stylistic': stylistic,
-      '@stylexjs': stylex,
-      'react-hooks': reactHooks,
-    },
-    rules: {
-      '@stylistic/padding-line-between-statements': [
-        'error',
-        { blankLine: 'always', prev: '*', next: ['return', 'throw'] },
-        { blankLine: 'always', prev: 'block-like', next: '*' },
-        { blankLine: 'always', prev: 'import', next: '*' },
-        { blankLine: 'any', prev: 'import', next: 'import' },
-        {
-          blankLine: 'any',
-          prev: ['case', 'default'],
-          next: ['case', 'default'],
-        },
-      ],
-      '@stylexjs/valid-styles': 'error',
-      '@stylexjs/no-unused': 'error',
-      '@stylexjs/valid-shorthands': 'error',
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'error',
-    },
-  },
-  {
-    linterOptions: {
-      reportUnusedDisableDirectives: 'error',
-      reportUnusedInlineConfigs: 'error',
-    },
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -56,32 +23,27 @@ export default tseslint.config(
       },
     },
     rules: {
-      curly: ['error', 'all'],
-      eqeqeq: ['error', 'always'],
-      'no-nested-ternary': 'error',
-      'no-eval': 'error',
-      '@typescript-eslint/no-floating-promises': [
-        'error',
-        { ignoreVoid: false, checkThenables: true },
-      ],
-      '@typescript-eslint/no-unsafe-type-assertion': 'error',
-      '@typescript-eslint/no-non-null-assertion': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
-      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'error',
-      '@typescript-eslint/strict-boolean-expressions': [
-        'error',
-        { allowString: false, allowNumber: false },
-      ],
-      '@typescript-eslint/ban-ts-comment': [
+      // TanStack Router signals redirects and missing pages by throwing these.
+      '@typescript-eslint/only-throw-error': [
         'error',
         {
-          'ts-ignore': true,
-          'ts-nocheck': true,
-          'ts-check': false,
-          'ts-expect-error': 'allow-with-description',
-          minimumDescriptionLength: 10,
+          allow: [
+            {
+              from: 'package',
+              package: '@tanstack/router-core',
+              name: ['Redirect', 'NotFoundError'],
+            },
+          ],
         },
       ],
     },
+  },
+  {
+    files: ['packages/{app,site,docs}/**/*.tsx'],
+    extends: [reactHooks.configs.flat['recommended-latest']],
+  },
+  {
+    files: ['**/*.config.ts', '**/*.js', '**/*.mjs'],
+    extends: [tseslint.configs.disableTypeChecked],
   },
 );

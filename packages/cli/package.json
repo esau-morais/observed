@@ -1,0 +1,17 @@
+{
+  "name": "@observed/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "observed": "dist/observed.js"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "bun build src/main.ts --target bun --outfile dist/observed.js"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.5",
+    "effect": "4.0.5"
+  }
+}

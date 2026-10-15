@@ -1,0 +1,16 @@
+{
+  "name": "@observed/runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "bun build src/index.ts --target bun --outdir dist --packages external"
+  },
+  "dependencies": {
+    "effect": "4.0.5"
+  }
+}

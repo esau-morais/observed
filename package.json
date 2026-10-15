@@ -1,96 +1,42 @@
 {
-  "name": "@observed-software/cli",
-  "version": "0.2.0-alpha.10",
-  "description": "See what a code change does in the running app: capture it, compare it with another revision, and check named expectations.",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/esau-morais/observed.git"
-  },
-  "homepage": "https://github.com/esau-morais/observed#readme",
-  "bugs": {
-    "url": "https://github.com/esau-morais/observed/issues"
-  },
-  "keywords": [
-    "browser",
-    "capture",
-    "visual-regression",
-    "pull-request",
-    "agent",
-    "cli"
-  ],
+  "name": "observed-workspace",
+  "private": true,
   "type": "module",
-  "bin": {
-    "observed": "dist/observed.js"
-  },
-  "files": [
-    "dist/observed.js",
-    "dist/github-action.js",
-    "dist/viewer/",
-    "dist/diagrams/",
-    "dist/THIRD-PARTY-NOTICES.txt",
-    "CHANGELOG.md"
-  ],
   "packageManager": "bun@1.4.2",
   "engines": {
     "bun": ">=1.4.2"
   },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "start": "bun scripts/start.ts",
-    "setup": "bun src/workflow-cli.ts setup",
-    "observe": "bun src/workflow-cli.ts observe",
-    "capture": "bun src/workflow-cli.ts capture",
-    "compare": "bun src/workflow-cli.ts compare",
-    "view": "bun src/workflow-cli.ts view",
-    "verify": "bun run --bun vitest run --config vitest.browser.config.ts",
-    "report": "bun src/cli.ts",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build",
-    "typecheck": "bun run --bun tsc --noEmit",
-    "lint": "bun run --bun eslint . && bun run --bun prettier --check .",
-    "lint:fix": "bun run --bun eslint --fix",
-    "format": "bun run --bun prettier --write .",
-    "test": "bun run --bun vitest run",
-    "build": "bun scripts/build.ts",
-    "check:pr-body": "bun scripts/check-pr-body.ts",
-    "gates": "bun scripts/gate-corpus/run.ts",
-    "gates:check": "bun scripts/gate-corpus/check.ts",
-    "gates:missing": "bun scripts/gate-corpus/missing.ts",
-    "gates:faults": "bun scripts/gate-corpus/faults.ts"
-  },
-  "dependencies": {
-    "agent-browser": "0.38.1"
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build && bun run check:skills",
+    "typecheck": "tsc -p tsconfig.json && bun run --filter '*' typecheck",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "build": "bun run --filter '*' build",
+    "check:skills": "bun scripts/check-skills.ts"
   },
   "devDependencies": {
-    "@effect/platform-bun": "4.0.0-rc.117",
     "@eslint/js": "10.0.1",
-    "@fontsource/geist": "5.3.0",
-    "@fontsource/geist-mono": "5.3.0",
-    "@fontsource/geist-pixel": "5.3.0",
-    "@stylexjs/eslint-plugin": "0.19.1",
-    "@stylexjs/stylex": "0.19.1",
-    "@stylexjs/unplugin": "0.19.1",
-    "@stylistic/eslint-plugin": "5.10.0",
-    "@types/bun": "1.4.2",
-    "@types/node": "22.19.15",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.1",
-    "effect": "4.0.0-rc.117",
-    "eslint": "10.11.0",
+    "@tanstack/intent": "0.5.5",
+    "@types/bun": "1.4.3",
+    "eslint": "10.12.0",
     "eslint-plugin-react-hooks": "7.1.1",
-    "mdast-util-from-markdown": "2.1.0",
-    "mermaid": "12.1.0",
-    "prettier": "3.9.9",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.70.1",
-    "unplugin": "2.3.11",
-    "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  },
+  "intent": {
+    "skills": [
+      "@tanstack/react-start",
+      "@tanstack/router-core",
+      "@tanstack/router-plugin",
+      "@tanstack/start-client-core",
+      "@tanstack/start-server-core",
+      "@tanstack/virtual-file-routes"
+    ]
   }
 }
