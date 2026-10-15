@@ -7,11 +7,13 @@ type Tool = Extract<AgentEvent, { _tag: 'Tool' }>;
 export const makeLedger = (cwd: string) => {
   const open = new Map<string, Tool>();
   const declined = new Set<string>();
+  const done = new Set<string>();
 
   const note = (
     id: string,
     fields: { kind?: ToolKind; title?: string; paths?: ReadonlyArray<string> },
   ) => {
+    if (done.has(id)) return;
     const known = open.get(id) ?? {
       _tag: 'Tool',
       id,
@@ -34,6 +36,7 @@ export const makeLedger = (cwd: string) => {
     const tool = open.get(id);
     if (tool === undefined) return undefined;
     open.delete(id);
+    done.add(id);
     return { ...tool, status: declined.has(id) ? 'declined' : status };
   };
 

@@ -57,6 +57,7 @@ agent.on('session/prompt', async () => {
   }
   writeFileSync(file, 'hello\n');
   update({ sessionUpdate: 'tool_call_update', toolCallId: 'call-1', status: 'completed' });
+  update({ sessionUpdate: 'tool_call_update', toolCallId: 'call-1', rawOutput: { ok: true } });
   say('Done.', 'm2');
   return { stopReason: 'end_turn', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } };
 });

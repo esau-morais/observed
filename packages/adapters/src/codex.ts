@@ -42,6 +42,7 @@ const McpItem = Schema.Struct({
 const OtherItem = Schema.Struct({
   item: Schema.Struct({ id: Schema.String, status: Schema.optionalKey(Schema.Unknown) }),
 });
+const decodeItemStatus = Schema.decodeUnknownOption(ItemStatus);
 
 const notTools = new Set([
   'userMessage',
@@ -51,6 +52,9 @@ const notTools = new Set([
   'contextCompaction',
   'enteredReviewMode',
   'exitedReviewMode',
+  'functionCallOutput',
+  'subAgentActivity',
+  'sleep',
 ]);
 
 const TokenUsage = Schema.Struct({
@@ -148,7 +152,13 @@ export const codex = (options: CodexOptions): Adapter => {
                 if (notTools.has(item.type) || item.id === undefined) return;
                 const other = (yield* decode(OtherItem)).item;
                 ledger.note(other.id, { kind: 'other', title: item.type });
-                if (completed) settle(other.id, other.status === 'failed' ? 'failed' : 'completed');
+                if (!completed) return;
+                if (other.status === undefined) {
+                  settle(other.id, 'completed');
+                } else {
+                  const status = decodeItemStatus(other.status);
+                  if (status._tag === 'Some') settle(other.id, status.value);
+                }
               }
             }
           });

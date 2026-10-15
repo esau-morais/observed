@@ -183,7 +183,7 @@ export const claude = (options: ClaudeOptions): Adapter => {
             },
           });
 
-          const turn = { finished: false };
+          const progress = { finished: false };
           const decode = <S extends Schema.ConstraintDecoder<unknown>>(what: string, schema: S) =>
             decodeFrom(agent, `Claude Code ${what}`, schema);
 
@@ -254,7 +254,7 @@ export const claude = (options: ClaudeOptions): Adapter => {
                     ? null
                     : (message.errors?.join('\n') ?? message.result ?? message.subtype),
               });
-              turn.finished = true;
+              progress.finished = true;
             }
           });
 
@@ -267,7 +267,7 @@ export const claude = (options: ClaudeOptions): Adapter => {
                 message: `Claude Code stopped: ${error instanceof Error ? error.message : String(error)}`,
               }),
           ).pipe(Stream.runForEach(onMessage));
-          if (!turn.finished) {
+          if (!progress.finished) {
             return yield* new AgentError({
               agent,
               reason: 'exited',

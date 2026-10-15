@@ -77,7 +77,6 @@ describe.each(Object.keys(agents))('%s', (name) => {
     ]);
   });
 
-  // An edit the turn never finished is unknown evidence, not a missing row.
   it('reports a tool call the turn left open as unfinished', async () => {
     const exit = await run(make('stop', allowAll), workspace());
     if (Exit.isFailure(exit)) throw new Error(String(exit.cause));

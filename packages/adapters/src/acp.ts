@@ -125,11 +125,11 @@ export const acp = (options: AcpOptions): Adapter => {
             }
             if (sessionUpdate !== 'tool_call' && sessionUpdate !== 'tool_call_update') return;
             flush();
-            const call = (yield* decodeFrom(agent, 'tool call', ToolUpdate)(params)).update;
-            ledger.note(call.toolCallId, describeTool(call));
-            if (call.status === 'completed' || call.status === 'failed') {
-              const tool = ledger.finish(call.toolCallId, call.status);
-              if (tool !== undefined) emit(tool);
+            const tool = (yield* decodeFrom(agent, 'tool call', ToolUpdate)(params)).update;
+            ledger.note(tool.toolCallId, describeTool(tool));
+            if (tool.status === 'completed' || tool.status === 'failed') {
+              const finished = ledger.finish(tool.toolCallId, tool.status);
+              if (finished !== undefined) emit(finished);
             }
           });
 
