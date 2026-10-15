@@ -23,8 +23,6 @@ const hash = (a: number, b: number) => {
   return v - Math.floor(v);
 };
 
-// Draws a value field as characters, denser where it is brighter. The glyphs resolve
-// once when the field first scrolls into view, then hold still.
 export function GlyphField({
   field,
   colors,

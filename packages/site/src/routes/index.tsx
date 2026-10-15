@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { Chip, Flipbook, Receipt } from '@/components/evidence';
 import { horizon, mark, markBlue, nightBlue, paleBlue, rise } from '@/components/fields';
 import { GlyphField } from '@/components/glyph-field';
@@ -9,6 +9,8 @@ import { docsUrl, repoUrl } from '@/meta';
 export const Route = createFileRoute('/')({
   component: Home,
 });
+
+const stagger = (i: number): CSSProperties => ({ '--i': i }) as CSSProperties;
 
 const rules = [
   {
@@ -20,12 +22,12 @@ const rules = [
     why: 'If a screenshot is absent or a log was changed, the receipt says unknown. It never rounds that up to a pass.',
   },
   {
-    rule: 'Slower means every sample was slower.',
-    why: 'Timing is noisy. A performance check fails only when every candidate sample is slower than every base sample. If the ranges overlap, the result is unknown.',
+    rule: 'Slower than the base means every sample was slower.',
+    why: 'Timing is noisy. A check against the base fails only when every candidate sample is slower than every base sample. If the ranges overlap, the result is unknown.',
   },
   {
     rule: 'Observed, never proved.',
-    why: 'A journey shows the cases it ran. When changed code has no journey, the agent proposes one and Observed runs it before showing you anything.',
+    why: 'A journey shows only the cases it ran, so results say observed. Changed code that no journey reaches is reported as a gap, never counted as a pass.',
   },
 ];
 
@@ -57,6 +59,7 @@ function useReveal() {
       if (el.getBoundingClientRect().top < innerHeight) el.classList.remove('pre');
       else io.observe(el);
     }
+    document.documentElement.classList.add('reveal');
     return () => {
       io.disconnect();
     };
@@ -97,17 +100,17 @@ function Home() {
             <div className="hero-copy">
               <h1 className="display lines" id="h-hero">
                 <span className="line">
-                  <span data-line style={{ '--i': 0 } as React.CSSProperties}>
+                  <span data-line style={stagger(0)}>
                     See what changed.
                   </span>
                 </span>
               </h1>
-              <p className="lead" data-rise style={{ '--i': 0 } as React.CSSProperties}>
+              <p className="lead" data-rise style={stagger(0)}>
                 Observed runs your coding agent, then runs your app on both revisions and shows what
                 the change did. Checks written before the change decide what holds. No model gets a
                 vote.
               </p>
-              <div className="actions" data-rise style={{ '--i': 1 } as React.CSSProperties}>
+              <div className="actions" data-rise style={stagger(1)}>
                 <a className="button" href={docsUrl}>
                   Read the docs
                 </a>
@@ -115,14 +118,14 @@ function Home() {
                   View the source
                 </a>
               </div>
-              <p className="hero-meta micro" data-rise style={{ '--i': 2 } as React.CSSProperties}>
+              <p className="hero-meta micro" data-rise style={stagger(2)}>
                 <span>Being rebuilt</span>
                 <span>MIT licensed</span>
                 <span>Claude Code, Codex, opencode, Muse</span>
               </p>
             </div>
 
-            <div className="hero-frag" data-rise style={{ '--i': 3 } as React.CSSProperties}>
+            <div className="hero-frag" data-rise style={stagger(3)}>
               <figure className="card" data-ui>
                 <figcaption className="cardbar">
                   <span>
@@ -157,22 +160,22 @@ function Home() {
             The agent writes. The code judges.
           </h2>
           <div className="three">
-            <p className="pre" style={{ '--i': 0 } as React.CSSProperties}>
+            <p className="pre" style={stagger(0)}>
               <strong>Your agent makes the change.</strong>
               Claude Code, Codex, opencode or Muse writes it, as it does today.
             </p>
-            <p className="pre" style={{ '--i': 1 } as React.CSSProperties}>
+            <p className="pre" style={stagger(1)}>
               <strong>Observed runs both revisions.</strong>
               It drives your app on the base and on the candidate and records screenshots, requests
               and errors.
             </p>
-            <p className="pre" style={{ '--i': 2 } as React.CSSProperties}>
+            <p className="pre" style={stagger(2)}>
               <strong>Checks from the base decide.</strong>
               The verdict comes from code with no model in it, and every claim points at its
               evidence.
             </p>
           </div>
-          <figure className="twin pre" style={{ '--i': 3 } as React.CSSProperties}>
+          <figure className="twin pre" style={stagger(3)}>
             <pre aria-hidden="true">
               <u>BASE 83f756f</u>
               {'               '}
@@ -229,7 +232,7 @@ POST /orders  `}
           </div>
           <ol className="rules">
             {rules.map((r, i) => (
-              <li className="rule pre" key={r.rule} style={{ '--i': i } as React.CSSProperties}>
+              <li className="rule pre" key={r.rule} style={stagger(i)}>
                 <p className="rule-head">{r.rule}</p>
                 <p>{r.why}</p>
               </li>
@@ -251,7 +254,7 @@ POST /orders  `}
           </div>
           <ul className="agent-list">
             {agents.map((a, i) => (
-              <li className="agent pre" key={a.name} style={{ '--i': i } as React.CSSProperties}>
+              <li className="agent pre" key={a.name} style={stagger(i)}>
                 <span className="agent-name">{a.name}</span>
                 <span className="micro">{a.how}</span>
               </li>

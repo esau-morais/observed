@@ -4,16 +4,14 @@ const bitmaps = {
   check: ['.....#', '....##', '#..##.', '####..', '.##...', '......'],
   delta: ['..##..', '..##..', '.#..#.', '.#..#.', '######', '......'],
   unknown: ['.####.', '#....#', '...##.', '..#...', '......', '..#...'],
-  stop: ['..##..', '..##..', '..##..', '..##..', '......', '..##..'],
 };
 
-type State = 'checked' | 'changed' | 'unknown' | 'regression';
+type State = 'checked' | 'changed' | 'unknown';
 
 const stateIcon: Record<State, keyof typeof bitmaps> = {
   checked: 'check',
   changed: 'delta',
   unknown: 'unknown',
-  regression: 'stop',
 };
 
 function Pixel({ name }: { name: keyof typeof bitmaps }) {
@@ -116,7 +114,7 @@ const receipt: readonly (readonly [string, React.ReactNode])[] = [
 
 export function Receipt() {
   return (
-    <div className="receipt" aria-label="Example receipt">
+    <div className="receipt" role="group" aria-label="Example receipt">
       <p className="receipt-head">Turn 3 · Disable checkout while saving</p>
       {receipt.map(([k, v]) => (
         <p className="receipt-row" key={k}>

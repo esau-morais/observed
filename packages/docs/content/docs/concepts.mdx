@@ -21,14 +21,14 @@ A check counts only if it exists at the base revision. An agent can add or edit 
 
 The **judge** reads the evidence, applies the checks and decides what holds. It is plain code with no model in it, and it imports no model SDK.
 
-Each result is one of four states:
+Each line on a receipt is in one of four states:
 
-| State      | Meaning                                                                 |
-| ---------- | ----------------------------------------------------------------------- |
-| Checked    | A check from the base revision holds on the candidate.                  |
-| Changed    | Something differs that no check covers. You decide if it was meant.     |
-| Unknown    | Evidence is missing, skipped or was altered, so the judge can't decide. |
-| Regression | A check from the base revision fails on the candidate.                  |
+| State   | Meaning                                                                 |
+| ------- | ----------------------------------------------------------------------- |
+| Checked | A check from the base revision holds on the candidate.                  |
+| Changed | Something differs that no check covers. You decide if it was meant.     |
+| Unknown | Evidence is missing, skipped or was altered, so the judge can't decide. |
+| Failed  | A check from the base revision fails on the candidate.                  |
 
 Unknown is never rounded up to a pass. A journey only shows the cases it ran, so Observed says "observed", never "proved".
 

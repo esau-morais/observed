@@ -12,7 +12,8 @@ description: The kinds of checks and the rules every check follows.
 
 - A check counts only if it exists at the base revision.
 - Missing, skipped or altered evidence makes a check unknown, never a pass.
-- A performance check fails only when the candidate's median is over the limit and every candidate sample is slower than every base sample. If the ranges overlap, the result is unknown.
+- A performance check with a fixed limit compares the candidate's median with that limit.
+- A performance check against the base fails only when the median grew past the allowed increase and every candidate sample is slower than every base sample. If the ranges overlap, the result is unknown.
 
 ## Kinds
 

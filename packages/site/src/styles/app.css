@@ -31,8 +31,6 @@
   --changed-bg: #fbefd2;
   --unknown: #4f5764;
   --unknown-bg: #e4e7ec;
-  --regression: #ab301c;
-  --regression-bg: #fce4de;
   --gutter: max(20px, env(safe-area-inset-left, 0px));
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --s-micro: 11px;
@@ -124,7 +122,6 @@
   top: 12px;
 }
 
-/* bands run edge to edge */
 .band {
   margin-inline: calc(-1 * var(--gutter));
   padding-inline: var(--gutter);
@@ -152,7 +149,6 @@
   border-radius: inherit;
 }
 
-/* top bar */
 .bar {
   display: flex;
   align-items: center;
@@ -189,7 +185,6 @@
   }
 }
 
-/* buttons: the blue one is lifted, the light one is a key. Radius is concentric with the padding. */
 .button,
 .key {
   position: relative;
@@ -259,7 +254,6 @@
     0 0 0 1px var(--color-blue);
 }
 
-/* hero */
 .hero {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -358,26 +352,26 @@
 @media (prefers-reduced-motion: no-preference) {
   .js [data-line] {
     transform: translateY(105%);
-    animation: line-up 900ms var(--ease) forwards;
-    animation-delay: calc(var(--i) * 110ms + 150ms);
+    animation: line-up 600ms var(--ease) forwards;
+    animation-delay: calc(var(--i) * 80ms + 100ms);
   }
   .js [data-rise] {
     opacity: 0;
     transform: translateY(18px);
-    animation: rise 700ms var(--ease) forwards;
-    animation-delay: calc(var(--i, 0) * 90ms + 380ms);
+    animation: rise 500ms var(--ease) forwards;
+    animation-delay: calc(var(--i, 0) * 60ms + 260ms);
   }
-  .js .pre {
+  .reveal .pre {
     opacity: 0;
     transform: translateY(24px);
   }
-  .js .pre.in {
+  .reveal .pre.in {
     opacity: 1;
     transform: none;
     transition:
-      opacity 700ms var(--ease),
-      transform 900ms var(--ease);
-    transition-delay: calc(var(--i, 0) * 75ms);
+      opacity 400ms var(--ease),
+      transform 500ms var(--ease);
+    transition-delay: calc(var(--i, 0) * 60ms);
   }
 }
 @keyframes line-up {
@@ -392,7 +386,6 @@
   }
 }
 
-/* product fragments */
 .card {
   margin: 0;
   background: var(--card);
@@ -469,12 +462,7 @@
   color: var(--unknown);
   background: var(--unknown-bg);
 }
-.chip-regression {
-  color: var(--regression);
-  background: var(--regression-bg);
-}
 
-/* flipbook: base on the left of the handle, candidate on the right */
 .flip {
   position: relative;
   aspect-ratio: 2 / 1;
@@ -610,7 +598,6 @@
   outline-offset: 2px;
 }
 
-/* receipt */
 .receipt {
   background: #fbfcfd;
   padding: 22px 22px 36px;
@@ -627,8 +614,8 @@
   transform: rotate(1.2deg);
 }
 .receipt-head {
-  font-family: var(--font-pixel);
-  font-size: 13px;
+  font-weight: 600;
+  font-size: 12px;
   margin-bottom: 6px;
   max-width: none;
 }
@@ -649,7 +636,6 @@
   margin: 8px 0;
 }
 
-/* how it works, on the night band */
 .judge {
   position: relative;
   overflow: hidden;
@@ -731,7 +717,6 @@
   }
 }
 
-/* rules, on the blue field */
 .memo {
   position: relative;
   display: grid;
@@ -811,7 +796,6 @@
   }
 }
 
-/* agents */
 .agents {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -870,7 +854,6 @@
   }
 }
 
-/* footer */
 .tiles {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
