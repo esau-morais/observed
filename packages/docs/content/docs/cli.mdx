@@ -19,7 +19,7 @@ observed receipt [revision]
 
 Prints the receipt for `revision` from the newest record in `refs/observed/evidence`. `revision` is any commit name git accepts and defaults to `HEAD`. Run it inside the repository.
 
-If the ref is missing, the commit has no record or a record was altered, it prints the reason to stderr, prints nothing to stdout and exits with code 1. [Where evidence lives](/docs/concepts#where-evidence-lives) shows how to fetch the ref.
+If the ref is missing, if the commit has no record, or if a record was altered, the command prints the reason to stderr, prints nothing to stdout, and exits with code 1. [Where evidence lives](/docs/concepts#where-evidence-lives) shows how to fetch the ref.
 
 The receipt is plain text, so a PR comment shows it as-is inside a code block. To post the receipt for `HEAD` on the current branch's pull request with the [GitHub CLI](https://cli.github.com):
 

@@ -231,11 +231,12 @@ const appendOnly = Effect.fn('appendOnly')(function* (cwd: string, tip: string) 
       '--no-commit-id',
       '--name-only',
       '--diff-filter=a',
+      '-z',
     ],
     history,
   ))
     .toString()
-    .split('\n')
+    .split('\0')
     .filter((line) => line !== '');
 
   if (changed !== undefined) {
