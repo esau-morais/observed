@@ -5,3 +5,4 @@ export const Journey = Schema.Struct({
   steps: Schema.NonEmptyArray(Schema.String),
 });
 export type Journey = typeof Journey.Type;
+export * from './store/store';

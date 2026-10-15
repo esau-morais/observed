@@ -11,6 +11,10 @@
     "build": "bun build src/index.ts --target bun --outdir dist --packages external"
   },
   "dependencies": {
+    "@observed/judge": "workspace:*",
     "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "4.0.5"
   }
 }

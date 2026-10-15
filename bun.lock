@@ -101,7 +101,11 @@
       "name": "@observed/runner",
       "version": "0.0.0",
       "dependencies": {
+        "@observed/judge": "workspace:*",
         "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@effect/platform-bun": "4.0.5",
       },
     },
     "packages/site": {
