@@ -1,4 +1,4 @@
-import { Deferred, Effect, Queue, Schema, Stream } from 'effect';
+import { Deferred, Effect, Option, Queue, Schema, Stream } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import packageJson from '../package.json' with { type: 'json' };
 import {
@@ -43,6 +43,8 @@ const OtherItem = Schema.Struct({
   item: Schema.Struct({ id: Schema.String, status: Schema.optionalKey(Schema.Unknown) }),
 });
 const decodeItemStatus = Schema.decodeUnknownOption(ItemStatus);
+
+const withoutStatus = new Set(['webSearch', 'imageView']);
 
 const notTools = new Set([
   'userMessage',
@@ -154,11 +156,11 @@ export const codex = (options: CodexOptions): Adapter => {
                 ledger.note(other.id, { kind: 'other', title: item.type });
                 if (!completed) return;
                 if (other.status === undefined) {
-                  settle(other.id, 'completed');
-                } else {
-                  const status = decodeItemStatus(other.status);
-                  if (status._tag === 'Some') settle(other.id, status.value);
+                  if (withoutStatus.has(item.type)) settle(other.id, 'completed');
+                  return;
                 }
+                const status = decodeItemStatus(other.status);
+                if (Option.isSome(status)) settle(other.id, status.value);
               }
             }
           });
