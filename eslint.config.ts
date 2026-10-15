@@ -23,6 +23,8 @@ export default defineConfig(
       },
     },
     rules: {
+      // Counts and sizes fill most evidence messages.
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
       // TanStack Router signals redirects and missing pages by throwing these.
       '@typescript-eslint/only-throw-error': [
         'error',
