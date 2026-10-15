@@ -31,8 +31,9 @@ test('the judge depends on nothing but Effect, Node built-ins and itself', async
 
   expect(files.length).toBeGreaterThan(0);
   expect(external).toEqual([]);
-  expect(manifest).toMatchObject({ dependencies: { effect: expect.any(String) as unknown } });
-  expect(Object.keys((manifest as { dependencies: Record<string, string> }).dependencies)).toEqual([
-    'effect',
-  ]);
+  const declared = ['dependencies', 'peerDependencies', 'optionalDependencies'].flatMap((field) =>
+    Object.keys((manifest as Record<string, Record<string, string> | undefined>)[field] ?? {}),
+  );
+
+  expect(declared).toEqual(['effect']);
 });

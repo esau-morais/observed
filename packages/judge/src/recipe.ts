@@ -145,9 +145,7 @@ export function journeyCollectors(
   );
 }
 
-// K ties the kind's entry to the definitions it receives, which the guard
-// narrows to that kind.
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- K ties the entry to the narrowed definitions
 function collectorsFor<K extends CheckDefinition['kind']>(
   kind: K,
   checks: readonly CheckDefinition[],

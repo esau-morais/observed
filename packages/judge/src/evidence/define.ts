@@ -23,7 +23,7 @@ export type EvidenceDefinition<
 };
 
 // One evidence kind: what its collector is configured with, and the value its
-// versioned artifact file holds. Schemas only, so the viewer can bundle it.
+// versioned artifact file holds.
 export function defineEvidence<
   const K extends string,
   C extends Schema.Struct.Fields,
