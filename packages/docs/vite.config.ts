@@ -13,7 +13,7 @@ export default defineConfig({
         enabled: true,
         crawlLinks: true,
       },
-      pages: [{ path: '/llms.txt' }, { path: '/llms-full.txt' }],
+      pages: [{ path: '/llms.txt' }, { path: '/llms-full.txt' }, { path: '/api/search' }],
     }),
     react(),
   ],

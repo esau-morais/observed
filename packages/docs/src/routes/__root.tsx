@@ -12,11 +12,16 @@ export const Route = createRootRoute({
         name: 'viewport',
         content: 'width=device-width, initial-scale=1',
       },
+      { title: 'Observed docs' },
       {
-        title: 'Observed docs',
+        name: 'description',
+        content: "How to run Observed and read what it tells you about your agent's change.",
       },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+    ],
   }),
   component: RootComponent,
 });
@@ -28,7 +33,7 @@ function RootComponent() {
         <HeadContent />
       </head>
       <body className="flex flex-col min-h-screen">
-        <RootProvider>
+        <RootProvider search={{ options: { type: 'static', api: '/api/search' } }}>
           <Outlet />
         </RootProvider>
         <Scripts />

@@ -1,8 +1,38 @@
 ---
-title: Observed
+title: Introduction
 description: See what your agent's change actually did.
 ---
 
-Observed runs your coding agent and shows what each change did to your app, with evidence a model can't fake.
+Observed runs your coding agent and shows what each change did to your app. It runs the app on the revision before the change and the revision after it, records screenshots, requests and errors on both, and prints a receipt. Checks written before the change decide what holds. No model gets a vote.
 
-The rebuild is in progress. These pages fill in as each part ships.
+<Callout title="Being rebuilt">
+  Observed is being rebuilt from its first version. The judge and the agent adapters are in
+  progress, so there is nothing to install yet. These pages say what works today and mark the rest
+  as in progress.
+</Callout>
+
+## A receipt
+
+This is what you get after an agent's turn. It is plain text, so it fits a terminal, a PR comment or a phone notification.
+
+```txt
+Turn 3 · Disable checkout while saving
+  ✓ One POST /orders per click     base 2 · now 1
+  ✓ Button disabled while saving   2 screenshots
+  Δ Pay → Saving…                  CheckoutButton.tsx:41
+  1m 42s · 38.2k tokens
+```
+
+Each line is a claim and the evidence behind it. `✓` means a check from before the change still holds. `Δ` means something changed that no check covers, so you decide whether it was meant.
+
+## How it works
+
+- Your agent (Claude Code, Codex, opencode or Muse) writes the change.
+- Observed runs your app on both revisions and records what happened.
+- Checks that existed before the change decide what holds. Missing evidence is unknown, never a pass.
+
+## Where to go next
+
+- [Quickstart](/docs/quickstart) to build it from source today.
+- [Concepts](/docs/concepts) for the judge, evidence and gaps.
+- [Agents](/docs/agents) for which agents it runs and how.

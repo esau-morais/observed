@@ -1,0 +1,51 @@
+---
+title: Concepts
+description: The judge, evidence, unknowns and gaps.
+---
+
+## Base and candidate
+
+The **base** is your code before the agent's change. The **candidate** is your code after it. Observed runs your app on both and compares them, so every result is about what this change did.
+
+## Journeys
+
+A **journey** is a scripted walk through your app, like adding an item to the cart and paying. Observed runs each journey on both revisions and records screenshots, network requests, browser errors and timings. That record is the **evidence**.
+
+## Checks
+
+A **check** is a rule about the evidence, like "one click sends one POST /orders" or "no new browser errors". See [Checks](/docs/checks) for the kinds.
+
+A check counts only if it exists at the base revision. An agent can add or edit checks, but its edits apply from the next change on, so it never grades its own work.
+
+## The judge
+
+The **judge** reads the evidence, applies the checks and decides what holds. It is plain code with no model in it, and it imports no model SDK.
+
+Each result is one of four states:
+
+| State      | Meaning                                                                 |
+| ---------- | ----------------------------------------------------------------------- |
+| Checked    | A check from the base revision holds on the candidate.                  |
+| Changed    | Something differs that no check covers. You decide if it was meant.     |
+| Unknown    | Evidence is missing, skipped or was altered, so the judge can't decide. |
+| Regression | A check from the base revision fails on the candidate.                  |
+
+Unknown is never rounded up to a pass. A journey only shows the cases it ran, so Observed says "observed", never "proved".
+
+## Gaps
+
+<Callout title="In progress">Gap closing is planned for a later milestone.</Callout>
+
+A **gap** is changed code that no journey reaches. When there is one, the agent proposes a journey for it and Observed runs that journey before showing you results. A gap that stays open shows as a short note on the receipt, not a task for you.
+
+## Laws
+
+<Callout title="In progress">Laws are planned for a later milestone.</Callout>
+
+**Laws** are sentences about what must stay true, taken from the chat, issue or PR text you already write. Once a person accepts a law it is locked, and like a check it is judged at the base revision. An agent's edit to a law changes no verdict until a person merges it.
+
+## Where evidence lives
+
+<Callout title="In progress">The evidence store is planned for a later milestone.</Callout>
+
+Evidence is stored as hashed records in a hidden git ref, so it travels with the repository without adding files to your tree. Anyone who clones the repository can rebuild the same receipt from that ref.

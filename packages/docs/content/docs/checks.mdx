@@ -1,0 +1,31 @@
+---
+title: Checks
+description: The kinds of checks and the rules every check follows.
+---
+
+<Callout title="In progress">
+  The judge is being ported from the first version of Observed. The kinds below are the ones that
+  version has. How you write a check will be documented here once the new judge lands.
+</Callout>
+
+## Rules every check follows
+
+- A check counts only if it exists at the base revision.
+- Missing, skipped or altered evidence makes a check unknown, never a pass.
+- A performance check fails only when the candidate's median is over the limit and every candidate sample is slower than every base sample. If the ranges overlap, the result is unknown.
+
+## Kinds
+
+| Kind                      | What it checks                                              |
+| ------------------------- | ----------------------------------------------------------- |
+| `request-count`           | How many requests a journey sends to a method and path      |
+| `text`                    | The text in an element                                      |
+| `browser-errors`          | Errors in the browser console                               |
+| `baseline-browser-errors` | No new browser errors compared with the base                |
+| `baseline-server-errors`  | No new server errors compared with the base                 |
+| `accessibility`           | No new accessibility violations at or above an impact level |
+| `performance`             | A timing metric against a limit, over several samples       |
+| `react-renders`           | How many times a React component renders                    |
+| `api-status`              | The status code an API returns                              |
+| `api-schema`              | The shape of an API response                                |
+| `api-readback`            | A value read back from an API matches the expected value    |

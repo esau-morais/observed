@@ -1,0 +1,25 @@
+---
+title: Agents
+description: Use Observed with Claude Code, Codex, opencode or Muse.
+---
+
+<Callout title="In progress">
+  The adapters are being built. Claude Code comes first, then Codex, opencode and Muse.
+</Callout>
+
+Observed doesn't write code. Your agent does, the same way it does today. Each agent gets a thin **adapter** that starts a turn, waits for it to finish and hands the change to the judge. Nothing that decides a verdict depends on hooks inside the agent.
+
+| Agent       | How Observed talks to it                                             |
+| ----------- | -------------------------------------------------------------------- |
+| Claude Code | The Claude Agent SDK, using your installed Claude Code or an API key |
+| Codex       | The Codex app-server                                                 |
+| opencode    | The Agent Client Protocol                                            |
+| Muse        | Planned                                                              |
+
+Agents that speak the [Agent Client Protocol](https://agentclientprotocol.com) can use the shared adapter. Claude Code and Codex get native adapters, which add token usage, approvals and history.
+
+The Claude adapter can't offer a claude.ai login inside Observed. It uses the Claude Code you already have installed and signed in, or an API key.
+
+## Comparing agents
+
+The same task run through two agents produces two receipts the judge compares the same way, because the judge only reads evidence and never the agent's own account of what it did.

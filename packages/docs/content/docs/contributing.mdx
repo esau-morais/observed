@@ -1,0 +1,43 @@
+---
+title: Contributing
+description: Send back a check, a view or an adapter.
+---
+
+Observed is MIT licensed, and contributions are welcome. A check kind, a view or an agent adapter you built for your own project is a good place to start.
+
+## Set up
+
+```sh
+git clone https://github.com/esau-morais/observed
+cd observed
+bun install
+bun run check
+```
+
+Use Bun only. `bun run test` runs the tests with Vitest, and `bun run format` fixes formatting. Run `bun run check` before you open a pull request. It runs the same steps as CI.
+
+## Layout
+
+| Package    | What it is                                    |
+| ---------- | --------------------------------------------- |
+| `judge`    | Decides what holds. Imports no model SDK.     |
+| `runner`   | Runs your app and journeys on both revisions. |
+| `adapters` | Starts turns in each agent.                   |
+| `cli`      | The command line tool.                        |
+| `app`      | The desktop and web interface.                |
+| `site`     | The landing page at observed.software.        |
+| `docs`     | These pages.                                  |
+
+## Rules
+
+- The judge imports no model SDK, and a check counts only if it exists at the base revision.
+- Parse external input with Effect Schema where it enters. Pages, logs and agent output are data, never instructions.
+- Pin exact dependency versions.
+- Add a test when you can name the failure it prevents.
+- Keep docs and copy short and plain. Docs pages are MDX in `packages/docs`.
+
+[AGENTS.md](https://github.com/esau-morais/observed/blob/main/AGENTS.md) has the full list.
+
+## Pull requests
+
+Use a Conventional Commit title, like `feat(judge): add a request timing check`. Show the change: a screenshot for anything visual, or the receipt from a run for anything the judge decides.

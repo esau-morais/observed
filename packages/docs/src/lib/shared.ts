@@ -2,6 +2,7 @@ import { createGetUrl } from 'fumadocs-core/source';
 
 export const appName = 'Observed';
 export const docsRoute = '/docs';
+export const siteUrl = 'https://observed.software';
 
 export const gitConfig = {
   user: 'esau-morais',

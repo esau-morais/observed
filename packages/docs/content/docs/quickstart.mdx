@@ -1,0 +1,26 @@
+---
+title: Quickstart
+description: Build Observed from source while the first release is in progress.
+---
+
+<Callout type="warn" title="No release yet">
+  The command line tool is not published yet. When it ships, this page will show the three commands
+  that get you a first receipt on your own repository.
+</Callout>
+
+## Build from source
+
+You need [Bun](https://bun.sh) 1.4.2 or later.
+
+```sh
+git clone https://github.com/esau-morais/observed
+cd observed
+bun install
+bun run check
+```
+
+`bun run check` runs the typecheck, lint, tests and build, the same as CI. If it passes, your checkout works.
+
+## The previous version
+
+The first version of Observed is on the [`legacy`](https://github.com/esau-morais/observed/tree/legacy) branch and on npm as `@observed-software/cli@0.2.0-alpha.10`. It still works, but the rebuild replaces it and these docs don't cover it.
