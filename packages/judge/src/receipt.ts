@@ -1,9 +1,6 @@
 import type { CheckVerdict, Comparison, Conclusion, Journey, Measure } from './result';
 import { addedText } from './words';
 
-// The plain-text receipt for a judged comparison. It renders verdicts the
-// judge already decided and never changes one.
-
 export const receiptStates = ['failed', 'unknown', 'changed', 'checked'] as const;
 
 export type ReceiptState = (typeof receiptStates)[number];
@@ -21,9 +18,7 @@ const conclusionLabels = {
 
 export const previewText = 'A preview has no base revision to judge against.';
 
-// Names, details and imported test titles are data. A line break inside one
-// must not start a new receipt line.
-function field(value: string): string {
+function oneLine(value: string): string {
   return value.replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim();
 }
 
@@ -41,8 +36,6 @@ function measured(measure: Measure | undefined): string | null {
     .join(' · ');
 }
 
-// A check counts only if the base revision defines it, so a pass without a
-// baseline stays unknown.
 function checkLine(check: CheckVerdict, mode: Comparison['mode']): Line {
   const line = (state: ReceiptState, evidence: string): Line => ({
     state,
@@ -74,7 +67,6 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
-// Differences that no check covers.
 function comparisonLines(comparison: Journey['comparison']): Line[] {
   switch (comparison.kind) {
     case 'preview':
@@ -154,12 +146,12 @@ export function receipt(result: Comparison): string {
   const count = (state: ReceiptState) => lines.filter((line) => line.state === state).length;
   const width = Math.max(...receiptStates.map((state) => state.length));
   const row = ({ state, subject, evidence }: Line) =>
-    `  ${state.padEnd(width)}  ${[subject, evidence].map(field).join(' · ')}`;
+    `  ${state.padEnd(width)}  ${[subject, evidence].map(oneLine).join(' · ')}`;
 
   return [
-    field(result.title),
+    oneLine(result.title),
     ...groups.flatMap((group) => [
-      ...(groups.length > 1 ? [field(group.title)] : []),
+      ...(groups.length > 1 ? [oneLine(group.title)] : []),
       ...(group.lines.length === 0 ? ['  Nothing to report.'] : group.lines.map(row)),
     ]),
     `${conclusionLabels[result.conclusion.kind]} · ${[...receiptStates]

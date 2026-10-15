@@ -5,10 +5,6 @@ import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Records live under one hidden ref as <commit>/<record id>/, where the id is
-// the SHA-256 of the record's files. Writes only add paths, so the ref's
-// history must too.
-
 export const evidenceRef = 'refs/observed/evidence';
 
 export const evidenceRefspec = 'refs/observed/*:refs/observed/*';
@@ -64,11 +60,10 @@ function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-// Code unit order, so every machine sorts alike.
-const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 function sorted(files: readonly RecordFile[]): RecordFile[] {
-  return [...files].sort((a, b) => byText(a.path, b.path));
+  return [...files].sort((a, b) => byCodeUnit(a.path, b.path));
 }
 
 function recordId(files: readonly RecordFile[]): string {
@@ -157,8 +152,8 @@ function importStream(options: {
   return Buffer.concat(parts);
 }
 
-// Adds one record for `commit` and returns its id. Nothing touches the
-// working tree or the index. Writing the same record again adds nothing.
+// Adds one record for `commit`. Nothing touches the working tree or the
+// index. Writing the same record again adds nothing.
 export const writeRecord = Effect.fn('writeRecord')(function* (options: {
   cwd: string;
   commit: string;
@@ -201,7 +196,6 @@ export const writeRecord = Effect.fn('writeRecord')(function* (options: {
 
 const altered = (detail: string) => fail(`The evidence in ${evidenceRef} was altered: ${detail}`);
 
-// Every commit on the ref may only add paths to its single parent.
 const appendOnly = Effect.fn('appendOnly')(function* (cwd: string, tip: string) {
   const history = yield* run(cwd, ['rev-list', '--parents', tip]);
   const merge = history
@@ -352,6 +346,6 @@ export const readRecords = Effect.fn('readRecords')(function* (options: {
   }
 
   return records.sort(
-    (a, b) => byText(a.result.evaluatedAt, b.result.evaluatedAt) || byText(a.id, b.id),
+    (a, b) => byCodeUnit(a.result.evaluatedAt, b.result.evaluatedAt) || byCodeUnit(a.id, b.id),
   );
 });
