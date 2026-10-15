@@ -1,4 +1,10 @@
-import { comparisonSchema, resultVersionProblem, type Comparison } from '@observed/judge';
+import {
+  comparisonSchema,
+  resultVersionProblem,
+  selectionSchema,
+  type Comparison,
+  type Selection,
+} from '@observed/judge';
 import { Data, Effect, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { createHash } from 'node:crypto';
@@ -15,9 +21,14 @@ export class EvidenceStoreError extends Data.TaggedError('EvidenceStoreError')<{
 
 type Mode = '100644' | '100755';
 
-type RecordFile = { readonly path: string; readonly mode: Mode; readonly bytes: Uint8Array };
+export type RecordFile = { readonly path: string; readonly mode: Mode; readonly bytes: Uint8Array };
 
-export type StoredRecord = { readonly id: string; readonly result: Comparison };
+export type StoredRecord = {
+  readonly id: string;
+  readonly selection: Selection;
+  readonly result: Comparison;
+  readonly captures: readonly RecordFile[];
+};
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -158,6 +169,7 @@ export const writeRecord = Effect.fn('writeRecord')(function* (options: {
   cwd: string;
   commit: string;
   captures: string;
+  selection: Selection;
   result: Comparison;
 }) {
   const commit = yield* resolveCommit(options.cwd, options.commit);
@@ -166,12 +178,14 @@ export const writeRecord = Effect.fn('writeRecord')(function* (options: {
     catch: (cause) =>
       new EvidenceStoreError({ message: `Captures could not be read: ${String(cause)}` }),
   });
+  const saved = (path: string, value: unknown): RecordFile => ({
+    path,
+    mode: '100644',
+    bytes: encoder.encode(`${JSON.stringify(value, null, 2)}\n`),
+  });
   const files: RecordFile[] = [
-    {
-      path: 'result.json',
-      mode: '100644',
-      bytes: encoder.encode(`${JSON.stringify(options.result, null, 2)}\n`),
-    },
+    saved('selection.json', options.selection),
+    saved('result.json', options.result),
     ...captured.map((file) => ({ ...file, path: `captures/${file.path}` })),
   ];
   const id = recordId(files);
@@ -255,6 +269,7 @@ const blobs = Effect.fn('blobs')(function* (cwd: string, oids: readonly string[]
 });
 
 const decodeResult = Schema.decodeUnknownEffect(comparisonSchema);
+const decodeSelection = Schema.decodeUnknownEffect(selectionSchema);
 
 // Every record for `commit`, oldest evaluation first. A missing ref, a ref
 // whose history is not append-only, or a record that no longer matches its
@@ -317,21 +332,22 @@ export const readRecords = Effect.fn('readRecords')(function* (options: {
       return yield* altered(`record ${id} for ${commit} no longer matches its hash.`);
     }
 
-    const result = files.find((file) => file.path === 'result.json');
-
-    if (result === undefined) {
-      return yield* altered(`record ${id} for ${commit} has no result.json.`);
-    }
-
-    const unreadable = (detail: string) =>
+    const unreadable = (name: string, detail: string) =>
       new EvidenceStoreError({
-        message: `Record ${id} for ${commit} holds an unreadable result: ${detail}`,
+        message: `Record ${id} for ${commit} holds an unreadable ${name}: ${detail}`,
       });
-    const parsed = yield* Effect.try({
-      try: (): unknown => JSON.parse(decoder.decode(result.bytes)),
-      catch: (cause) => unreadable(String(cause)),
-    });
-    const versionProblem = resultVersionProblem(parsed);
+    const parsed = (name: string) => {
+      const file = files.find((item) => item.path === name);
+
+      return file === undefined
+        ? altered(`record ${id} for ${commit} has no ${name}.`)
+        : Effect.try({
+            try: (): unknown => JSON.parse(decoder.decode(file.bytes)),
+            catch: (cause) => unreadable(name, String(cause)),
+          });
+    };
+    const result = yield* parsed('result.json');
+    const versionProblem = resultVersionProblem(result);
 
     if (versionProblem !== null) {
       return yield* fail(versionProblem);
@@ -339,8 +355,16 @@ export const readRecords = Effect.fn('readRecords')(function* (options: {
 
     records.push({
       id,
-      result: yield* decodeResult(parsed).pipe(
-        Effect.mapError((error) => unreadable(error.message)),
+      selection: yield* decodeSelection(yield* parsed('selection.json')).pipe(
+        Effect.mapError((error) => unreadable('selection.json', error.message)),
+      ),
+      result: yield* decodeResult(result).pipe(
+        Effect.mapError((error) => unreadable('result.json', error.message)),
+      ),
+      captures: files.flatMap((file) =>
+        file.path.startsWith('captures/')
+          ? [{ ...file, path: file.path.slice('captures/'.length) }]
+          : [],
       ),
     });
   }

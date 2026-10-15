@@ -1,6 +1,7 @@
 import { BunServices } from '@effect/platform-bun';
-import { receipt } from '@observed/judge';
+import { receipt, selectionSchemaVersion, type Selection } from '@observed/judge';
 import {
+  evaluatedAt,
   judgedSides,
   projectJourney,
   removeTemporaryDirectories,
@@ -51,14 +52,24 @@ it('prints the stored receipt for a commit, and fails without the evidence ref',
   expect(missing.stderr).toContain('refs/observed/evidence is missing');
 
   const bundles = await judgedSides({ captured: [requestCheck], baseCount: 1, candidateCount: 2 });
+  const selection: Selection = {
+    schemaVersion: selectionSchemaVersion,
+    evaluatedAt,
+    mode: 'comparison',
+    journeys: [{ directory: 'journey-1', base: null, candidate: null }],
+  };
   const result = await selectedComparison(bundles, {
     base: { kind: 'unavailable', reason: 'Not read in this test.' },
     candidate: [projectJourney([requestCheck])],
   });
   await Effect.runPromise(
-    writeRecord({ cwd: repo, commit: 'HEAD', captures: bundles.candidate.directory, result }).pipe(
-      Effect.provide(BunServices.layer),
-    ),
+    writeRecord({
+      cwd: repo,
+      commit: 'HEAD',
+      captures: bundles.candidate.directory,
+      selection,
+      result,
+    }).pipe(Effect.provide(BunServices.layer)),
   );
 
   const stored = printed();

@@ -1,5 +1,10 @@
 import { BunServices } from '@effect/platform-bun';
-import { inspectComparison, receipt, selectionSchemaVersion } from '@observed/judge';
+import {
+  inspectComparison,
+  receipt,
+  selectionSchemaVersion,
+  type Selection,
+} from '@observed/judge';
 import {
   evaluatedAt,
   judgedSides,
@@ -9,10 +14,10 @@ import {
 } from '@observed/judge/testing';
 import { Effect } from 'effect';
 import { execFileSync } from 'node:child_process';
-import { cp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { evidenceRef, evidenceRefspec, readRecords, writeRecord } from './store';
+import { evidenceRef, evidenceRefspec, readRecords, writeRecord, type StoredRecord } from './store';
 
 afterEach(removeTemporaryDirectories);
 
@@ -47,6 +52,21 @@ const readError = (cwd: string) =>
     (error) => error.message,
   );
 
+async function rejudged(record: StoredRecord) {
+  const root = await temporaryDirectory('observed-store-rejudge-');
+
+  for (const file of record.captures) {
+    await mkdir(path.dirname(path.join(root, file.path)), { recursive: true });
+    await writeFile(path.join(root, file.path), file.bytes);
+  }
+
+  const { result } = await Effect.runPromise(
+    inspectComparison({ root, selection: record.selection }),
+  );
+
+  return receipt(result);
+}
+
 async function judgedProject() {
   const repo = await temporaryDirectory('observed-store-repo-');
   git(repo, ['init', '-q']);
@@ -64,19 +84,15 @@ async function judgedProject() {
   await cp(bundles.candidate.directory, path.join(captures, 'journey-1/candidate'), {
     recursive: true,
   });
-  const { result } = await Effect.runPromise(
-    inspectComparison({
-      root: captures,
-      selection: {
-        schemaVersion: selectionSchemaVersion,
-        evaluatedAt,
-        mode: 'comparison',
-        journeys: [{ directory: 'journey-1', base: null, candidate: null }],
-      },
-    }),
-  );
+  const selection: Selection = {
+    schemaVersion: selectionSchemaVersion,
+    evaluatedAt,
+    mode: 'comparison',
+    journeys: [{ directory: 'journey-1', base: null, candidate: null }],
+  };
+  const { result } = await Effect.runPromise(inspectComparison({ root: captures, selection }));
   const written = await Effect.runPromise(
-    provided(writeRecord({ cwd: repo, commit: 'HEAD', captures, result })),
+    provided(writeRecord({ cwd: repo, commit: 'HEAD', captures, selection, result })),
   );
 
   return { repo, captures, result, written };
@@ -100,6 +116,7 @@ test('a fresh clone rebuilds the same receipt from the ref alone', async () => {
   const records = await read(clone);
 
   expect(records.map((record) => receipt(record.result))).toEqual([expected]);
+  expect(await Promise.all(records.map(rejudged))).toEqual([expected]);
 });
 
 test('a record changed, removed or rewritten into history is refused, never read', async () => {
