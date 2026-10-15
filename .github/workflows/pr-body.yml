@@ -1,0 +1,53 @@
+name: PR body
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: pr-body-${{ github.event.pull_request.number }}
+
+jobs:
+  strip-attribution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Remove Claude attribution lines
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY' > "$RUNNER_TEMP/body.json"
+          import json, os, re, sys
+
+          body = os.environ.get("BODY") or ""
+          drop = [
+              re.compile(r"^<!-- claude-projects-attribution:.*-->$"),
+              re.compile(r"^_Requested by .*\]\(https://claude\.ai/code/project/[^)]*\)_$"),
+              re.compile(r"^(🤖 )?_?Generated (with|by) \[Claude Code\]\(https://claude\.(ai|com)/[^)]*\)_?$"),
+              re.compile(r"^<?https://claude\.ai/code/session_\w+>?$"),
+              re.compile(r"^Co-Authored-By: Claude .*$", re.I),
+          ]
+          lines = body.replace("\r\n", "\n").split("\n")
+          kept, removed = [], False
+          for line in lines:
+              if any(p.match(line.strip()) for p in drop):
+                  removed = True
+                  while kept and kept[-1].strip() in ("", "---"):
+                      kept.pop()
+                  continue
+              kept.append(line)
+          if not removed:
+              sys.exit(0)
+          cleaned = "\n".join(kept).strip("\n")
+          json.dump({"body": cleaned}, sys.stdout)
+          PY
+          if [ -s "$RUNNER_TEMP/body.json" ]; then
+            gh api -X PATCH "repos/$REPO/pulls/$NUMBER" --input "$RUNNER_TEMP/body.json" > /dev/null
+            echo "Removed attribution from #$NUMBER"
+          fi
