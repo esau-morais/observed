@@ -4,6 +4,19 @@ Observed follows [semantic versioning](https://semver.org/). Before 1.0.0, a
 minor version can change the project configuration, the evidence format, or the
 action's inputs.
 
+## 0.2.0-alpha.10 (2026-10-15)
+
+Eleventh alpha of 0.2.0, and the last release before the rebuild.
+The action's inputs and outputs are unchanged, and its `v0` tag stays on 0.1.0.
+`result.json` stays at schema version 9.
+
+- **No change in behavior.** This release carries test and CI changes only: gate 1
+  changed lines are cross-checked against raw coverage, gate 6 screenshots are
+  inspected independently of the comparator, and the gate corpus and seeded
+  faults run on pull requests and `main`.
+- **The code stays on the `legacy` branch.** The next releases come from a
+  rebuild in this repository. This version stays installable from npm.
+
 ## 0.2.0-alpha.9 (2026-10-05)
 
 Tenth alpha of 0.2.0.
