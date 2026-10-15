@@ -63,8 +63,7 @@ export function jsonType(value: Schema.Json): Exclude<TypeName, 'integer'> {
   return typeof value === 'boolean' ? 'boolean' : 'object';
 }
 
-// Object key order does not matter. Kept free of node:util because the
-// viewer bundles this module.
+// Object key order does not matter.
 export function jsonEqual(left: Schema.Json, right: Schema.Json): boolean {
   if (Array.isArray(left) || Array.isArray(right)) {
     const before: readonly Schema.Json[] = Array.isArray(left) ? left : [];

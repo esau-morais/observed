@@ -1,6 +1,12 @@
 import { Schema } from 'effect';
 import { generatedBaselineChecks } from './checks/baseline';
-import { checkKind, checkSchema, type CheckDefinition } from './checks';
+import {
+  checkKind,
+  checkKinds,
+  checkSchema,
+  type CheckDefinition,
+  type CheckKinds,
+} from './checks';
 import { collectorSchema, defaultCollectors, type CollectorConfig } from './evidence';
 import { httpOriginSchema, relativePathSchema, routeSchema, text } from './capture';
 
@@ -124,14 +130,7 @@ export function journeyCollectors(
   ];
 
   for (const kind of new Set(checks.map((check) => check.kind))) {
-    const definitions = checks.filter((check) => check.kind === kind);
-    const [first] = definitions;
-
-    if (first === undefined) {
-      continue;
-    }
-
-    for (const collector of checkKind(first).collectors(definitions)) {
+    for (const collector of collectorsFor(kind, checks)) {
       if (!collectors.some((item) => item.kind === collector.kind)) {
         collectors.push(collector);
       }
@@ -143,6 +142,20 @@ export function journeyCollectors(
   // samples, measures.
   return collectors.toSorted(
     (left, right) => Number(left.kind === 'coverage') - Number(right.kind === 'coverage'),
+  );
+}
+
+// K ties the kind's entry to the definitions it receives, which the guard
+// narrows to that kind.
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+function collectorsFor<K extends CheckDefinition['kind']>(
+  kind: K,
+  checks: readonly CheckDefinition[],
+): readonly CollectorConfig[] {
+  const entry: CheckKinds[K] = checkKinds[kind];
+
+  return entry.collectors(
+    checks.filter((check): check is Extract<CheckDefinition, { kind: K }> => check.kind === kind),
   );
 }
 
