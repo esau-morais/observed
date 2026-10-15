@@ -16,7 +16,10 @@ const conclusionLabels = {
   preview: 'Preview',
 } satisfies Record<Conclusion['kind'], string>;
 
-export const previewText = 'A preview has no base revision to judge against.';
+const previewText = 'A preview has no base revision to judge against.';
+const unreadBaseText =
+  "The base revision's observed.json was not read, so the check has no baseline.";
+const testFileText = 'This change alters its test file, so the check has no baseline.';
 
 function oneLine(value: string): string {
   return value.replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim();
@@ -36,7 +39,26 @@ function measured(measure: Measure | undefined): string | null {
     .join(' · ');
 }
 
-function checkLine(check: CheckVerdict, mode: Comparison['mode']): Line {
+function noBaseline(check: CheckVerdict, result: Comparison): string | null {
+  if (result.mode === 'preview') {
+    return previewText;
+  }
+
+  if (result.recipe.kind === 'unavailable') {
+    return unreadBaseText;
+  }
+
+  switch (check.recipe?.change) {
+    case 'added':
+      return addedText;
+    case 'test-file-changed':
+      return testFileText;
+    default:
+      return null;
+  }
+}
+
+function checkLine(check: CheckVerdict, result: Comparison): Line {
   const line = (state: ReceiptState, evidence: string): Line => ({
     state,
     subject: check.name,
@@ -50,14 +72,13 @@ function checkLine(check: CheckVerdict, mode: Comparison['mode']): Line {
     case 'unknown':
     case 'not-run':
       return line('unknown', check.detail);
-    case 'passed':
-      if (mode === 'preview') {
-        return line('unknown', previewText);
-      }
+    case 'passed': {
+      const missing = noBaseline(check, result);
 
-      return check.recipe?.change === 'added'
-        ? line('unknown', addedText)
-        : line('checked', measured(check.measure) ?? check.expectation);
+      return missing === null
+        ? line('checked', measured(check.measure) ?? check.expectation)
+        : line('unknown', missing);
+    }
     default:
       return check.verdict satisfies never;
   }
@@ -131,7 +152,7 @@ export function receipt(result: Comparison): string {
     ...result.journeys.map((journey) => ({
       title: journey.title,
       lines: ordered([
-        ...journey.checks.map((check) => checkLine(check, result.mode)),
+        ...journey.checks.map((check) => checkLine(check, result)),
         ...comparisonLines(journey.comparison),
       ]),
     })),
@@ -139,7 +160,7 @@ export function receipt(result: Comparison): string {
       .filter((journey) => journey.checks.length > 0)
       .map((journey) => ({
         title: journey.journey,
-        lines: journey.checks.map((check) => checkLine(check, result.mode)),
+        lines: journey.checks.map((check) => checkLine(check, result)),
       })),
   ];
   const lines = groups.flatMap((group) => group.lines);

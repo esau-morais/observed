@@ -23,14 +23,16 @@ The **judge** reads the evidence, applies the checks and decides what holds. It 
 
 Each line on a receipt is in one of four states:
 
-| State   | Meaning                                                                                     |
-| ------- | ------------------------------------------------------------------------------------------- |
-| Checked | A check from the base revision passes on the candidate.                                     |
-| Changed | The screenshot or the total request count differs. No verdict depends on it, so you decide. |
-| Unknown | Evidence is missing, skipped or was altered, so the judge can't decide.                     |
-| Failed  | A check fails on the candidate.                                                             |
+| State   | Meaning                                                                                               |
+| ------- | ----------------------------------------------------------------------------------------------------- |
+| Checked | A check from the base revision passes on the candidate.                                               |
+| Changed | The screenshot or the total request count differs. These lines set no verdict, so you decide.         |
+| Unknown | Evidence is missing, skipped or was altered, or the check has no baseline, so the judge can't decide. |
+| Failed  | A check fails on the candidate.                                                                       |
 
-Unknown is never rounded up to a pass. A check that the change adds has no baseline, so it prints as unknown when it passes and as failed when it fails. A journey only shows the cases it ran, so Observed says "observed", never "proved".
+Unknown is never rounded up to a pass. A check has no baseline when the change adds it, when the change alters its test file, or when Observed could not read the base revision's `observed.json`. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, so it can say "No regression" while a line above it says unknown.
+
+A journey only shows the cases it ran, so Observed says "observed", never "proved".
 
 ## Gaps
 
@@ -66,7 +68,7 @@ To fetch it on every `git fetch`, add the refspec to the remote:
 git config --add remote.origin.fetch 'refs/observed/*:refs/observed/*'
 ```
 
-The refspec has no leading `+`, so git refuses a push or fetch that would rewrite the ref's history. Observed only adds records. Before it reads one, it checks that no commit on the ref changed or removed a record and that every record still matches its SHA-256 name. If either check fails, it reads nothing.
+The refspec has no leading `+`, so git refuses a push or fetch that would rewrite the ref's history unless you force it. Observed only adds records. Before it reads one, it checks that no commit on the ref changed or removed a record and that every record still matches its SHA-256 name. If either check fails, it reads nothing. A forced rewrite that drops a record entirely is not caught, and that commit then reads as having no record.
 
 A clone that has fetched the ref prints the same receipt as the clone that wrote it, with `observed receipt` from the [CLI](/docs/cli).
 
