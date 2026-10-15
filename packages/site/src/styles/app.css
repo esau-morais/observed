@@ -619,16 +619,29 @@
   margin-bottom: 6px;
   max-width: none;
 }
-.receipt-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
+.receipt-line {
+  display: grid;
+  grid-template-columns: 7ch 1fr;
+  column-gap: 2ch;
   max-width: none;
   font-variant-numeric: tabular-nums;
 }
-.receipt-row span:last-child {
+.receipt-checked {
+  color: var(--checked);
+}
+.receipt-changed {
+  color: var(--changed);
+}
+.receipt-unknown {
+  color: var(--unknown);
+}
+.receipt-evidence {
+  display: block;
   color: var(--soft);
-  text-align: right;
+}
+.receipt-foot {
+  max-width: none;
+  font-variant-numeric: tabular-nums;
 }
 .receipt hr {
   border: 0;

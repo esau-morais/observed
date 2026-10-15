@@ -166,6 +166,5 @@ export function receipt(result: Comparison): string {
       .reverse()
       .map((state) => `${count(state)} ${state}`)
       .join(', ')}`,
-    '',
   ].join('\n');
 }

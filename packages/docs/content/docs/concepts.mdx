@@ -23,14 +23,14 @@ The **judge** reads the evidence, applies the checks and decides what holds. It 
 
 Each line on a receipt is in one of four states:
 
-| State   | Meaning                                                                 |
-| ------- | ----------------------------------------------------------------------- |
-| Checked | A check from the base revision holds on the candidate.                  |
-| Changed | Something differs that no check covers. You decide if it was meant.     |
-| Unknown | Evidence is missing, skipped or was altered, so the judge can't decide. |
-| Failed  | A check from the base revision fails on the candidate.                  |
+| State   | Meaning                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------- |
+| Checked | A check from the base revision passes on the candidate.                                     |
+| Changed | The screenshot or the total request count differs. No verdict depends on it, so you decide. |
+| Unknown | Evidence is missing, skipped or was altered, so the judge can't decide.                     |
+| Failed  | A check fails on the candidate.                                                             |
 
-Unknown is never rounded up to a pass. A journey only shows the cases it ran, so Observed says "observed", never "proved".
+Unknown is never rounded up to a pass. A check that the change adds has no baseline, so it prints as unknown when it passes and as failed when it fails. A journey only shows the cases it ran, so Observed says "observed", never "proved".
 
 ## Gaps
 
@@ -46,6 +46,28 @@ A **gap** is changed code that no journey reaches. When there is one, the agent 
 
 ## Where evidence lives
 
-<Callout title="In progress">The evidence store is planned for a later milestone.</Callout>
+Observed stores each result, with the captures it judged, as a record in the hidden ref `refs/observed/evidence`. Each record sits under the commit it judged, and its name is the SHA-256 of its files. Records never appear in your working tree, your index or your diffs.
 
-Evidence is stored as hashed records in a hidden git ref, so it travels with the repository without adding files to your tree. Anyone who clones the repository can rebuild the same receipt from that ref.
+Git does not push or fetch that ref unless you ask. To share your evidence, push it:
+
+```sh
+git push origin 'refs/observed/*:refs/observed/*'
+```
+
+To get it in another clone, fetch it:
+
+```sh
+git fetch origin 'refs/observed/*:refs/observed/*'
+```
+
+To fetch it on every `git fetch`, add the refspec to the remote:
+
+```sh
+git config --add remote.origin.fetch 'refs/observed/*:refs/observed/*'
+```
+
+The refspec has no leading `+`, so git refuses a push or fetch that would rewrite the ref's history. Observed only adds records. Before it reads one, it checks that no commit on the ref changed or removed a record and that every record still matches its SHA-256 name. If either check fails, it reads nothing.
+
+A clone that has fetched the ref prints the same receipt as the clone that wrote it, with `observed receipt` from the [CLI](/docs/cli).
+
+If two clones write records before either pushes, the second push is rejected, and Observed can't merge the two histories yet. Write records from one place, such as CI.

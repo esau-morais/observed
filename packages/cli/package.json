@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.5",
+    "@observed/judge": "workspace:*",
+    "@observed/runner": "workspace:*",
     "effect": "4.0.5"
   }
 }

@@ -107,43 +107,32 @@ export function Flipbook() {
   );
 }
 
-const receipt: readonly (readonly [string, React.ReactNode])[] = [
-  ['Files changed', '2'],
-  ['Journeys run', '2 on each side'],
+const receipt: readonly (readonly [State, string, string])[] = [
+  ['changed', 'Screenshot', '1840 pixels in 1 region'],
+  ['changed', 'Requests', '1 request fewer on the candidate'],
+  ['checked', 'One POST /orders per click', 'base 2 · candidate 1 · exactly 1'],
+  [
+    'checked',
+    'Button reads Saving… while saving',
+    'Exactly one button element with text "Saving…".',
+  ],
 ];
 
 export function Receipt() {
   return (
     <div className="receipt" role="group" aria-label="Example receipt">
-      <p className="receipt-head">Turn 3 · Disable checkout while saving</p>
-      {receipt.map(([k, v]) => (
-        <p className="receipt-row" key={k}>
-          <span>{k}</span>
-          <span>{v}</span>
+      <p className="receipt-head">Pay for the order</p>
+      {receipt.map(([state, subject, evidence]) => (
+        <p className="receipt-line" key={subject}>
+          <span className={`receipt-state receipt-${state}`}>{state}</span>
+          <span>
+            {subject}
+            <span className="receipt-evidence">{evidence}</span>
+          </span>
         </p>
       ))}
       <hr />
-      <p className="receipt-row">
-        <span>One POST /orders per click</span>
-        <span>base 2 · now 1</span>
-      </p>
-      <p className="receipt-row">
-        <span>Button disabled while saving</span>
-        <span>2 screenshots</span>
-      </p>
-      <p className="receipt-row">
-        <span>Δ Pay → Saving…</span>
-        <span>CheckoutButton.tsx:41</span>
-      </p>
-      <p className="receipt-row">
-        <span>? Declined card</span>
-        <span>not observed</span>
-      </p>
-      <hr />
-      <p className="receipt-row">
-        <span>Time</span>
-        <span>1m 42s</span>
-      </p>
+      <p className="receipt-foot">No regression · 2 checked, 2 changed, 0 unknown, 0 failed</p>
     </div>
   );
 }

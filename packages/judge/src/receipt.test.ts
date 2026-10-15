@@ -49,7 +49,6 @@ test('prints a judged comparison', async () => {
       '  failed   One request per load action · base 1 · candidate 2 · exactly 1',
       '  changed  Requests · 1 request more on the candidate',
       'Regression · 0 checked, 1 changed, 0 unknown, 1 failed',
-      '',
     ].join('\n'),
   );
 });
@@ -94,5 +93,5 @@ test('a line break in a check name cannot add a receipt line', async () => {
   const check = judgedCheck(result);
   const forged = { ...check, verdict: 'failed' as const, name: 'Real\n  checked  Forged' };
 
-  expect(receipt(withChecks(result, [forged])).split('\n')).toHaveLength(4);
+  expect(receipt(withChecks(result, [forged])).split('\n')).toHaveLength(3);
 });

@@ -13,17 +13,18 @@ Observed runs your coding agent and shows what each change did to your app. It r
 
 ## A receipt
 
-Here is an example of the receipt Observed prints after an agent's turn. It is plain text, so it fits a terminal, a PR comment or a phone notification.
+Here is an example of the receipt Observed prints for a journey. It is plain text, so it fits a terminal, a PR comment or a phone notification.
 
 ```txt
-Turn 3 · Disable checkout while saving
-  ✓ One POST /orders per click     base 2 · now 1
-  ✓ Button disabled while saving   2 screenshots
-  Δ Pay → Saving…                  CheckoutButton.tsx:41
-  1m 42s · 38.2k tokens
+Pay for the order
+  changed  Screenshot · 1840 pixels in 1 region
+  changed  Requests · 1 request fewer on the candidate
+  checked  One POST /orders per click · base 2 · candidate 1 · exactly 1
+  checked  Button reads Saving… while saving · Exactly one button element with text "Saving…".
+No regression · 2 checked, 2 changed, 0 unknown, 0 failed
 ```
 
-Each line is a claim and the evidence behind it. `✓` means a check from before the change still holds. `Δ` means something changed that no check covers, so you decide whether it was meant.
+Each line starts with its state, then names what it is about and the evidence. `checked` means a check from before the change passes. `changed` means the screenshot or the request count differs, so you decide whether it was meant. The last line is the judge's conclusion and a count for each state. [Concepts](/docs/concepts) lists all four states.
 
 ## How it works
 
