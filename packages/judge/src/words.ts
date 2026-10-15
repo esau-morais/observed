@@ -60,7 +60,7 @@ const proposedOutcomes = {
   'not-run': 'did not run',
 } satisfies Record<Proposed['outcome'], string>;
 
-const addedText = 'This change adds the check, so it has no baseline.';
+export const addedText = 'This change adds the check, so it has no baseline.';
 
 function recipeNote({ recipe, verdict }: CheckVerdict): string {
   const proposal = proposedOf(recipe);

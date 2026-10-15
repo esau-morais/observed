@@ -6,5 +6,6 @@ export * from './journey';
 export * from './judge';
 export * from './read';
 export * from './recipe';
+export * from './receipt';
 export * from './result';
 export * from './revisions';
