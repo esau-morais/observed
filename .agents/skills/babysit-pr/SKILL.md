@@ -163,7 +163,10 @@ Confirm GitHub reports merged and inspect the squash subject. Confirm the PR's
 local and remote branches were deleted and the local base is synchronized. If a
 worktree or unrelated work blocks deletion, preserve it and report the remaining
 cleanup. Remove a worktree this session created once its branch merges. Never
-delete unrelated branches or worktrees.
+delete unrelated branches or worktrees. A merge through another route, such as
+the GitHub web UI or an API tool without a delete option, leaves the branch:
+delete it with `git push origin --delete BRANCH`, and if that is refused, name
+the branch left behind so the maintainer can delete it.
 
 Report PR URL/state, reviewed head, separate review results, executed checks,
 unverified scope, and branch cleanup. If approval is pending, say so. Claim a
