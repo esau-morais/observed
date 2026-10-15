@@ -24,6 +24,7 @@ agent.on('session/prompt', async () => {
     process.stderr.write('fake agent crashed\n');
     process.exit(3);
   }
+  update({ sessionUpdate: 'usage_update', used: 100, size: 1000 });
   say('hello.txt.', 'm1');
   update({ sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking' } });
   update({
@@ -34,6 +35,7 @@ agent.on('session/prompt', async () => {
     status: 'pending',
     locations: [{ path: file }],
   });
+  if (mode === 'stop') return { stopReason: 'cancelled' };
   if (mode === 'ask') {
     const answer = await agent.ask('session/request_permission', {
       sessionId: 'acp-session',

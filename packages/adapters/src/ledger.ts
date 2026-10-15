@@ -49,5 +49,5 @@ export const makeLedger = (cwd: string) => {
     return left;
   };
 
-  return { note, finish, decline, rest };
+  return { note, finish, decline, rest, get: (id: string) => open.get(id) };
 };

@@ -25,6 +25,19 @@ export const fakeClaude = (mode: Mode, calls: { count: number } = { count: 0 }):
         input: { file_path: file, content: 'hello\n' },
       },
     ]);
+    if (mode === 'stop') {
+      yield {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        stop_reason: null,
+        total_cost_usd: 0,
+        session_id: 'claude-session',
+        usage: { input_tokens: 10, output_tokens: 5 },
+        errors: ['interrupted'],
+      };
+      return;
+    }
     let allowed = true;
     if (mode === 'ask' && options.canUseTool !== undefined) {
       const decision = await options.canUseTool(

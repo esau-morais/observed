@@ -25,6 +25,7 @@ export {
 export interface AdapterOptions {
   readonly approve: Approve;
   // Overrides how the agent is started, such as an ACP entry point for Muse.
+  // For Claude Code only the executable is used.
   readonly command?: readonly [string, ...Array<string>];
 }
 

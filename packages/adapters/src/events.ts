@@ -54,6 +54,8 @@ export interface ApprovalRequest {
   readonly paths: ReadonlyArray<string>;
 }
 
+// Answers the approvals an agent asks for. Which actions it asks about follows
+// the user's own agent settings, such as Claude Code allow rules or the Codex sandbox.
 export type Approve = (request: ApprovalRequest) => Effect.Effect<boolean>;
 
 export const allowAll: Approve = () => Effect.succeed(true);

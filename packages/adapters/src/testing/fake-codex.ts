@@ -38,6 +38,13 @@ const play = async () => {
     changes: [{ path: file, kind: { type: 'add' }, diff: '' }],
   };
   item('item/started', { ...change, status: 'inProgress' });
+  if (mode === 'stop') {
+    agent.notify('turn/completed', {
+      threadId,
+      turn: { id: turnId, status: 'interrupted', error: null },
+    });
+    return;
+  }
   let status = 'completed';
   if (mode === 'ask') {
     const answer = await agent.ask('item/fileChange/requestApproval', {

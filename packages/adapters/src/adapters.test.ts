@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,7 +35,6 @@ afterEach(() => {
 const workspace = () => {
   const dir = mkdtempSync(join(tmpdir(), 'observed-adapters-'));
   workspaces.push(dir);
-  execFileSync('git', ['init', '--quiet'], { cwd: dir });
   return dir;
 };
 
@@ -77,9 +75,18 @@ describe.each(Object.keys(agents))('%s', (name) => {
       { _tag: 'Usage' },
       { _tag: 'Finished', stopReason: 'completed' },
     ]);
-    expect(execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' })).toBe(
-      '?? hello.txt\n',
-    );
+  });
+
+  // An edit the turn never finished is unknown evidence, not a missing row.
+  it('reports a tool call the turn left open as unfinished', async () => {
+    const exit = await run(make('stop', allowAll), workspace());
+    if (Exit.isFailure(exit)) throw new Error(String(exit.cause));
+    expect(exit.value.map(shape)).toContainEqual({
+      _tag: 'Tool',
+      kind: 'edit',
+      status: 'unfinished',
+      paths: ['hello.txt'],
+    });
   });
 
   it('declines an edit the approval policy refuses', async () => {

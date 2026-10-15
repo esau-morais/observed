@@ -7,40 +7,51 @@ import {
   type AgentEvent,
   type Approve,
   type StopReason,
-  type ToolStatus,
   workspacePath,
 } from './events';
+import { makeLedger } from './ledger';
 import { connect, decodeFrom, methodNotFound, Refusal } from './rpc';
 
 const ThreadStarted = Schema.Struct({ thread: Schema.Struct({ id: Schema.String }) });
 
 const ItemStatus = Schema.Literals(['inProgress', 'completed', 'failed', 'declined']);
 
-const Item = Schema.Union([
-  Schema.Struct({ type: Schema.Literal('agentMessage'), id: Schema.String, text: Schema.String }),
-  Schema.Struct({
-    type: Schema.Literal('commandExecution'),
-    id: Schema.String,
-    command: Schema.String,
-    status: ItemStatus,
-  }),
-  Schema.Struct({
-    type: Schema.Literal('fileChange'),
+const ItemEvent = Schema.Struct({
+  threadId: Schema.String,
+  item: Schema.Struct({ type: Schema.String, id: Schema.optionalKey(Schema.String) }),
+});
+const AgentMessage = Schema.Struct({ item: Schema.Struct({ text: Schema.String }) });
+const CommandItem = Schema.Struct({
+  item: Schema.Struct({ id: Schema.String, command: Schema.String, status: ItemStatus }),
+});
+const FileChangeItem = Schema.Struct({
+  item: Schema.Struct({
     id: Schema.String,
     changes: Schema.Array(Schema.Struct({ path: Schema.String })),
     status: ItemStatus,
   }),
-  Schema.Struct({
-    type: Schema.Literal('mcpToolCall'),
+});
+const McpItem = Schema.Struct({
+  item: Schema.Struct({
     id: Schema.String,
     server: Schema.String,
     tool: Schema.String,
-    status: Schema.String,
+    status: Schema.Literals(['inProgress', 'completed', 'failed']),
   }),
-  Schema.Struct({ type: Schema.String, id: Schema.optionalKey(Schema.String) }),
-]);
+});
+const OtherItem = Schema.Struct({
+  item: Schema.Struct({ id: Schema.String, status: Schema.optionalKey(Schema.Unknown) }),
+});
 
-const ItemEvent = Schema.Struct({ threadId: Schema.String, item: Item });
+const notTools = new Set([
+  'userMessage',
+  'hookPrompt',
+  'reasoning',
+  'plan',
+  'contextCompaction',
+  'enteredReviewMode',
+  'exitedReviewMode',
+]);
 
 const TokenUsage = Schema.Struct({
   threadId: Schema.String,
@@ -71,9 +82,6 @@ const turnStops: Record<typeof TurnCompleted.Type.turn.status, StopReason> = {
   inProgress: 'failed',
 };
 
-const toolStatus = (status: typeof ItemStatus.Type): ToolStatus =>
-  status === 'inProgress' ? 'unfinished' : status;
-
 export interface CodexOptions {
   readonly command?: readonly [string, ...Array<string>];
   readonly approve: Approve;
@@ -93,54 +101,55 @@ export const codex = (options: CodexOptions): Adapter => {
           const finished = yield* Deferred.make<typeof TurnCompleted.Type>();
           let threadId: string | null = null;
           let usage: typeof TokenUsage.Type.tokenUsage.total | null = null;
-          // File change approvals name only the item, so remember its paths.
-          const changePaths = new Map<string, ReadonlyArray<string>>();
+          const ledger = makeLedger(task.cwd);
+
+          const settle = (id: string, status: typeof ItemStatus.Type) => {
+            if (status === 'inProgress') return;
+            const tool = ledger.finish(id, status);
+            if (tool !== undefined) emit(tool);
+          };
 
           const onItem = Effect.fnUntraced(function* (method: string, params: unknown) {
             const { threadId: thread, item } = yield* decodeFrom(agent, method, ItemEvent)(params);
             if (thread !== threadId) return;
-            if (item.type === 'fileChange' && 'changes' in item) {
-              changePaths.set(
-                item.id,
-                item.changes.map((change) => workspacePath(task.cwd, change.path)),
-              );
-            }
-            if (method !== 'item/completed') return;
-            if (item.type === 'agentMessage' && 'text' in item) {
-              if (item.text.trim() !== '') emit({ _tag: 'Message', text: item.text.trim() });
-            } else if (item.type === 'commandExecution' && 'command' in item) {
-              emit({
-                _tag: 'Tool',
-                id: item.id,
-                kind: 'execute',
-                title: item.command,
-                status: toolStatus(item.status),
-                paths: [],
-              });
-            } else if (item.type === 'fileChange' && 'changes' in item) {
-              const paths = item.changes.map((change) => workspacePath(task.cwd, change.path));
-              emit({
-                _tag: 'Tool',
-                id: item.id,
-                kind: 'edit',
-                title: `Edit ${paths.join(', ')}`,
-                status: toolStatus(item.status),
-                paths,
-              });
-            } else if (item.type === 'mcpToolCall' && 'server' in item) {
-              emit({
-                _tag: 'Tool',
-                id: item.id,
-                kind: 'other',
-                title: `${item.server}.${item.tool}`,
-                status:
-                  item.status === 'completed'
-                    ? 'completed'
-                    : item.status === 'failed'
-                      ? 'failed'
-                      : 'unfinished',
-                paths: [],
-              });
+            const completed = method === 'item/completed';
+            const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S) =>
+              decodeFrom(agent, `${item.type} item`, schema)(params);
+            switch (item.type) {
+              case 'agentMessage': {
+                const { text } = (yield* decode(AgentMessage)).item;
+                if (completed && text.trim() !== '') emit({ _tag: 'Message', text: text.trim() });
+                return;
+              }
+              case 'commandExecution': {
+                const command = (yield* decode(CommandItem)).item;
+                ledger.note(command.id, { kind: 'execute', title: command.command });
+                if (completed) settle(command.id, command.status);
+                return;
+              }
+              case 'fileChange': {
+                const change = (yield* decode(FileChangeItem)).item;
+                const paths = change.changes.map((file) => file.path);
+                ledger.note(change.id, {
+                  kind: 'edit',
+                  title: `Edit ${paths.map((path) => workspacePath(task.cwd, path)).join(', ')}`,
+                  paths,
+                });
+                if (completed) settle(change.id, change.status);
+                return;
+              }
+              case 'mcpToolCall': {
+                const call = (yield* decode(McpItem)).item;
+                ledger.note(call.id, { kind: 'other', title: `${call.server}.${call.tool}` });
+                if (completed) settle(call.id, call.status);
+                return;
+              }
+              default: {
+                if (notTools.has(item.type) || item.id === undefined) return;
+                const other = (yield* decode(OtherItem)).item;
+                ledger.note(other.id, { kind: 'other', title: item.type });
+                if (completed) settle(other.id, other.status === 'failed' ? 'failed' : 'completed');
+              }
             }
           });
 
@@ -159,8 +168,13 @@ export const codex = (options: CodexOptions): Adapter => {
             }
           });
 
-          const decide = (request: Parameters<Approve>[0]) =>
+          const decide = (itemId: string, request: Parameters<Approve>[0]) =>
             approve(request).pipe(
+              Effect.tap((allowed) =>
+                Effect.sync(() => {
+                  if (!allowed) ledger.decline(itemId);
+                }),
+              ),
               Effect.map((allowed) => ({ decision: allowed ? 'accept' : 'decline' })),
             );
 
@@ -175,7 +189,7 @@ export const codex = (options: CodexOptions): Adapter => {
                 method,
                 CommandApproval,
               )(params).pipe(asRefusal);
-              return yield* decide({
+              return yield* decide(asked.itemId, {
                 kind: 'execute',
                 title: asked.command ?? asked.reason ?? asked.itemId,
                 paths: [],
@@ -183,11 +197,11 @@ export const codex = (options: CodexOptions): Adapter => {
             }
             if (method === 'item/fileChange/requestApproval') {
               const asked = yield* decodeFrom(agent, method, FileApproval)(params).pipe(asRefusal);
-              const paths = changePaths.get(asked.itemId) ?? [];
-              return yield* decide({
+              const known = ledger.get(asked.itemId);
+              return yield* decide(asked.itemId, {
                 kind: 'edit',
-                title: paths.length === 0 ? asked.itemId : `Edit ${paths.join(', ')}`,
-                paths,
+                title: known?.title ?? asked.itemId,
+                paths: known?.paths ?? [],
               });
             }
             return yield* Effect.fail(methodNotFound(method));
@@ -243,6 +257,7 @@ export const codex = (options: CodexOptions): Adapter => {
               })
               .pipe(refused('turn/start'));
             const completed = yield* Deferred.await(finished);
+            for (const tool of ledger.rest()) emit(tool);
             if (usage !== null) {
               emit({
                 _tag: 'Usage',

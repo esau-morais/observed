@@ -14,48 +14,39 @@ import {
 import { makeLedger } from './ledger';
 import { decodeFrom } from './rpc';
 
-const Block = Schema.Union([
-  Schema.Struct({ type: Schema.Literal('text'), text: Schema.String }),
-  Schema.Struct({
-    type: Schema.Literal('tool_use'),
-    id: Schema.String,
-    name: Schema.String,
-    input: Schema.Unknown,
+const Head = Schema.Struct({ type: Schema.String });
+const Turn = Schema.Struct({
+  parent_tool_use_id: Schema.NullOr(Schema.String),
+  aborted: Schema.optionalKey(Schema.Boolean),
+  message: Schema.Struct({
+    content: Schema.Union([Schema.String, Schema.Array(Schema.Unknown)]),
   }),
-  Schema.Struct({
-    type: Schema.Literal('tool_result'),
-    tool_use_id: Schema.String,
-    is_error: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+});
+const TextBlock = Schema.Struct({ text: Schema.String });
+const ToolUseBlock = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  input: Schema.Unknown,
+});
+const ToolResultBlock = Schema.Struct({
+  tool_use_id: Schema.String,
+  is_error: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+});
+const Result = Schema.Struct({
+  subtype: Schema.String,
+  is_error: Schema.Boolean,
+  stop_reason: Schema.NullOr(Schema.String),
+  total_cost_usd: Schema.Number,
+  session_id: Schema.String,
+  usage: Schema.Struct({
+    input_tokens: Schema.Number,
+    output_tokens: Schema.Number,
+    cache_read_input_tokens: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+    cache_creation_input_tokens: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   }),
-  Schema.Struct({ type: Schema.String }),
-]);
-
-const Message = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literals(['assistant', 'user']),
-    parent_tool_use_id: Schema.NullOr(Schema.String),
-    message: Schema.Struct({
-      content: Schema.Union([Schema.String, Schema.Array(Block)]),
-    }),
-  }),
-  Schema.Struct({
-    type: Schema.Literal('result'),
-    subtype: Schema.String,
-    is_error: Schema.Boolean,
-    stop_reason: Schema.NullOr(Schema.String),
-    total_cost_usd: Schema.Number,
-    session_id: Schema.String,
-    usage: Schema.Struct({
-      input_tokens: Schema.Number,
-      output_tokens: Schema.Number,
-      cache_read_input_tokens: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-      cache_creation_input_tokens: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-    }),
-    result: Schema.optionalKey(Schema.String),
-    errors: Schema.optionalKey(Schema.Array(Schema.String)),
-  }),
-  Schema.Struct({ type: Schema.String }),
-]);
+  result: Schema.optionalKey(Schema.String),
+  errors: Schema.optionalKey(Schema.Array(Schema.String)),
+});
 
 const ToolInput = Schema.Struct({
   command: Schema.optionalKey(Schema.String),
@@ -172,6 +163,7 @@ export const claude = (options: ClaudeOptions): Adapter => {
                 ...described,
                 paths: described.paths.map((path) => workspacePath(task.cwd, path)),
               }),
+              { signal: context.signal },
             );
             if (allowed) return { behavior: 'allow', updatedInput: input };
             ledger.decline(context.toolUseID);
@@ -192,29 +184,48 @@ export const claude = (options: ClaudeOptions): Adapter => {
           });
 
           const turn = { finished: false };
+          const decode = <S extends Schema.ConstraintDecoder<unknown>>(what: string, schema: S) =>
+            decodeFrom(agent, `Claude Code ${what}`, schema);
+
+          const onBlock = Effect.fnUntraced(function* (
+            raw: unknown,
+            from: { assistant: boolean; topLevel: boolean; aborted: boolean },
+          ) {
+            const { type } = yield* decode('block', Head)(raw);
+            if (type === 'text') {
+              const { text } = yield* decode('text block', TextBlock)(raw);
+              if (from.assistant && from.topLevel && !from.aborted && text.trim() !== '') {
+                emit({ _tag: 'Message', text: text.trim() });
+              }
+            } else if (type === 'tool_use') {
+              const use = yield* decode('tool use', ToolUseBlock)(raw);
+              ledger.note(use.id, describeTool(use.name, use.input));
+            } else if (type === 'tool_result') {
+              const result = yield* decode('tool result', ToolResultBlock)(raw);
+              const tool = ledger.finish(
+                result.tool_use_id,
+                result.is_error === true ? 'failed' : 'completed',
+              );
+              if (tool !== undefined) emit(tool);
+            }
+          });
+
           const onMessage = Effect.fnUntraced(function* (raw: unknown) {
-            const message = yield* decodeFrom(agent, 'Claude Code message', Message)(raw);
-            if ((message.type === 'assistant' || message.type === 'user') && 'message' in message) {
-              if (typeof message.message.content === 'string') return;
-              for (const block of message.message.content) {
-                if (block.type === 'text' && 'text' in block) {
-                  if (message.type === 'assistant' && message.parent_tool_use_id === null) {
-                    if (block.text.trim() !== '')
-                      emit({ _tag: 'Message', text: block.text.trim() });
-                  }
-                } else if (block.type === 'tool_use' && 'name' in block) {
-                  ledger.note(block.id, describeTool(block.name, block.input));
-                } else if (block.type === 'tool_result' && 'tool_use_id' in block) {
-                  const tool = ledger.finish(
-                    block.tool_use_id,
-                    block.is_error === true ? 'failed' : 'completed',
-                  );
-                  if (tool !== undefined) emit(tool);
-                }
+            const { type } = yield* decode('message', Head)(raw);
+            if (type === 'assistant' || type === 'user') {
+              const turn = yield* decode(`${type} message`, Turn)(raw);
+              if (typeof turn.message.content === 'string') return;
+              for (const block of turn.message.content) {
+                yield* onBlock(block, {
+                  assistant: type === 'assistant',
+                  topLevel: turn.parent_tool_use_id === null,
+                  aborted: turn.aborted === true,
+                });
               }
               return;
             }
-            if (message.type === 'result' && 'subtype' in message) {
+            if (type === 'result') {
+              const message = yield* decode('result', Result)(raw);
               for (const tool of ledger.rest()) emit(tool);
               const { usage } = message;
               emit({

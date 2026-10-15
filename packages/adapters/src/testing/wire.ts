@@ -43,5 +43,5 @@ export const wire = (dialect: 'jsonrpc' | 'codex') => {
   };
 };
 
-export type Mode = 'edit' | 'ask' | 'crash';
+export type Mode = 'edit' | 'ask' | 'crash' | 'stop';
 export const mode = (process.argv[2] ?? 'edit') as Mode;

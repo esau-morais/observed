@@ -36,20 +36,17 @@ const ToolFields = {
 };
 const ToolCall = Schema.Struct(ToolFields);
 
-const Update = Schema.Struct({
-  update: Schema.Union([
-    Schema.Struct({
-      sessionUpdate: Schema.Literal('agent_message_chunk'),
-      messageId: Schema.optionalKey(Schema.NullOr(Schema.String)),
-      content: Schema.Struct({ type: Schema.String, text: Schema.optionalKey(Schema.String) }),
-    }),
-    Schema.Struct({
-      sessionUpdate: Schema.Literals(['tool_call', 'tool_call_update']),
-      ...ToolFields,
-    }),
-    Schema.Struct({ sessionUpdate: Schema.String }),
-  ]),
+const Update = Schema.Struct({ update: Schema.Struct({ sessionUpdate: Schema.String }) });
+const MessageChunk = Schema.Struct({
+  update: Schema.Struct({
+    messageId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    content: Schema.Struct({ type: Schema.String, text: Schema.optionalKey(Schema.String) }),
+  }),
 });
+const ToolUpdate = Schema.Struct({ update: ToolCall });
+
+const authRequired = -32000;
+const invalidParams = -32602;
 
 const PermissionAsked = Schema.Struct({
   toolCall: ToolCall,
@@ -92,9 +89,9 @@ export const acp = (options: AcpOptions): Adapter => {
   const refused = (step: string) => (refusal: Refusal) =>
     new AgentError({
       agent,
-      reason: refusal.code === -32000 ? 'unauthenticated' : 'protocol',
+      reason: refusal.code === authRequired ? 'unauthenticated' : 'protocol',
       message:
-        refusal.code === -32000
+        refusal.code === authRequired
           ? `${command[0]} needs you to sign in before Observed can run it: ${refusal.message}`
           : `${step} failed: ${refusal.message}`,
     });
@@ -115,22 +112,24 @@ export const acp = (options: AcpOptions): Adapter => {
           };
 
           const onUpdate = Effect.fnUntraced(function* (params: unknown) {
-            const { update } = yield* decodeFrom(agent, 'session update', Update)(params);
-            if (update.sessionUpdate === 'agent_message_chunk' && 'content' in update) {
-              const id = update.messageId ?? null;
+            const { sessionUpdate } = (yield* decodeFrom(agent, 'session update', Update)(params))
+              .update;
+            if (sessionUpdate === 'agent_message_chunk') {
+              const chunk = (yield* decodeFrom(agent, 'message chunk', MessageChunk)(params))
+                .update;
+              const id = chunk.messageId ?? null;
               if (id !== messageId) flush();
               messageId = id;
-              if (update.content.type === 'text') message += update.content.text ?? '';
+              if (chunk.content.type === 'text') message += chunk.content.text ?? '';
               return;
             }
-            if (update.sessionUpdate === 'agent_thought_chunk') return;
+            if (sessionUpdate !== 'tool_call' && sessionUpdate !== 'tool_call_update') return;
             flush();
-            if ('toolCallId' in update) {
-              ledger.note(update.toolCallId, describeTool(update));
-              if (update.status === 'completed' || update.status === 'failed') {
-                const tool = ledger.finish(update.toolCallId, update.status);
-                if (tool !== undefined) emit(tool);
-              }
+            const call = (yield* decodeFrom(agent, 'tool call', ToolUpdate)(params)).update;
+            ledger.note(call.toolCallId, describeTool(call));
+            if (call.status === 'completed' || call.status === 'failed') {
+              const tool = ledger.finish(call.toolCallId, call.status);
+              if (tool !== undefined) emit(tool);
             }
           });
 
@@ -140,7 +139,9 @@ export const acp = (options: AcpOptions): Adapter => {
               'permission request',
               PermissionAsked,
             )(params).pipe(
-              Effect.mapError((error) => new Refusal({ code: -32602, message: error.message })),
+              Effect.mapError(
+                (error) => new Refusal({ code: invalidParams, message: error.message }),
+              ),
             );
             ledger.note(asked.toolCall.toolCallId, describeTool(asked.toolCall));
             const described = describeTool(asked.toolCall);
@@ -150,12 +151,8 @@ export const acp = (options: AcpOptions): Adapter => {
               paths: (described.paths ?? []).map((path) => workspacePath(task.cwd, path)),
             });
             if (!allowed) ledger.decline(asked.toolCall.toolCallId);
-            const wanted = allowed
-              ? ['allow_once', 'allow_always']
-              : ['reject_once', 'reject_always'];
-            const option = wanted
-              .map((kind) => asked.options.find((candidate) => candidate.kind === kind))
-              .find((candidate) => candidate !== undefined);
+            const wanted = allowed ? 'allow_once' : 'reject_once';
+            const option = asked.options.find((candidate) => candidate.kind === wanted);
             return option === undefined
               ? { outcome: { outcome: 'cancelled' } }
               : { outcome: { outcome: 'selected', optionId: option.optionId } };
@@ -174,22 +171,31 @@ export const acp = (options: AcpOptions): Adapter => {
                 : Effect.fail(methodNotFound(method)),
           });
 
+          const call = <S extends Schema.ConstraintDecoder<unknown>>(
+            method: string,
+            params: unknown,
+            schema: S,
+          ) =>
+            peer.request(method, params).pipe(
+              Effect.mapError((error) =>
+                error._tag === 'Refusal' ? refused(method)(error) : error,
+              ),
+              Effect.flatMap(decodeFrom(agent, `${method} result`, schema)),
+            );
+
           const drive = Effect.gen(function* () {
-            const initialized = yield* peer
-              .request('initialize', {
+            const initialized = yield* call(
+              'initialize',
+              {
                 protocolVersion,
                 clientCapabilities: {
                   fs: { readTextFile: false, writeTextFile: false },
                   terminal: false,
                 },
                 clientInfo: { name: 'observed', title: 'Observed', version: packageJson.version },
-              })
-              .pipe(
-                Effect.catchTag('Refusal', (refusal) =>
-                  Effect.fail(refused('initialize')(refusal)),
-                ),
-              )
-              .pipe(Effect.flatMap(decodeFrom(agent, 'initialize result', Initialized)));
+              },
+              Initialized,
+            );
             if (initialized.protocolVersion !== protocolVersion) {
               return yield* new AgentError({
                 agent,
@@ -197,25 +203,16 @@ export const acp = (options: AcpOptions): Adapter => {
                 message: `${command[0]} speaks ACP version ${String(initialized.protocolVersion)}; Observed speaks ${String(protocolVersion)}.`,
               });
             }
-            const { sessionId } = yield* peer
-              .request('session/new', { cwd: task.cwd, mcpServers: [] })
-              .pipe(
-                Effect.catchTag('Refusal', (refusal) =>
-                  Effect.fail(refused('session/new')(refusal)),
-                ),
-              )
-              .pipe(Effect.flatMap(decodeFrom(agent, 'session', SessionCreated)));
-            const prompted = yield* peer
-              .request('session/prompt', {
-                sessionId,
-                prompt: [{ type: 'text', text: task.prompt }],
-              })
-              .pipe(
-                Effect.catchTag('Refusal', (refusal) =>
-                  Effect.fail(refused('session/prompt')(refusal)),
-                ),
-              )
-              .pipe(Effect.flatMap(decodeFrom(agent, 'prompt result', Prompted)));
+            const { sessionId } = yield* call(
+              'session/new',
+              { cwd: task.cwd, mcpServers: [] },
+              SessionCreated,
+            );
+            const prompted = yield* call(
+              'session/prompt',
+              { sessionId, prompt: [{ type: 'text', text: task.prompt }] },
+              Prompted,
+            );
             flush();
             for (const tool of ledger.rest()) emit(tool);
             if (prompted.usage != null) {
