@@ -88,7 +88,7 @@ test('only a passing check the base defines prints as checked or concludes no re
             conclusion: { kind: 'no-regression', text: 'x' },
           }).split('\n');
 
-          expect(lines).toHaveLength(3);
+          expect(lines, `${mode} ${scope} ${change} ${verdict}`).toHaveLength(3);
 
           const [, line = '', last = ''] = lines;
           const isChecked = line.trim().startsWith('checked');
