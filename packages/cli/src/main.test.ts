@@ -52,16 +52,18 @@ it('prints the stored receipt for a commit, and fails without the evidence ref',
   expect(missing.stderr).toContain('refs/observed/evidence is missing');
 
   const bundles = await judgedSides({ captured: [requestCheck], baseCount: 1, candidateCount: 2 });
+  const recipes: Selection['recipes'] = {
+    base: { kind: 'unavailable', reason: 'Not read in this test.' },
+    candidate: [projectJourney([requestCheck])],
+  };
   const selection: Selection = {
     schemaVersion: selectionSchemaVersion,
     evaluatedAt,
     mode: 'comparison',
     journeys: [{ directory: 'journey-1', base: null, candidate: null }],
+    recipes,
   };
-  const result = await selectedComparison(bundles, {
-    base: { kind: 'unavailable', reason: 'Not read in this test.' },
-    candidate: [projectJourney([requestCheck])],
-  });
+  const result = await selectedComparison(bundles, recipes);
   await Effect.runPromise(
     writeRecord({
       cwd: repo,

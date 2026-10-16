@@ -53,7 +53,7 @@ test('prints a judged comparison', async () => {
   );
 });
 
-test('only a passing check the base defines prints as checked', async () => {
+test('only a passing check the base defines prints as checked or concludes no regression', async () => {
   const result = await judged([requestCheck]);
   const check = judgedCheck(result);
   const verdicts = ['regression', 'failed', 'unknown', 'passed', 'not-run'] as const;
@@ -81,11 +81,19 @@ test('only a passing check the base defines prints as checked', async () => {
             verdict,
             ...(verdictRecipe === undefined ? {} : { recipe: verdictRecipe }),
           };
-          const line = receipt({ ...withChecks(result, [item]), mode, recipe }).split('\n')[1];
+          const [, line = '', last = ''] = receipt({
+            ...withChecks(result, [item]),
+            mode,
+            recipe,
+            conclusion: { kind: 'no-regression', text: 'x' },
+          }).split('\n');
+          const isChecked = line.trim().startsWith('checked');
 
-          return line?.trim().startsWith('checked') === true
-            ? [`${mode} ${scope} ${change} ${verdict}`]
-            : [];
+          expect(last.startsWith('No regression'), `${mode} ${scope} ${change} ${verdict}`).toBe(
+            isChecked,
+          );
+
+          return isChecked ? [`${mode} ${scope} ${change} ${verdict}`] : [];
         }),
       ),
     ),
@@ -96,7 +104,6 @@ test('only a passing check the base defines prints as checked', async () => {
     'comparison read none passed',
     'comparison read removed passed',
     'comparison read altered passed',
-    'comparison read journey-altered passed',
   ]);
 });
 

@@ -1,5 +1,5 @@
 import type { CheckVerdict, Comparison, Conclusion, Journey, Measure } from './result';
-import { addedText } from './words';
+import { addedText, journeyAlteredDetail } from './words';
 
 export const receiptStates = ['failed', 'unknown', 'changed', 'checked'] as const;
 
@@ -49,12 +49,18 @@ function noBaseline(check: CheckVerdict, result: Comparison): string | null {
   }
 
   switch (check.recipe?.change) {
+    case undefined:
+    case 'removed':
+    case 'altered':
+      return null;
+    case 'journey-altered':
+      return journeyAlteredDetail(check.recipe.fields);
     case 'added':
       return addedText;
     case 'test-file-changed':
       return testFileText;
     default:
-      return null;
+      return check.recipe satisfies never;
   }
 }
 
@@ -160,12 +166,17 @@ export function receipt(result: Comparison): string {
       .filter((journey) => journey.checks.length > 0)
       .map((journey) => ({
         title: journey.journey,
-        lines: journey.checks.map((check) => checkLine(check, result)),
+        lines: ordered(journey.checks.map((check) => checkLine(check, result))),
       })),
   ];
   const lines = groups.flatMap((group) => group.lines);
   const count = (state: ReceiptState) => lines.filter((line) => line.state === state).length;
   const width = Math.max(...receiptStates.map((state) => state.length));
+  // A pass printed as unknown has no baseline, so it cannot make the run a no-regression.
+  const conclusion =
+    result.conclusion.kind === 'no-regression' && count('checked') === 0
+      ? 'not-checked'
+      : result.conclusion.kind;
   const row = ({ state, subject, evidence }: Line) =>
     `  ${state.padEnd(width)}  ${[subject, evidence].map(oneLine).join(' · ')}`;
 
@@ -175,7 +186,7 @@ export function receipt(result: Comparison): string {
       ...(groups.length > 1 ? [oneLine(group.title)] : []),
       ...(group.lines.length === 0 ? ['  Nothing to report.'] : group.lines.map(row)),
     ]),
-    `${conclusionLabels[result.conclusion.kind]} · ${[...receiptStates]
+    `${conclusionLabels[conclusion]} · ${[...receiptStates]
       .reverse()
       .map((state) => `${count(state)} ${state}`)
       .join(', ')}`,

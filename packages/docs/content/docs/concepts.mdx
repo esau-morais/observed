@@ -30,7 +30,7 @@ Each line on a receipt is in one of four states:
 | Unknown | Evidence is missing, skipped or was altered, or the check has no baseline, so the judge can't decide. |
 | Failed  | A check fails on the candidate.                                                                       |
 
-Unknown is never rounded up to a pass. A check has no baseline when the change adds it, when the change alters its test file, or when Observed could not read the base revision's `observed.json`. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, so it can say "No regression" while a line above it says unknown.
+Unknown is never rounded up to a pass. A check has no baseline when the change adds it, when the change alters its test file, or when Observed could not read the base revision's `observed.json`. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, except that it says "Nothing checked" instead of "No regression" when no line is checked.
 
 A journey only shows the cases it ran, so Observed says "observed", never "proved".
 
@@ -68,7 +68,7 @@ To fetch it on every `git fetch`, add the refspec to the remote:
 git config --add remote.origin.fetch 'refs/observed/*:refs/observed/*'
 ```
 
-The refspec has no leading `+`, so git refuses a push or fetch that would rewrite the ref's history unless you force it. Observed only adds records. Before it reads one, it checks that no commit on the ref changed or removed a record and that every record still matches its SHA-256 name. If either check fails, it reads nothing. A forced rewrite that drops a record entirely is not caught, and that commit then reads as having no record.
+The refspec has no leading `+`, so git refuses a push or fetch that would rewrite the ref's history unless you force it. Observed only adds records. Before it reads one, it checks that no commit on the ref changed or removed a record and that every record still matches its SHA-256 name. If either check fails, it reads nothing. Observed does not catch a forced rewrite that drops a record entirely, so that commit reads as having no record.
 
 A clone that has fetched the ref prints the same receipt as the clone that wrote it, with `observed receipt` from the [CLI](/docs/cli).
 

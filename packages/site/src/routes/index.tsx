@@ -192,13 +192,6 @@ POST /orders  `}
               <i>x2</i>
               {'           POST /orders  '}
               <b>x1</b>
-              {`
-
-`}
-              <i>changed</i>
-              {'  Screenshot · 1840 pixels in 1 region\n'}
-              <b>checked</b>
-              {'  One POST /orders · base 2 · candidate 1'}
             </pre>
             <figcaption className="micro">
               Every view also prints as plain text, so the same evidence fits a terminal, a PR

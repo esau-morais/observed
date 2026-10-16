@@ -25,5 +25,5 @@ The receipt is plain text, so a PR comment shows it as-is inside a code block. T
 
 ````sh
 receipt=$(observed receipt HEAD) &&
-  printf '```txt\n%s\n```\n' "$receipt" | gh pr comment --body-file -
+	printf '```txt\n%s\n```\n' "$receipt" | gh pr comment --body-file -
 ````

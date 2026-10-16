@@ -8,6 +8,7 @@ import {
 import {
   evaluatedAt,
   judgedSides,
+  projectJourney,
   removeTemporaryDirectories,
   requestCheck,
   temporaryDirectory,
@@ -74,11 +75,14 @@ async function judgedProject() {
   git(repo, ['add', 'app.txt']);
   git(repo, ['commit', '-q', '-m', 'app']);
 
-  const bundles = await judgedSides({
-    captured: [requestCheck],
-    baseCount: 1,
-    candidateCount: 2,
-  });
+  const allowsTwo = {
+    ...requestCheck,
+    id: 'at-most-two-requests',
+    name: 'Two requests',
+    expectedCount: 2,
+  };
+  const checks = [requestCheck, allowsTwo];
+  const bundles = await judgedSides({ captured: checks, baseCount: 2, candidateCount: 2 });
   const captures = await temporaryDirectory('observed-store-captures-');
   await cp(bundles.base.directory, path.join(captures, 'journey-1/base'), { recursive: true });
   await cp(bundles.candidate.directory, path.join(captures, 'journey-1/candidate'), {
@@ -89,6 +93,15 @@ async function judgedProject() {
     evaluatedAt,
     mode: 'comparison',
     journeys: [{ directory: 'journey-1', base: null, candidate: null }],
+    recipes: {
+      base: {
+        kind: 'read',
+        commit: 'c'.repeat(40),
+        sha256: 'd'.repeat(64),
+        journeys: [projectJourney(checks)],
+      },
+      candidate: [projectJourney(checks)],
+    },
   };
   const { result } = await Effect.runPromise(inspectComparison({ root: captures, selection }));
   const written = await Effect.runPromise(
@@ -115,6 +128,8 @@ test('a fresh clone rebuilds the same receipt from the ref alone', async () => {
 
   const records = await read(clone);
 
+  expect(expected.split('\n').map((line) => line.trim().split(' ')[0])).toContain('checked');
+
   expect(records.map((record) => receipt(record.result))).toEqual([expected]);
   expect(await Promise.all(records.map(rejudged))).toEqual([expected]);
 });
@@ -122,10 +137,11 @@ test('a fresh clone rebuilds the same receipt from the ref alone', async () => {
 test('a record changed, removed or rewritten into history is refused, never read', async () => {
   const { repo, written } = await judgedProject();
   const prefix = `${written.commit}/${written.id}`;
-  const forged = git(repo, ['show', `${evidenceRef}:${prefix}/result.json`]).replace(
-    '"kind": "regression"',
-    '"kind": "no-regression"',
-  );
+  const stored = git(repo, ['show', `${evidenceRef}:${prefix}/result.json`]);
+  const forged = stored.replace(/"kind": "check-failed"/g, '"kind": "no-regression"');
+
+  expect(forged).not.toBe(stored);
+
   const change = (index: string) => {
     const blob = git(repo, ['hash-object', '-w', '--stdin'], { input: forged });
     git(repo, ['update-index', '--cacheinfo', `100644,${blob},${prefix}/result.json`], {
