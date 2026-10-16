@@ -1,4 +1,14 @@
 {
   "title": "Observed",
-  "pages": ["index", "quickstart", "concepts", "agents", "checks", "runner", "cli", "contributing"]
+  "pages": [
+    "index",
+    "quickstart",
+    "concepts",
+    "agents",
+    "checks",
+    "runner",
+    "gate-corpus",
+    "cli",
+    "contributing"
+  ]
 }
