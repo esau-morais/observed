@@ -81,12 +81,16 @@ test('only a passing check the base defines prints as checked or concludes no re
             verdict,
             ...(verdictRecipe === undefined ? {} : { recipe: verdictRecipe }),
           };
-          const [, line = '', last = ''] = receipt({
+          const lines = receipt({
             ...withChecks(result, [item]),
             mode,
             recipe,
             conclusion: { kind: 'no-regression', text: 'x' },
           }).split('\n');
+
+          expect(lines).toHaveLength(3);
+
+          const [, line = '', last = ''] = lines;
           const isChecked = line.trim().startsWith('checked');
 
           expect(last.startsWith('No regression'), `${mode} ${scope} ${change} ${verdict}`).toBe(

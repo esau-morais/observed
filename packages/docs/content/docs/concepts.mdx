@@ -30,7 +30,7 @@ Each line on a receipt is in one of four states:
 | Unknown | Evidence is missing, skipped or was altered, or the check has no baseline, so the judge can't decide. |
 | Failed  | A check fails on the candidate.                                                                       |
 
-Unknown is never rounded up to a pass. A check has no baseline when the change adds it, when the change alters its test file, or when Observed could not read the base revision's `observed.json`. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, except that it says "Nothing checked" instead of "No regression" when no line is checked.
+Unknown is never rounded up to a pass. A check has no baseline when the change adds it, when the change alters its test file, or when Observed could not read the base revision's `observed.json`. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, except that it says "Nothing checked" instead of "No regression" when no line is checked. The stored result keeps the judge's own conclusion. A receipt with a checked line can still end in "No regression" above an unknown line.
 
 A journey only shows the cases it ran, so Observed says "observed", never "proved".
 
