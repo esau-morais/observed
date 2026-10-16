@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "build": "bun build src/main.ts --target bun --outfile dist/observed.js"
+    "build": "bun build src/main.ts --target bun --outfile dist/observed.js --external chromium-bidi"
   },
   "dependencies": {
     "@effect/platform-bun": "4.0.5",

@@ -56,6 +56,7 @@ test('key order, whitespace, check versus checks, and omitted defaults are not d
     checks: [loadItems.check],
     viewport: { width: 1280, height: 800, scale: 1 },
     browserArguments: [],
+    mask: [],
     maxAgeMs: 86_400_000,
   });
 
@@ -65,6 +66,22 @@ test('key order, whitespace, check versus checks, and omitted defaults are not d
       base: provenance,
     });
   }
+});
+
+test('a new screenshot mask alters the journey, so it cannot hide a visual change', () => {
+  const plan = recipePlan(
+    {
+      base: read(journey(loadItems)),
+      candidate: [journey({ ...loadItems, mask: ['#result'] })],
+    },
+    'unused',
+  );
+
+  expect(plan.judge('Load items')).toEqual({
+    kind: 'compared',
+    base: [loadItems.check],
+    fields: ['mask'],
+  });
 });
 
 test('an altered expectation keeps both values and the base definition', () => {

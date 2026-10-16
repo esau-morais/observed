@@ -1,8 +1,10 @@
-import { Schema } from 'effect';
-
-export const Journey = Schema.Struct({
-  name: Schema.NonEmptyString,
-  steps: Schema.NonEmptyArray(Schema.String),
-});
-export type Journey = typeof Journey.Type;
+export { runComparison } from './run';
+export { runLayout, type RunLayout, type Side } from './layout';
+export {
+  loadProject,
+  projectSchema,
+  ProjectFailure,
+  ProjectUnreadable,
+  type Project,
+} from './project';
 export * from './store/store';

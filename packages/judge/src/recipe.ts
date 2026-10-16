@@ -55,6 +55,7 @@ export const recipeSchema = Schema.Struct({
     scale: positive,
   }),
   browserArguments: Schema.Array(text),
+  mask: Schema.optionalKey(Schema.Array(text)),
   allowedOrigins: Schema.optionalKey(Schema.Array(httpOriginSchema)),
   maxAgeMs: positive,
 }).check(

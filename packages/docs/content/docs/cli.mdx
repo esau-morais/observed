@@ -11,6 +11,46 @@ description: Every command and flag.
 
 The plan is a single binary built with Bun.
 
+## observed run
+
+Runs every journey in `observed.json` on two revisions and judges the change.
+
+```sh
+observed run [project] [--base REV] [--candidate REV] [--output DIR]
+```
+
+| Argument      | Default                           | Meaning                                         |
+| ------------- | --------------------------------- | ----------------------------------------------- |
+| `project`     | `.`                               | The directory that holds `observed.json`        |
+| `--base`      | `HEAD`                            | The revision before the change                  |
+| `--candidate` | the working tree                  | The revision after the change                   |
+| `--output`    | `<project>/.observed/runs/<time>` | A new directory for the captures and the result |
+
+Both revisions run the journeys in the candidate's `observed.json`. With `--candidate`, Observed reads that file from the candidate commit. Without it, Observed reads the working tree. The checks that count come from the base revision's `observed.json`.
+
+### Exit codes
+
+| Code | Conclusion                                                      |
+| ---- | --------------------------------------------------------------- |
+| 0    | No regression, or nothing was checked                           |
+| 1    | Unavailable: evidence is missing, so the judge could not decide |
+| 2    | A regression, or a check failed                                 |
+
+A problem before any capture, such as a malformed `observed.json`, also exits with 1 and prints the reason.
+
+### Output
+
+| Path                             | Contents                                                    |
+| -------------------------------- | ----------------------------------------------------------- |
+| `result.json`                    | The judge's result                                          |
+| `selection.json`                 | The hashes of the captures the judge read                   |
+| `timings.json`                   | How long setup, each capture and the judge took, in ms      |
+| `journey-<n>/base`, `/candidate` | One capture: `capture.json` and every file it lists, hashed |
+
+### Records
+
+When `--candidate` names a commit, `run` adds the selection, the result and every capture to `refs/observed/evidence` under that commit, so `observed receipt` can print it later. A run on the working tree adds nothing, because there is no commit to file it under.
+
 ## observed receipt
 
 ```sh
@@ -27,3 +67,80 @@ The receipt is plain text, so a PR comment shows it as-is inside a code block. T
 receipt=$(observed receipt HEAD) &&
 	printf '```txt\n%s\n```\n' "$receipt" | gh pr comment --body-file -
 ````
+
+## observed.json
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "Request lab",
+  "source": { "entry": "server.ts", "paths": ["server.ts", "App.tsx", "package.json", "bun.lock"] },
+  "setup": [
+    ["bun", "install", "--frozen-lockfile"],
+    ["bun", "run", "build"]
+  ],
+  "start": ["bun", "run", "start"],
+  "ready": { "path": "/", "status": 200 },
+  "journeys": [
+    {
+      "name": "Load items",
+      "path": "/",
+      "ready": [{ "kind": "wait-text", "text": "Load items" }],
+      "steps": [
+        { "kind": "click-role", "role": "button", "name": "Load items" },
+        { "kind": "network-idle" }
+      ],
+      "check": {
+        "kind": "request-count",
+        "id": "one-items-request",
+        "name": "One request per load action",
+        "scope": "One Load items click.",
+        "method": "GET",
+        "path": "/api/items",
+        "expectedCount": 1,
+        "status": 200
+      }
+    }
+  ]
+}
+```
+
+| Field      | Meaning                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| `source`   | The files to copy from each revision. `entry` must be one of them.                             |
+| `setup`    | Commands that run once per revision, before any journey.                                       |
+| `start`    | The command that starts the app. It gets `PORT`, and `{port}` in an argument becomes the port. |
+| `ready`    | The path and status that mean the app is up.                                                   |
+| `journeys` | One to three journeys. `capture` holds a single journey instead.                               |
+
+Some files are never copied, such as `.env` files, private keys, and anything under `node_modules`, `dist`, `build` or `.git`.
+
+### Journey fields
+
+| Field              | Default          | Meaning                                               |
+| ------------------ | ---------------- | ----------------------------------------------------- |
+| `name`             |                  | Unique within the file                                |
+| `path`             |                  | Where the journey opens                               |
+| `ready`            |                  | Steps that run before recording starts                |
+| `steps`            |                  | The recorded steps                                    |
+| `check`, `checks`  | none             | One check, or a list. See [Checks](/docs/checks).     |
+| `viewport`         | 1280 × 800 at 1× | `{ "width", "height", "scale" }`                      |
+| `mask`             | none             | CSS selectors of elements covered in every screenshot |
+| `browserArguments` | none             | Extra Chromium flags, such as `--no-sandbox`          |
+| `allowedOrigins`   | the app's origin | Other origins the page may request                    |
+| `maxAgeMs`         | one day          | How old a capture may be when it is judged            |
+
+### Steps
+
+| Step                                       | What it does                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `{ "kind": "navigate", "path" }`           | Opens a path in the app                                                                   |
+| `{ "kind": "click", "selector" }`          | Clicks the one element the selector matches                                               |
+| `{ "kind": "click-role", "role", "name" }` | Clicks the element with that ARIA role and exact name                                     |
+| `{ "kind": "fill", "selector", "value" }`  | Types a value; `{ "env": "NAME" }` reads it from the environment and hides it in evidence |
+| `{ "kind": "press", "key" }`               | Presses a key, such as `Enter`                                                            |
+| `{ "kind": "wait-text", "text" }`          | Waits until the text is visible                                                           |
+| `{ "kind": "wait-selector", "selector" }`  | Waits until an element matching the selector is visible                                   |
+| `{ "kind": "network-idle" }`               | Waits for half a second without requests                                                  |
+
+A step waits at most 20 seconds.

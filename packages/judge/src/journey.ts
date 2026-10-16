@@ -16,6 +16,7 @@ export const savedJourneySchema = Schema.Struct({
   collectors: Schema.optionalKey(Schema.Array(collectorSchema)),
   viewport: Schema.optionalKey(recipeSchema.fields.viewport),
   browserArguments: Schema.optionalKey(Schema.Array(text)),
+  mask: recipeSchema.fields.mask,
   allowedOrigins: recipeSchema.fields.allowedOrigins,
   maxAgeMs: Schema.optionalKey(recipeSchema.fields.maxAgeMs),
 }).check(

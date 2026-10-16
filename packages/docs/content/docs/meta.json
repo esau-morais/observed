@@ -1,4 +1,4 @@
 {
   "title": "Observed",
-  "pages": ["index", "quickstart", "concepts", "agents", "checks", "cli", "contributing"]
+  "pages": ["index", "quickstart", "concepts", "agents", "checks", "runner", "cli", "contributing"]
 }

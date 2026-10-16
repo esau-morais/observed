@@ -1,0 +1,58 @@
+---
+title: Runner
+description: How a run captures both revisions, and how long it takes.
+---
+
+The runner is the part of Observed that starts your app and walks through its journeys. It has to be fast enough to run after every agent turn, so it does the slow work once and repeats only what each journey needs.
+
+## What a run does
+
+1. It reads the base revision's `observed.json` through Git, so the checks that count are the ones that existed before the change.
+2. For each revision, in parallel, it copies the source files listed in `observed.json` into a temporary directory and runs `setup` there once.
+3. It starts headless Chromium from Playwright once for the whole run, or once for each distinct `browserArguments`.
+4. For each journey, base first and then candidate, it starts a fresh app process on a free port and opens a fresh browser context. The context has the journey's viewport, the `en-US` locale, the UTC time zone, a light color scheme and reduced motion.
+5. It runs the `ready` steps, starts recording requests, then runs the `steps`.
+6. It writes the capture, stops the app, and closes the context.
+7. The judge reads every capture and writes `result.json`.
+
+Journeys of the same revision share one setup. If your app writes into its own directory, a later journey sees what an earlier one wrote. Each journey still gets its own app process and browser storage.
+
+## Screenshots
+
+A journey gets a screenshot after its `ready` steps and after each step. The last one is `screenshot.png`, the one the judge compares between revisions. The others are in `shots/`, and `shots.json` lists when each was taken.
+
+Before each screenshot the runner settles the page. It waits until no request has been in flight for 100 ms, for web fonts, and for two animation frames. Animations are finished, the text caret is hidden, and the elements matched by the journey's `mask` are covered with a solid box. If the page keeps sending requests for two seconds, the shot is taken anyway and `shots.json` marks it as not settled.
+
+A changed `mask` changes the journey, so the judge treats its checks as unknown, the same as a changed step. A mask can't hide a visual change without that showing in the result.
+
+## Evidence
+
+Each capture holds the raw files the browser produced next to the evidence the judge reads. A check can be traced back to Playwright's own output.
+
+| Evidence       | Raw file                   |
+| -------------- | -------------------------- |
+| Requests       | `requests.har`             |
+| Browser errors | `errors.json`              |
+| Final page     | `snapshot.yml`             |
+| Element text   | `text-<n>.json`            |
+| Accessibility  | `a11y.json`, from axe-core |
+
+Coverage isn't collected yet. It comes back with change scope, which is the part that reads it, so every capture marks it as unavailable.
+
+## How long a run takes
+
+The demo app, request lab, has two journeys. One clicks **Load items** and checks that it sends one request; the other checks the heading. The candidate sends two requests per click. A run captures both journeys on both revisions, so four captures, and finds the regression.
+
+Measured with `bun scripts/measure-request-lab.ts 5` on Bun 1.4.2, Linux, an AMD Ryzen 5 7600 with 32 GB of memory. Each value is the median of five runs, with dependencies in Bun's cache. The whole command includes writing the record to `refs/observed/evidence`.
+
+| Phase                                | Time   |
+| ------------------------------------ | ------ |
+| Setup of both revisions, in parallel | 0.56 s |
+| Load items journey, both revisions   | 2.93 s |
+| Heading journey, both revisions      | 0.88 s |
+| Judge                                | 0.17 s |
+| Whole command, from start to exit    | 5.06 s |
+
+CI runs the same script on every pull request that touches the runner. It fails if any run misses the regression, or if the median run takes longer than 15 seconds. That ceiling is three times the median above. It catches the runner getting slower. It is not a measured limit on how long an agent turn may wait.
+
+The Load items journey spends one second of that waiting for the network to go idle, half a second after its `ready` steps and half a second after the click, because the journey asks for it.

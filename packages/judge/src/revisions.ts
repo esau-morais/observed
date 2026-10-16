@@ -44,6 +44,7 @@ function journeyFields(journey: SavedJourney): Record<string, unknown> {
     collectors: journey.collectors ?? [],
     viewport: journey.viewport ?? defaultViewport,
     browserArguments: journey.browserArguments ?? [],
+    mask: journey.mask ?? [],
     allowedOrigins: journey.allowedOrigins ?? null,
     maxAgeMs: journey.maxAgeMs ?? defaultMaxAgeMs,
   };

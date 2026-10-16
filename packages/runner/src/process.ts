@@ -1,0 +1,117 @@
+import { Cause, DateTime, Effect, Exit, FileSystem, Schema, Stream } from 'effect';
+import { ChildProcess } from 'effect/process';
+import { conceal, redact, redactText } from './redact';
+
+// A Git hook exports these for the calling repository; inherited, they would
+// make Git describe that repository instead of the directory it runs in.
+const repositoryVariables = new Set([
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_COMMON_DIR',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+  'GIT_NAMESPACE',
+  'GIT_PREFIX',
+]);
+
+export function gitEnvironment(): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !repositoryVariables.has(name)),
+  );
+}
+
+export class ProcessFailure extends Schema.TaggedError<ProcessFailure>()('ProcessFailure', {
+  command: Schema.String,
+  exitCode: Schema.Number,
+  message: Schema.String,
+  stdout: Schema.String,
+  stderr: Schema.String,
+}) {}
+
+export const processOutput = Effect.fn('processOutput')(function* (options: {
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  env?: Record<string, string | undefined>;
+  transcript: string;
+  timeoutMs?: number;
+  concealed?: readonly string[];
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const hide = (value: string) => conceal(value, options.concealed ?? []);
+  const startedAt = DateTime.formatIso(yield* DateTime.now);
+  let stdout = '';
+  let stderr = '';
+
+  const execute = Effect.gen(function* () {
+    const handle = yield* ChildProcess.make(options.command, options.args, {
+      cwd: options.cwd,
+      ...(options.env === undefined ? {} : { env: options.env }),
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+      forceKillAfter: '2 seconds',
+    });
+
+    const [exitCode] = yield* Effect.all(
+      [
+        handle.exitCode,
+        handle.stdout.pipe(
+          Stream.decodeText(),
+          Stream.runForEach((chunk) =>
+            Effect.sync(() => {
+              stdout += chunk;
+            }),
+          ),
+        ),
+        handle.stderr.pipe(
+          Stream.decodeText(),
+          Stream.runForEach((chunk) =>
+            Effect.sync(() => {
+              stderr += chunk;
+            }),
+          ),
+        ),
+      ],
+      { concurrency: 'unbounded' },
+    );
+
+    if (exitCode !== 0) {
+      return yield* new ProcessFailure({
+        command: options.command,
+        exitCode,
+        stdout: redactText(stdout, options.concealed),
+        stderr: redactText(stderr, options.concealed),
+        message: `${options.command} exited with code ${exitCode}; see transcript.jsonl for original output`,
+      });
+    }
+
+    return stdout;
+  }).pipe(Effect.scoped, Effect.timeout(options.timeoutMs ?? 30_000));
+
+  return yield* execute.pipe(
+    Effect.onExit((exit) =>
+      Effect.gen(function* () {
+        const finishedAt = DateTime.formatIso(yield* DateTime.now);
+
+        yield* fs.writeFileString(
+          options.transcript,
+          `${JSON.stringify(
+            redact({
+              command: options.command,
+              args: options.args.map(hide),
+              startedAt,
+              finishedAt,
+              stdout: redactText(stdout, options.concealed),
+              stderr: redactText(stderr, options.concealed),
+              outcome: Exit.isSuccess(exit) ? 'complete' : hide(Cause.pretty(exit.cause)),
+            }),
+          )}\n`,
+          { flag: 'a' },
+        );
+      }).pipe(Effect.orDie),
+    ),
+  );
+});

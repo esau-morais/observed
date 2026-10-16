@@ -9,3 +9,5 @@ export * from './recipe';
 export * from './receipt';
 export * from './result';
 export * from './revisions';
+export { parseTreeLine } from './accessibility';
+export { json, sha256 } from './hash';
