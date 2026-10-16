@@ -6,7 +6,9 @@ description: Carry Observed changes through automatic standards/spec review, Git
 # Maintain an Observed PR
 
 Apply this workflow automatically to implementation and workflow changes. Reuse
-the task's publication and merge authorization; do not request it again.
+the task's publication and merge authorization; do not request it again. It
+covers only a head that passed Standards and Spec review, and never a change
+reserved for the maintainer's approval.
 
 ## Start and synchronize
 
@@ -30,7 +32,9 @@ branch and one reviewable slice.
    in the task.
 3. Run separate, bounded **Standards** and **Spec** review agents in parallel,
    automatically. Give each the pinned diff and its criteria. Standards checks
-   repository rules; Spec checks missing, incorrect, or unrequested behavior.
+   repository rules and flags any diff that loosens shared lint, TypeScript, or
+   CI config as a standards change for the maintainer; Spec checks missing,
+   incorrect, or unrequested behavior.
    Report the axes separately. Reviewers only report: they do not edit, merge,
    or change settings, and they receive the criteria, not the author's summary.
    Each lists the external claims in the diff and whether it checked them.
@@ -139,7 +143,10 @@ pauses work, report that it stopped. No completed agent or skill keeps watching
 on its own.
 
 Limit repeated fix/push cycles for the same unresolved failure to three. Report
-the concrete blocker rather than retrying indefinitely or weakening checks.
+the concrete blocker rather than retrying indefinitely or weakening checks. A
+refusal from the environment or a permission check, such as a proxy cut-off or a
+403, is not a transient failure: try once, report it in one line, and create no
+branch or remote state to probe it.
 
 ## Merge and clean up
 
@@ -148,7 +155,10 @@ passing applicable checks, resolved blocking feedback, every Standards and Spec
 finding fixed or declined with a reason, no conflicts, and either GitHub
 approval for that head or explicit maintainer authorization to merge once stated
 conditions are met. A change that AGENTS.md reserves for maintainer approval
-also needs that approval. Record which authorization applies. A stale approval,
+also needs that approval; ask for it only after the reviews ran, and name any
+review that did not. An open question on the task's acceptance criteria blocks
+the merge unless the maintainer deferred it; then the PR body says done-when is
+partial. Record which authorization applies. A stale approval,
 empty review decision, model opinion, or green check is not authorization. Never
 approve your own PR or bypass repository rules with `--admin`.
 
