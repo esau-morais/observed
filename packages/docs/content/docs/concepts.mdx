@@ -30,7 +30,7 @@ Each line on a receipt is in one of four states:
 | Unknown | Evidence is missing, skipped or was altered, or the check has no baseline, so the judge can't decide. |
 | Failed  | A check fails on the candidate.                                                                       |
 
-Unknown is never rounded up to a pass. A check has no baseline when the change adds it, alters its journey or alters its test file, or when Observed could not read the base revision's `observed.json`. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, except that it says "Nothing checked" instead of "No regression" when no line is checked. The `result.json` that Observed [stores](#where-evidence-lives) keeps the judge's own conclusion. A receipt with a checked line still ends in "No regression" even when other lines are unknown.
+Unknown is never rounded up to a pass. A check has no baseline when the change adds it, alters its journey or alters its test file. It also has none when Observed could not read the base revision's `observed.json`, or in a preview, which captures only the candidate. Such a check prints as unknown when it passes and as failed when it fails. The last line is the judge's conclusion, except that it says "Nothing checked" instead of "No regression" when no line is checked. The `result.json` that Observed [stores](#where-evidence-lives) keeps the judge's own conclusion. A receipt with a checked line still ends in "No regression" even when other lines are unknown.
 
 A journey only shows the cases it ran, so Observed says "observed", never "proved".
 
@@ -48,7 +48,7 @@ A **gap** is changed code that no journey reaches. When there is one, the agent 
 
 ## Where evidence lives
 
-Observed stores each result, with the captures it judged, as a record in the hidden ref `refs/observed/evidence`. Each record sits under the commit it judged, and its name is the SHA-256 of its files. Records never appear in your working tree, your index or your diffs.
+Observed stores each result as `result.json`, with the captures it judged, in a record in the hidden ref `refs/observed/evidence`. Each record sits under the commit it judged, and its name is the SHA-256 of its files. Records never appear in your working tree, your index or your diffs.
 
 Git does not push or fetch that ref unless you ask. To share your evidence, push it:
 
