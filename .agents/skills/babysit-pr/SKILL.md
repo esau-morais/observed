@@ -1,6 +1,6 @@
 ---
 name: babysit-pr
-description: Carry Observed changes through automatic standards/spec review, GitHub feedback, checks, authorized squash merge, and branch cleanup.
+description: Carry Observed changes through automatic standards, spec, and plan review, GitHub feedback, checks, authorized squash merge, and branch cleanup.
 ---
 
 # Maintain an Observed PR
@@ -22,8 +22,8 @@ branch and one reviewable slice.
 
 Brief another session by pointing it to AGENTS.md, the skills, and the source
 documents, and quote the maintainer's words instead of paraphrasing them. A
-brief adds no rule that contradicts this workflow and does not narrow it to a
-subset of the skills. Where the repo or `legacy` already names or decides
+brief adds no rule that contradicts this workflow and does not limit the session
+to a subset of the skills. Where the repo or `legacy` already names or decides
 something, use that over a tool's default. Give each file that parallel
 sessions could both edit, such as a CLI entry point, a package index, or
 `bun.lock`, to one session.
@@ -39,16 +39,17 @@ sessions could both edit, such as a CLI entry point, a package index, or
 3. Run separate, bounded **Standards** and **Spec** review agents in parallel,
    automatically. Give each the pinned diff and its criteria. Standards checks
    repository rules; Spec checks missing, incorrect, or unrequested behavior.
-   When the task names a plan milestone, also run a **Plan** reviewer that
-   checks whether the evidence meets its done-when. Report the axes separately. Reviewers only report: they do not edit, merge,
-   or change settings, and they receive the criteria, not the author's summary.
-   Each lists the external claims in the diff and whether it checked them.
-   Commit the candidate before pinning it. Reviewers read the pinned SHAs with
-   `git diff` and `git show`, not the working tree, which can move while they
-   run. From the second round on, give them the earlier rounds' findings and ask
-   which new finding repeats an earlier kind. If agents are unavailable, perform
-   each review directly and disclose that limit. Model review is not runtime
-   verification.
+   When the task names a plan milestone, also run a **Plan** reviewer with the
+   milestone's "done when" line as its criteria; it checks whether the evidence
+   meets that line. Report the axes separately. Reviewers only report: they do
+   not edit, merge, or change settings, and they receive the criteria, not the
+   author's summary. Each lists the external claims in the diff and whether it
+   checked them. Commit the candidate before pinning it. Reviewers read the
+   pinned SHAs with `git diff` and `git show`, not the working tree, which can
+   move while they run. From the second round on, give them the earlier rounds'
+   findings and ask which new finding repeats an earlier kind. If agents are
+   unavailable, perform each review directly and disclose that limit. Model
+   review is not runtime verification.
 4. Fix actionable findings and run applicable checks from `package.json`. Commit
    the fixes, pin the new head, and send the fix delta (`OLD_HEAD..NEW_HEAD`)
    and the full `BASE..NEW_HEAD` diff to the same reviewers again. The
@@ -67,7 +68,8 @@ sessions could both edit, such as a CLI entry point, a package index, or
    Commit subjects and PR titles.
 
 For instruction changes, review local links and run `git diff --check` and
-`git diff --cached --check`. `bun run check` confirms each skill is linked.
+`git diff --cached --check`. `bun run check` confirms each skill is present
+under `.agents/skills` and `.claude/skills`.
 
 ## Write the PR description
 
@@ -128,14 +130,14 @@ instead of repeating failed calls.
 Watch pending checks with `gh pr checks --watch` as a background command with a
 timeout, then fetch review state again. That command does not watch reviews.
 Wait for child reviews the same way, or end the turn and let their completion
-resume it. Before any wait, commit work in progress and record where it stands
-outside `/tmp`, which a reboot clears. During an active review
-session, start an actual bounded watcher for new or edited comments, reviews,
-thread state, and head changes. State its interval and duration. Handle events
-and resume the watch while the authorized session remains active. Do not hand
-off after one quiet fetch. If the watch expires, access fails, or the user
-pauses work, report that it stopped. No completed agent or skill keeps watching
-on its own.
+resume it. Before any wait, commit work in progress on the implementation branch
+and record where it stands outside `/tmp`, which a reboot clears. During an
+active review session, start an actual bounded watcher for new or edited
+comments, reviews, thread state, and head changes. State its interval and
+duration. Handle events and resume the watch while the authorized session
+remains active. Do not hand off after one quiet fetch. If the watch expires,
+access fails, or the user pauses work, report that it stopped. No completed
+agent or skill keeps watching on its own.
 
 Limit repeated fix/push cycles for the same unresolved failure to three. Report
 the concrete blocker rather than retrying indefinitely or weakening checks.
