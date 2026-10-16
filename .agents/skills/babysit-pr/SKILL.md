@@ -20,6 +20,14 @@ Reconcile upstream changes while preserving local work. If history was
 rewritten, compare contents before replaying commits. Use one implementation
 branch and one reviewable slice.
 
+Brief another session by pointing it to AGENTS.md, the skills, and the source
+documents, and quote the maintainer's words instead of paraphrasing them. A
+brief adds no rule that contradicts this workflow and does not narrow it to a
+subset of the skills. Where the repo or `legacy` already names or decides
+something, use that over a tool's default. Give each file that parallel
+sessions could both edit, such as a CLI entry point, a package index, or
+`bun.lock`, to one session.
+
 ## Review before publication and handoff
 
 1. Pin the actual base SHA and candidate SHA. For an existing PR, infer the base
@@ -31,18 +39,19 @@ branch and one reviewable slice.
 3. Run separate, bounded **Standards** and **Spec** review agents in parallel,
    automatically. Give each the pinned diff and its criteria. Standards checks
    repository rules; Spec checks missing, incorrect, or unrequested behavior.
-   Report the axes separately. Reviewers only report: they do not edit, merge,
+   When the task names a plan milestone, also run a **Plan** reviewer that
+   checks whether the evidence meets its done-when. Report the axes separately. Reviewers only report: they do not edit, merge,
    or change settings, and they receive the criteria, not the author's summary.
    Each lists the external claims in the diff and whether it checked them.
    Commit the candidate before pinning it. Reviewers read the pinned SHAs with
    `git diff` and `git show`, not the working tree, which can move while they
    run. From the second round on, give them the earlier rounds' findings and ask
    which new finding repeats an earlier kind. If agents are unavailable, perform
-   both reviews directly and disclose that limit. Model review is not runtime
+   each review directly and disclose that limit. Model review is not runtime
    verification.
 4. Fix actionable findings and run applicable checks from `package.json`. Commit
    the fixes, pin the new head, and send the fix delta (`OLD_HEAD..NEW_HEAD`)
-   and the full `BASE..NEW_HEAD` diff to Standards and Spec reviewers again. The
+   and the full `BASE..NEW_HEAD` diff to the same reviewers again. The
    author's re-read is not a review. Reuse successful checks only while their
    inputs and relevant environment remain unchanged. Before pushing a fix to a
    claim, status, or rule, search every doc that restates it and fix each copy.
@@ -57,19 +66,8 @@ branch and one reviewable slice.
    interruption, check HEAD and the remote before retrying. Use Conventional
    Commit subjects and PR titles.
 
-For instruction changes, review local links and run:
-
-```bash
-git diff --check
-git diff --cached --check
-test -L .claude/skills
-test "$(realpath .claude/skills)" = "$(realpath .agents/skills)"
-git check-ignore evidence/verification-probe.log
-git ls-files evidence
-```
-
-The last command must list no routine captures. A resolving symlink establishes
-the filesystem layout, not skill discovery in every host.
+For instruction changes, review local links and run `git diff --check` and
+`git diff --cached --check`. `bun run check` confirms each skill is linked.
 
 ## Write the PR description
 
@@ -130,7 +128,8 @@ instead of repeating failed calls.
 Watch pending checks with `gh pr checks --watch` as a background command with a
 timeout, then fetch review state again. That command does not watch reviews.
 Wait for child reviews the same way, or end the turn and let their completion
-resume it. Record where the work stands before any wait. During an active review
+resume it. Before any wait, commit work in progress and record where it stands
+outside `/tmp`, which a reboot clears. During an active review
 session, start an actual bounded watcher for new or edited comments, reviews,
 thread state, and head changes. State its interval and duration. Handle events
 and resume the watch while the authorized session remains active. Do not hand
@@ -144,8 +143,8 @@ the concrete blocker rather than retrying indefinitely or weakening checks.
 ## Merge and clean up
 
 Immediately before merging, re-fetch the current head and feedback. Require
-passing applicable checks, resolved blocking feedback, every Standards and Spec
-finding fixed or declined with a reason, no conflicts, and either GitHub
+passing applicable checks, resolved blocking feedback, every review finding
+fixed or declined with a reason, no conflicts, and either GitHub
 approval for that head or explicit maintainer authorization to merge once stated
 conditions are met. A change that AGENTS.md reserves for maintainer approval
 also needs that approval. Record which authorization applies. A stale approval,
