@@ -155,12 +155,14 @@ passing applicable checks, resolved blocking feedback, every Standards and Spec
 finding fixed or declined with a reason, no conflicts, and either GitHub
 approval for that head or explicit maintainer authorization to merge once stated
 conditions are met. A change that AGENTS.md reserves for maintainer approval
-also needs that approval; ask for it only after the reviews ran, and name any
-review that did not. An open question on the task's acceptance criteria blocks
-the merge unless the maintainer deferred it; then the PR body says done-when is
-partial. Record which authorization applies. A stale approval,
-empty review decision, model opinion, or green check is not authorization. Never
-approve your own PR or bypass repository rules with `--admin`.
+also needs that approval, and so does a diff that loosens shared lint,
+TypeScript, or CI config. Ask for approval only after Standards and Spec review
+ran; if one could not run, name it in the request. An open question on the
+task's acceptance criteria blocks the merge unless the maintainer deferred it;
+then list it under `not verified` and say the criteria are only partly met.
+Record which authorization applies. A stale approval, empty review decision,
+model opinion, or green check is not authorization. Never approve your own PR
+or bypass repository rules with `--admin`.
 
 Use the checked Conventional Commit title as `SUBJECT` and the reviewed head as
 `REVIEWED_SHA`:
