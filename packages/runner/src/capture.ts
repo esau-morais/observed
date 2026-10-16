@@ -15,6 +15,7 @@ import type { Browser } from 'playwright';
 import playwrightPackage from 'playwright/package.json' with { type: 'json' };
 import { startApplication } from './application';
 import { captureBrowser, type NewArtifact, type PendingEvidence } from './browser';
+import { apiEnvironment } from './collectors/api';
 import type { Project } from './project';
 import { conceal } from './redact';
 import { revisionFiles, type PreparedRevision } from './revision';
@@ -37,20 +38,18 @@ const lockfiles = new Set([
 ]);
 
 // An empty value is rejected too: CI systems commonly expand an unavailable
-// secret to an empty string, and filling it would capture a different journey.
-function fillValues(recipe: Recipe) {
+// secret to an empty string, and using it would capture a different journey.
+function environmentValues(names: readonly string[], what: string) {
   const values = new Map<string, string>();
   const missing = new Set<string>();
 
-  for (const step of [...recipe.ready, ...recipe.steps]) {
-    if (step.kind === 'fill' && typeof step.value !== 'string') {
-      const value = process.env[step.value.env];
+  for (const name of names) {
+    const value = process.env[name];
 
-      if (value === undefined || value === '') {
-        missing.add(step.value.env);
-      } else {
-        values.set(step.value.env, value);
-      }
+    if (value === undefined || value === '') {
+      missing.add(name);
+    } else {
+      values.set(name, value);
     }
   }
 
@@ -59,10 +58,27 @@ function fillValues(recipe: Recipe) {
     : Effect.fail(
         new CaptureFailure({
           category: 'configuration',
-          message: `Fill value unavailable. Missing or empty environment variables: ${[...missing].join(', ')}`,
+          message: `${what} unavailable. Missing or empty environment variables: ${[...missing].join(', ')}`,
         }),
       );
 }
+
+const fillNames = (recipe: Recipe) =>
+  [...recipe.ready, ...recipe.steps].flatMap((step) =>
+    step.kind === 'fill' && typeof step.value !== 'string' ? [step.value.env] : [],
+  );
+
+const collectorNames = (recipe: Recipe) =>
+  recipe.collectors.flatMap((collector) => {
+    switch (collector.kind) {
+      case 'api':
+        return apiEnvironment(collector.operations);
+      case 'playwright':
+        return collector.environment ?? [];
+      default:
+        return [];
+    }
+  });
 
 export const captureJourney = Effect.fn('captureJourney')(function* (options: {
   directory: string;
@@ -161,8 +177,12 @@ export const captureJourney = Effect.fn('captureJourney')(function* (options: {
       });
     }
 
-    const values = yield* fillValues(recipe);
-    concealed = [...values.values()];
+    const values = yield* environmentValues(fillNames(recipe), 'Fill value');
+    const collectorValues = yield* environmentValues(
+      collectorNames(recipe),
+      'Collector environment value',
+    );
+    concealed = [...values.values(), ...collectorValues.values()];
     const url = yield* startApplication({
       workspace: revision.workspace,
       evidenceDirectory: directory,
@@ -179,6 +199,9 @@ export const captureJourney = Effect.fn('captureJourney')(function* (options: {
         url,
         recipe,
         fillValues: values,
+        collectorValues,
+        workspace: revision.workspace,
+        timeoutMs: options.timeoutMs,
         addArtifact,
         addEvidence: (entry) => {
           pendingEvidence.push(entry);
@@ -246,7 +269,7 @@ export const captureJourney = Effect.fn('captureJourney')(function* (options: {
 
         const evidence = pendingEvidence.map((entry): Capture['evidence'][number] => {
           if (entry.status === 'unavailable') {
-            return { ...entry, producer };
+            return { producer, ...entry };
           }
 
           const written = records.find((item) => item.path === entry.path);
@@ -257,9 +280,9 @@ export const captureJourney = Effect.fn('captureJourney')(function* (options: {
                 schemaVersion: entry.schemaVersion,
                 status: 'unavailable',
                 reason: `Evidence file ${entry.path} was not written`,
-                producer,
+                producer: entry.producer ?? producer,
               }
-            : { ...entry, sha256: written.sha256, producer };
+            : { producer, ...entry, sha256: written.sha256 };
         });
 
         let execution: Capture['execution'] = { kind: 'complete' };

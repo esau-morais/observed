@@ -29,13 +29,20 @@ A changed `mask` changes the journey, so the judge treats its checks as unknown,
 
 Each capture holds the raw files the browser produced next to the evidence the judge reads. A check can be traced back to Playwright's own output.
 
-| Evidence       | Raw file                   |
-| -------------- | -------------------------- |
-| Requests       | `requests.har`             |
-| Browser errors | `errors.json`              |
-| Final page     | `snapshot.yml`             |
-| Element text   | `text-<n>.json`            |
-| Accessibility  | `a11y.json`, from axe-core |
+| Evidence         | Raw file                                |
+| ---------------- | --------------------------------------- |
+| Requests         | `requests.har`                          |
+| Browser errors   | `errors.json`                           |
+| Final page       | `snapshot.yml`                          |
+| Element text     | `text-<n>.json`                         |
+| Accessibility    | `a11y.json`, from axe-core              |
+| Timings          | `performance/run-<n>.json`, one per run |
+| React renders    | `react-renders.json`                    |
+| Playwright tests | `playwright/report.json`, the app's own |
+
+Requests, errors, text and accessibility come from the recorded journey. The rest run after it, so nothing they send counts in the journey's requests. Timings and React renders each walk the journey again in a browser context of their own. API operations are sent straight to the app. The app's own Playwright command runs last, against the same app process.
+
+React renders come from a small DevTools hook the runner adds to the page before React loads. A build that minifies names renames components too, so a check that names a component needs a build that keeps names.
 
 Coverage isn't collected yet. It comes back with change scope, which is the part that reads it, so every capture marks it as unavailable.
 

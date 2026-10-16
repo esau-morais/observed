@@ -10,3 +10,4 @@ CHANGELOG.md
 **/routeTree.gen.ts
 AGENTS.md
 CLAUDE.md
+packages/runner/fixtures/playwright-report/

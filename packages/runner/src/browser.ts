@@ -9,18 +9,21 @@ import {
 } from '@observed/judge';
 import { DateTime, Effect, FileSystem, Option, Schema } from 'effect';
 import path from 'node:path';
-import type { Browser, Page } from 'playwright';
+import type { Browser } from 'playwright';
 import { collectAccessibility } from './collectors/accessibility';
+import { apiConditions, apiProducer, collectApi } from './collectors/api';
 import { BrowserFailure, EvidenceUnavailable, browserCall } from './collectors/define';
 import { browserErrorsValue, timelineValue, type JourneyLog } from './collectors/journey-log';
+import { collectPerformance, performanceConditions } from './collectors/performance';
+import { runPlaywright } from './collectors/playwright/command';
+import { collectReact } from './collectors/react';
 import { collectText } from './collectors/text';
-import { watchNetwork } from './network';
 import { conceal, redact, redactText } from './redact';
-import { runStep, stepTarget, stepTimeoutMs } from './steps';
+import { openSession } from './session';
 
 export type NewArtifact = Omit<CaptureArtifact, 'sha256'>;
 
-export type PendingEvidence =
+export type PendingEvidence = (
   | {
       kind: string;
       schemaVersion: number;
@@ -28,15 +31,16 @@ export type PendingEvidence =
       path: string;
       conditions: Record<string, string | number | boolean | null>;
     }
-  | { kind: string; schemaVersion: number; status: 'unavailable'; reason: string };
+  | { kind: string; schemaVersion: number; status: 'unavailable'; reason: string }
+) & { producer?: Producer };
+
+export type Producer = { readonly name: string; readonly version: string };
 
 const settleQuietMs = 100;
 const settleTimeoutMs = 2_000;
 
-const notCollected: Partial<Record<EvidenceKind, string>> = {
-  coverage:
-    'This runner does not collect coverage; it returns with change scope, which is the part that reads it',
-};
+const coverageReason =
+  'This runner does not collect coverage; it returns with change scope, which is the part that reads it';
 
 const harSchema = Schema.Struct({
   log: Schema.Struct({
@@ -68,6 +72,9 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   url: string;
   recipe: Recipe;
   fillValues: ReadonlyMap<string, string>;
+  collectorValues: ReadonlyMap<string, string>;
+  workspace: string;
+  timeoutMs: number;
   addArtifact: (artifact: NewArtifact) => void;
   addEvidence: (entry: PendingEvidence) => void;
   inputsHash: string;
@@ -75,11 +82,9 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 }) {
   const fs = yield* FileSystem.FileSystem;
   const { recipe, directory } = options;
-  const concealed = [...options.fillValues.values()];
+  const concealed = [...options.fillValues.values(), ...options.collectorValues.values()];
   const origin = new URL(options.url).origin;
-  const allowed = new Set([origin, ...(recipe.allowedOrigins ?? [])]);
   const log: JourneyLog = { steps: [], errors: [] };
-  const blocked = new Set<string>();
 
   const saveText = Effect.fnUntraced(function* ({
     text,
@@ -95,53 +100,24 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     });
   });
 
-  const context = yield* Effect.acquireRelease(
-    browserCall('Opening a browser context', () =>
-      options.browser.newContext({
-        viewport: { width: recipe.viewport.width, height: recipe.viewport.height },
-        deviceScaleFactor: recipe.viewport.scale,
-        locale: 'en-US',
-        timezoneId: 'UTC',
-        colorScheme: 'light',
-        reducedMotion: 'reduce',
-        serviceWorkers: 'block',
-      }),
-    ),
-    (opened) =>
-      Effect.promise(() => opened.close()).pipe(
-        Effect.timeout('10 seconds'),
-        Effect.as(true),
-        Effect.orElseSucceed(() => false),
-        Effect.flatMap((contextClosed) =>
-          fs.writeFileString(
-            path.join(directory, 'browser-cleanup.json'),
-            json({ contextClosed }),
-            { flag: 'wx' },
-          ),
-        ),
-        Effect.orDie,
-      ),
-  );
   options.addArtifact({
     id: 'browser-cleanup',
     path: 'browser-cleanup.json',
     description: 'Owned browser context shutdown',
   });
-  context.setDefaultTimeout(stepTimeoutMs);
-
-  yield* browserCall('Limiting requests to allowed origins', () =>
-    context.route(
-      (url) => /^https?:$/.test(url.protocol) && !allowed.has(url.origin),
-      (route) => {
-        blocked.add(new URL(route.request().url()).origin);
-
-        return route.abort('blockedbyclient');
-      },
-    ),
-  );
-
-  const network = watchNetwork(context);
-  const page: Page = yield* browserCall('Opening a page', () => context.newPage());
+  const session = yield* openSession({
+    browser: options.browser,
+    recipe,
+    url: options.url,
+    fillValues: options.fillValues,
+    onClose: (contextClosed) =>
+      fs
+        .writeFileString(path.join(directory, 'browser-cleanup.json'), json({ contextClosed }), {
+          flag: 'wx',
+        })
+        .pipe(Effect.orDie),
+  });
+  const { context, page, network, blocked, run } = session;
   const at = () => new Date().toISOString();
 
   page.on('pageerror', (error) => {
@@ -153,28 +129,8 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     }
   });
 
-  const run = (phase: 'Ready step' | 'Step', step: Recipe['steps'][number], index: number) =>
-    browserCall(
-      `${phase} ${index + 1} (${[step.kind, stepTarget(step)].filter((part) => part !== null).join(' ')})`,
-      () =>
-        runStep({
-          page,
-          step,
-          url: options.url,
-          fillValues: options.fillValues,
-          idle: network.idle,
-        }),
-      'application',
-    );
-
-  yield* browserCall(
-    'Opening the journey path',
-    () => page.goto(new URL(recipe.path, options.url).toString()),
-    'application',
-  );
-  yield* Effect.forEach(recipe.ready, (step, index) => run('Ready step', step, index), {
-    discard: true,
-  });
+  yield* session.open();
+  yield* session.runAll('Ready step', recipe.ready);
 
   const environmentText = yield* browserCall('Reading the page environment', () =>
     page.evaluate<string>(
@@ -267,10 +223,11 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   const pendingKinds = new Set(recipe.collectors.map((collector) => collector.kind));
 
-  const record = Effect.fnUntraced(function* <E>(
+  const record = Effect.fnUntraced(function* <E, R>(
     kind: EvidenceKind,
-    collected: Effect.Effect<unknown, EvidenceUnavailable | E>,
+    collected: Effect.Effect<unknown, EvidenceUnavailable | E, R>,
     conditions: Record<string, string | number | boolean | null> = {},
+    producer?: (value: unknown) => Producer,
   ) {
     if (!pendingKinds.delete(kind)) {
       return;
@@ -293,8 +250,14 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
           }).pipe(Effect.option)
         : Option.none();
 
+    const source =
+      producer === undefined
+        ? {}
+        : { producer: producer(result.kind === 'recorded' ? result.value : null) };
+
     if (Option.isNone(file)) {
       options.addEvidence({
+        ...source,
         kind,
         schemaVersion: definition.schemaVersion,
         status: 'unavailable',
@@ -317,6 +280,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
       text: json(file.value),
     });
     options.addEvidence({
+      ...source,
       kind,
       schemaVersion: definition.schemaVersion,
       status: 'recorded',
@@ -403,17 +367,6 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
           }),
         );
         break;
-      default:
-        yield* record(
-          collector.kind,
-          Effect.fail(
-            new EvidenceUnavailable({
-              reason:
-                notCollected[collector.kind] ??
-                `This runner does not collect ${collector.kind} evidence yet`,
-            }),
-          ),
-        );
     }
   }
 
@@ -499,6 +452,93 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     description: 'When each screenshot was taken and whether the page settled',
     text: json(shots),
   });
+
+  // These run after the recorded window, so nothing they send counts in the
+  // journey's observations. The app's Playwright command runs last.
+  for (const collector of recipe.collectors) {
+    switch (collector.kind) {
+      case 'performance':
+        yield* record(
+          'performance',
+          collectPerformance({
+            config: collector,
+            browser: options.browser,
+            recipe,
+            url: options.url,
+            directory,
+            fillValues: options.fillValues,
+            concealed,
+            addArtifact: options.addArtifact,
+          }),
+          performanceConditions(collector),
+        );
+        break;
+      case 'react':
+        yield* record(
+          'react',
+          collectReact({
+            browser: options.browser,
+            recipe,
+            url: options.url,
+            fillValues: options.fillValues,
+            save: (text) =>
+              saveText({
+                id: 'react-renders',
+                path: 'react-renders.json',
+                description: 'React recording from the page',
+                text,
+              }).pipe(Effect.orDie),
+          }),
+          { devtoolsHook: 'minimal' },
+        );
+        break;
+      case 'api':
+        yield* record(
+          'api',
+          collectApi(collector.operations, {
+            url: options.url,
+            environment: options.collectorValues,
+          }),
+          apiConditions,
+          apiProducer,
+        );
+        break;
+      case 'coverage':
+        yield* record('coverage', Effect.fail(new EvidenceUnavailable({ reason: coverageReason })));
+        break;
+    }
+  }
+
+  for (const collector of recipe.collectors) {
+    if (collector.kind === 'playwright') {
+      yield* record(
+        'playwright',
+        runPlaywright({
+          command: collector.command,
+          environment: new Map(
+            (collector.environment ?? []).flatMap((name) => {
+              const value = options.collectorValues.get(name);
+
+              return value === undefined ? [] : [[name, value] as const];
+            }),
+          ),
+          directory,
+          workspace: options.workspace,
+          url: options.url,
+          concealed,
+          timeoutMs: options.timeoutMs,
+          addArtifact: options.addArtifact,
+        }),
+        {},
+        (value) => ({
+          name: 'Playwright',
+          version: Schema.is(evidenceKinds.playwright.value)(value)
+            ? (value.version ?? 'not recorded')
+            : 'not recorded',
+        }),
+      );
+    }
+  }
 
   return {
     browser: `chromium ${options.browser.version()}`,
