@@ -42,7 +42,7 @@ Each capture holds the raw files the browser produced next to the evidence the j
 
 Requests, errors, text and accessibility come from the recorded journey. The rest run after it, so nothing they send counts in the journey's requests. Timings and React renders each walk the journey again in a browser context of their own. The runner sends API operations straight to the app. The app's own Playwright command runs last, against the same app process.
 
-React renders come from a small DevTools hook the runner adds to the page before React loads. A build that minifies names renames components too, so a check that names a component needs a build that keeps names.
+React renders come from a small DevTools hook the runner adds to the page before React loads. A build that minifies names renames components too, so a check that names a component needs a build that keeps names. The runner does not record where each component is defined in the source.
 
 Coverage isn't collected yet. It comes back with change scope, which is the part that reads it, so every capture marks it as unavailable.
 

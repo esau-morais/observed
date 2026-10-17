@@ -40,7 +40,7 @@ const lockfiles = new Set([
 
 // An empty value is rejected too: CI systems commonly expand an unavailable
 // secret to an empty string, and using it would capture a different journey.
-function environmentValues(names: readonly string[], what: string) {
+export function environmentValues(names: readonly string[], what: string) {
   const values = new Map<string, string>();
   const missing = new Set<string>();
 
@@ -69,7 +69,7 @@ const fillNames = (recipe: Recipe) =>
     step.kind === 'fill' && typeof step.value !== 'string' ? [step.value.env] : [],
   );
 
-const collectorNames = (recipe: Recipe) =>
+export const collectorNames = (recipe: Recipe) =>
   recipe.collectors.flatMap((collector) => {
     switch (collector.kind) {
       case 'api':

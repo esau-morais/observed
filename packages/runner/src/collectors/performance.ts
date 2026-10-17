@@ -177,6 +177,7 @@ export const collectPerformance = Effect.fnUntraced(function* (options: {
   fillValues: ReadonlyMap<string, string>;
   concealed: readonly string[];
   addArtifact: AddArtifact;
+  onClose: (closed: boolean) => Effect.Effect<void>;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const { recipe, directory, config } = options;
@@ -203,6 +204,7 @@ export const collectPerformance = Effect.fnUntraced(function* (options: {
     url: options.url,
     fillValues: options.fillValues,
     initScripts: [observerScript],
+    onClose: options.onClose,
   }).pipe(
     Effect.mapError((error) => unavailable(`The sampling browser did not start: ${error.message}`)),
   );

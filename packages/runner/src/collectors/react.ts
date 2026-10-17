@@ -226,6 +226,7 @@ export const collectReact = Effect.fnUntraced(function* (options: {
   url: string;
   fillValues: ReadonlyMap<string, string>;
   save: (text: string) => Effect.Effect<void>;
+  onClose: (closed: boolean) => Effect.Effect<void>;
 }) {
   const { recipe } = options;
   const session = yield* openSession({
@@ -234,6 +235,7 @@ export const collectReact = Effect.fnUntraced(function* (options: {
     url: options.url,
     fillValues: options.fillValues,
     initScripts: [hookScript],
+    onClose: options.onClose,
   });
   const { page } = session;
   const fail = (reason: string) => new EvidenceUnavailable({ reason });
