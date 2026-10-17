@@ -103,22 +103,20 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     });
   });
 
-  options.addArtifact({
-    id: 'browser-cleanup',
-    path: 'browser-cleanup.json',
-    description: 'Owned browser context shutdown',
-  });
+  const recordCleanup = (id: string) => {
+    const artifact = { id, path: `${id}.json`, description: 'Owned browser context shutdown' };
+    options.addArtifact(artifact);
+
+    return (contextClosed: boolean) =>
+      saveText({ ...artifact, text: json({ contextClosed }) }).pipe(Effect.orDie);
+  };
+
   const session = yield* openSession({
     browser: options.browser,
     recipe,
     url: options.url,
     fillValues: options.fillValues,
-    onClose: (contextClosed) =>
-      fs
-        .writeFileString(path.join(directory, 'browser-cleanup.json'), json({ contextClosed }), {
-          flag: 'wx',
-        })
-        .pipe(Effect.orDie),
+    onClose: recordCleanup('browser-cleanup'),
   });
   const { context, page, network, blocked, run } = session;
   const at = () => new Date().toISOString();
@@ -455,14 +453,6 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     description: 'When each screenshot was taken and whether the page settled',
     text: json(shots),
   });
-
-  const recordCleanup = (id: string) => {
-    const artifact = { id, path: `${id}.json`, description: 'Owned browser context shutdown' };
-    options.addArtifact(artifact);
-
-    return (contextClosed: boolean) =>
-      saveText({ ...artifact, text: json({ contextClosed }) }).pipe(Effect.orDie);
-  };
 
   // These run after the recorded window, so nothing they send counts in the
   // journey's observations. The app's Playwright command runs last.
