@@ -49,7 +49,7 @@ A problem before any capture, such as a malformed `observed.json`, also exits wi
 
 ### Records
 
-When `--candidate` names a commit, `run` adds the selection, the result and every capture to `refs/observed/evidence` under that commit, so `observed receipt` can print it later. A run on the working tree adds nothing, because there is no commit to file it under.
+When `--candidate` names a commit, `run` adds the whole run directory to `refs/observed/evidence` under that commit: every capture, `selection.json`, `result.json`, `timings.json` and the Git transcripts. The record goes into the repository that holds the project, so run `observed receipt` there. A run on the working tree adds nothing, because there is no commit to file it under.
 
 ## observed receipt
 

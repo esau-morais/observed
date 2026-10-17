@@ -121,6 +121,22 @@ for (let run = 1; run <= runs; run += 1) {
     problems.push(`run ${run}: ${JSON.stringify({ conclusion: result.conclusion, journeys })}`);
   }
 
+  if (run === 1) {
+    const printed = await command(
+      [process.execPath, join(root, 'packages/cli/src/main.ts'), 'receipt', candidate],
+      project,
+    );
+
+    if (
+      printed.exitCode !== 0 ||
+      !/failed +One request per load action · base 1 · candidate 2/.test(printed.stdout)
+    ) {
+      problems.push(
+        `receipt after run 1: exit ${printed.exitCode}\n${printed.stdout}${printed.stderr}`,
+      );
+    }
+  }
+
   measured.push({ run, wallMs, ...(await readJson(timingsSchema, join(output, 'timings.json'))) });
 }
 

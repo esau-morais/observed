@@ -53,6 +53,10 @@ Measured with `bun scripts/measure-request-lab.ts 5` on Bun 1.4.2, Linux, an AMD
 | Judge                                | 0.17 s |
 | Whole command, from start to exit    | 5.06 s |
 
+The phases add up to less than the whole command. The rest is starting Bun, reading both `observed.json` files through Git, and writing the record.
+
+On GitHub's `ubuntu-24.04` runner the whole command takes 6.93 s at the median of five runs, and 8.69 s on the first run, before Bun's cache holds the demo app's dependencies.
+
 CI runs the same script on every pull request that touches the runner. It fails if any run misses the regression, or if the median run takes longer than 15 seconds. That ceiling is three times the median above. It catches the runner getting slower. It is not a measured limit on how long an agent turn may wait.
 
 The Load items journey spends one second of that waiting for the network to go idle, half a second after its `ready` steps and half a second after the click, because the journey asks for it.
