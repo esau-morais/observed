@@ -457,13 +457,11 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   });
 
   const recordCleanup = (id: string) => {
-    const file = `${id}.json`;
-    options.addArtifact({ id, path: file, description: 'Owned browser context shutdown' });
+    const artifact = { id, path: `${id}.json`, description: 'Owned browser context shutdown' };
+    options.addArtifact(artifact);
 
     return (contextClosed: boolean) =>
-      fs
-        .writeFileString(path.join(directory, file), json({ contextClosed }), { flag: 'wx' })
-        .pipe(Effect.orDie);
+      saveText({ ...artifact, text: json({ contextClosed }) }).pipe(Effect.orDie);
   };
 
   // These run after the recorded window, so nothing they send counts in the
