@@ -2,15 +2,10 @@ import { Effect, FileSystem } from 'effect';
 import path from 'node:path';
 import type { PlaywrightAttachment, PlaywrightValue } from '@observed/judge';
 import { conceal, redactText } from '../../redact';
+import type { AddArtifact } from '../define';
 import type { ParsedReport, ReportAttachment } from './report';
 import { summarizeTrace } from './trace';
-import { readZip } from './zip';
-
-export type AddArtifact = (artifact: {
-  readonly id: string;
-  readonly path: string;
-  readonly description: string;
-}) => void;
+import { maxZipEntryBytes, readZip } from './zip';
 
 function inside(root: string, file: string): boolean {
   const relative = path.relative(root, file);
@@ -31,8 +26,6 @@ function safeName(name: string): string {
 
 const textTypes = /^(?:text\/|application\/(?:json|xml)\b)/;
 
-const maxZipEntry = 256 * 1024 * 1024;
-
 // Checks the raw bytes and, for a zip, each entry's contents, since those
 // are usually compressed. A zip that can't be read counts as holding one.
 function holdsConcealed(bytes: Uint8Array, concealed: readonly string[]): boolean {
@@ -47,7 +40,7 @@ function holdsConcealed(bytes: Uint8Array, concealed: readonly string[]): boolea
   }
 
   try {
-    return [...readZip(bytes, maxZipEntry).values()].some((entry) =>
+    return [...readZip(bytes, maxZipEntryBytes).values()].some((entry) =>
       found(new TextDecoder().decode(entry.read())),
     );
   } catch {

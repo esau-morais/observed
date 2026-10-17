@@ -7,9 +7,6 @@ import { runStep, stepTarget, stepTimeoutMs } from './steps';
 
 export type Phase = 'Ready step' | 'Step';
 
-// A fresh browser context with the journey's viewport and fixed locale, time
-// zone, color scheme and motion. Requests to origins the journey does not
-// allow are aborted and named in `blocked`.
 export const openSession = Effect.fnUntraced(function* (options: {
   browser: Browser;
   recipe: Recipe;

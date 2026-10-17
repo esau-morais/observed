@@ -11,8 +11,7 @@ import path from 'node:path';
 import type { Browser } from 'playwright';
 import { conceal, redactText } from '../redact';
 import { openSession, type Session } from '../session';
-import type { AddArtifact } from './playwright/collect';
-import { EvidenceUnavailable, browserCall, type BrowserFailure } from './define';
+import { EvidenceUnavailable, browserCall, type AddArtifact, type BrowserFailure } from './define';
 
 // Added as an init script so the observers exist before page scripts run.
 // CLS uses session windows and INP groups event timing entries by
@@ -305,11 +304,7 @@ export const collectPerformance = Effect.fnUntraced(function* (options: {
 
   return yield* Schema.decodeUnknownEffect(evidenceKinds.performance.value)({
     conditions: {
-      samples,
-      warmup,
-      cpu: 'unthrottled',
-      network: 'unthrottled',
-      cache: 'warm',
+      ...performanceConditions(config),
       order: 'sequential',
       viewport: recipe.viewport,
     },
@@ -331,12 +326,17 @@ const inspect = Effect.fnUntraced(function* (options: {
   const fs = yield* FileSystem.FileSystem;
   const { page, context } = options.session;
 
-  const record = (
-    id: string,
-    filename: string,
-    description: string,
-    around: (run: Effect.Effect<void, BrowserFailure>) => Effect.Effect<string, BrowserFailure>,
-  ) =>
+  const record = ({
+    id,
+    filename,
+    description,
+    around,
+  }: {
+    id: string;
+    filename: string;
+    description: string;
+    around: (run: Effect.Effect<void, BrowserFailure>) => Effect.Effect<string, BrowserFailure>;
+  }) =>
     around(options.journey).pipe(
       Effect.flatMap((text) =>
         fs.writeFileString(
@@ -360,11 +360,12 @@ const inspect = Effect.fnUntraced(function* (options: {
       ),
     );
 
-  const trace = yield* record(
-    'performance-trace',
-    'performance/trace.json',
-    'Chrome DevTools trace of one extra journey run, for inspection only; not a timing sample',
-    (run) =>
+  const trace = yield* record({
+    id: 'performance-trace',
+    filename: 'performance/trace.json',
+    description:
+      'Chrome DevTools trace of one extra journey run, for inspection only; not a timing sample',
+    around: (run) =>
       Effect.gen(function* () {
         yield* browserCall('Starting the trace', () => options.browser.startTracing(page));
         yield* run;
@@ -373,12 +374,13 @@ const inspect = Effect.fnUntraced(function* (options: {
           options.browser.stopTracing(),
         )).toString('utf8');
       }),
-  );
-  const profile = yield* record(
-    'performance-profile',
-    'performance/profile.json',
-    'Chrome DevTools profile of one extra journey run, for inspection only; not a timing sample',
-    (run) =>
+  });
+  const profile = yield* record({
+    id: 'performance-profile',
+    filename: 'performance/profile.json',
+    description:
+      'Chrome DevTools profile of one extra journey run, for inspection only; not a timing sample',
+    around: (run) =>
       Effect.gen(function* () {
         const cdp = yield* browserCall('Opening a DevTools session', () =>
           context.newCDPSession(page),
@@ -394,7 +396,7 @@ const inspect = Effect.fnUntraced(function* (options: {
 
         return JSON.stringify(stopped.profile);
       }),
-  );
+  });
 
   return { kind: 'requested', trace, profile } satisfies PerformanceInspection;
 });

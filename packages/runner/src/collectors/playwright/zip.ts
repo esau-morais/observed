@@ -1,5 +1,7 @@
 import { crc32, inflateRawSync } from 'node:zlib';
 
+export const maxZipEntryBytes = 256 * 1024 * 1024;
+
 export class ZipError extends Error {
   override readonly name = 'ZipError';
 }

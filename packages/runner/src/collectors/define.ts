@@ -1,4 +1,9 @@
+import type { CaptureArtifact } from '@observed/judge';
 import { Effect, Schema } from 'effect';
+
+export type NewArtifact = Omit<CaptureArtifact, 'sha256'>;
+
+export type AddArtifact = (artifact: NewArtifact) => void;
 
 export class EvidenceUnavailable extends Schema.TaggedError<EvidenceUnavailable>()(
   'EvidenceUnavailable',

@@ -2,8 +2,8 @@ import { Effect, FileSystem } from 'effect';
 import path from 'node:path';
 import { processOutput } from '../../process';
 import { redactText } from '../../redact';
-import { EvidenceUnavailable } from '../define';
-import { collectReport, type AddArtifact } from './collect';
+import { EvidenceUnavailable, type AddArtifact } from '../define';
+import { collectReport } from './collect';
 import { parseJsonReport } from './report';
 
 // Runs the app's own Playwright command against the running app and keeps

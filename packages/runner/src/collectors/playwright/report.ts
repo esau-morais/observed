@@ -149,10 +149,7 @@ function annotations(
   }));
 }
 
-function results(
-  items: readonly (typeof resultSchema.Type)[],
-  resolve: (attachment: typeof attachmentSchema.Type) => AttachmentSource,
-): ReportTest['results'] {
+function results(items: readonly (typeof resultSchema.Type)[]): ReportTest['results'] {
   return items.map((item) => {
     const [first] = item.errors;
 
@@ -165,18 +162,15 @@ function results(
       attachments: item.attachments.map((attachment) => ({
         name: attachment.name,
         contentType: attachment.contentType,
-        source: resolve(attachment),
+        source: source(attachment),
       })),
     };
   });
 }
 
-function source(
-  attachment: typeof attachmentSchema.Type,
-  resolve: (file: string) => string,
-): AttachmentSource {
+function source(attachment: typeof attachmentSchema.Type): AttachmentSource {
   if (attachment.path !== undefined) {
-    return { kind: 'file', path: resolve(attachment.path) };
+    return { kind: 'file', path: attachment.path };
   }
 
   return attachment.body === undefined ? { kind: 'missing' } : { kind: 'inline' };
@@ -214,7 +208,7 @@ export const parseJsonReport = Effect.fnUntraced(function* (input: string) {
           outcome: item.status,
           expectedStatus: item.expectedStatus,
           annotations: annotations(item.annotations),
-          results: results(item.results, (attachment) => source(attachment, (file) => file)),
+          results: results(item.results),
         });
       }
     }

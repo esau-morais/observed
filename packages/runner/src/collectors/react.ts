@@ -186,13 +186,19 @@ const startFailures = {
   active: 'A React recording was already active in the page',
 } as const;
 
-const evaluate = <S extends Schema.Top & { readonly DecodingServices: never }>(
-  page: { evaluate: <R>(script: string) => Promise<R> },
-  script: string,
-  schema: S,
-  what: string,
-  save?: (text: string) => Effect.Effect<void>,
-) =>
+const evaluate = <S extends Schema.Top & { readonly DecodingServices: never }>({
+  page,
+  script,
+  schema,
+  what,
+  save,
+}: {
+  page: { evaluate: <R>(script: string) => Promise<R> };
+  script: string;
+  schema: S;
+  what: string;
+  save?: (text: string) => Effect.Effect<void>;
+}) =>
   Effect.gen(function* () {
     const text = yield* browserCall(what, () =>
       page.evaluate<string>(`Promise.resolve(${script}).then((value) => JSON.stringify(value))`),
@@ -235,7 +241,12 @@ export const collectReact = Effect.fnUntraced(function* (options: {
   yield* session.open();
   yield* session.runAll('Ready step', recipe.ready);
 
-  const started = yield* evaluate(page, startRecorder, startSchema, 'Starting the React recorder');
+  const started = yield* evaluate({
+    page,
+    script: startRecorder,
+    schema: startSchema,
+    what: 'Starting the React recorder',
+  });
 
   if (!started.started) {
     return yield* fail(startFailures[started.reason]);
@@ -243,12 +254,12 @@ export const collectReact = Effect.fnUntraced(function* (options: {
 
   yield* session.runAll('Step', recipe.steps);
 
-  const settled = yield* evaluate(
+  const settled = yield* evaluate({
     page,
-    settleRecorder,
-    Schema.Struct({ settled: Schema.Boolean }),
-    'Waiting for React to settle',
-  );
+    script: settleRecorder,
+    schema: Schema.Struct({ settled: Schema.Boolean }),
+    what: 'Waiting for React to settle',
+  });
 
   if (!settled.settled) {
     return yield* fail(
@@ -256,13 +267,13 @@ export const collectReact = Effect.fnUntraced(function* (options: {
     );
   }
 
-  const recording = yield* evaluate(
+  const recording = yield* evaluate({
     page,
-    stopRecorder,
-    stopSchema,
-    'Reading the React recording',
-    options.save,
-  );
+    script: stopRecorder,
+    schema: stopSchema,
+    what: 'Reading the React recording',
+    save: options.save,
+  });
 
   if (!recording.active) {
     return yield* fail(

@@ -2,7 +2,6 @@ import {
   evidenceKinds,
   json,
   observationsSchema,
-  type CaptureArtifact,
   type Conditions,
   type EvidenceKind,
   type Recipe,
@@ -12,7 +11,13 @@ import path from 'node:path';
 import type { Browser } from 'playwright';
 import { collectAccessibility } from './collectors/accessibility';
 import { apiConditions, apiProducer, collectApi } from './collectors/api';
-import { BrowserFailure, EvidenceUnavailable, browserCall } from './collectors/define';
+import {
+  BrowserFailure,
+  EvidenceUnavailable,
+  browserCall,
+  type AddArtifact,
+  type NewArtifact,
+} from './collectors/define';
 import { browserErrorsValue, timelineValue, type JourneyLog } from './collectors/journey-log';
 import { collectPerformance, performanceConditions } from './collectors/performance';
 import { runPlaywright } from './collectors/playwright/command';
@@ -20,8 +25,6 @@ import { collectReact } from './collectors/react';
 import { collectText } from './collectors/text';
 import { conceal, redact, redactText } from './redact';
 import { openSession } from './session';
-
-export type NewArtifact = Omit<CaptureArtifact, 'sha256'>;
 
 export type PendingEvidence = (
   | {
@@ -75,7 +78,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
   collectorValues: ReadonlyMap<string, string>;
   workspace: string;
   timeoutMs: number;
-  addArtifact: (artifact: NewArtifact) => void;
+  addArtifact: AddArtifact;
   addEvidence: (entry: PendingEvidence) => void;
   inputsHash: string;
   dependenciesHash: string | null;
@@ -223,11 +226,11 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
 
   const pendingKinds = new Set(recipe.collectors.map((collector) => collector.kind));
 
-  const record = Effect.fnUntraced(function* <E, R>(
+  const record = Effect.fnUntraced(function* <A, E, R>(
     kind: EvidenceKind,
-    collected: Effect.Effect<unknown, EvidenceUnavailable | E, R>,
+    collected: Effect.Effect<A, EvidenceUnavailable | E, R>,
     conditions: Record<string, string | number | boolean | null> = {},
-    producer?: (value: unknown) => Producer,
+    producer?: (value: A | null) => Producer,
   ) {
     if (!pendingKinds.delete(kind)) {
       return;
@@ -530,12 +533,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
           addArtifact: options.addArtifact,
         }),
         {},
-        (value) => ({
-          name: 'Playwright',
-          version: Schema.is(evidenceKinds.playwright.value)(value)
-            ? (value.version ?? 'not recorded')
-            : 'not recorded',
-        }),
+        (value) => ({ name: 'Playwright', version: value?.version ?? 'not recorded' }),
       );
     }
   }

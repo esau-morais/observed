@@ -1,6 +1,6 @@
 import { Option, Schema } from 'effect';
 import type { PlaywrightAttachment } from '@observed/judge';
-import { readZip, ZipError } from './zip';
+import { maxZipEntryBytes, readZip, ZipError } from './zip';
 
 type Trace = NonNullable<PlaywrightAttachment['trace']>;
 
@@ -27,15 +27,13 @@ const decodeContext = Schema.decodeUnknownOption(contextOptions);
 // context-options event. test.trace belongs to the test runner.
 const contextTrace = /^[0-9]+-trace\.trace$/;
 
-const maxTraceEntry = 256 * 1024 * 1024;
-
 // Summarizes a trace zip so the report can say what it recorded without
 // opening it. Viewing the trace is left to Playwright's own viewer.
 export function summarizeTrace(bytes: Uint8Array): Trace {
   let entries;
 
   try {
-    entries = readZip(bytes, maxTraceEntry);
+    entries = readZip(bytes, maxZipEntryBytes);
   } catch (cause) {
     return unreadable(cause);
   }
