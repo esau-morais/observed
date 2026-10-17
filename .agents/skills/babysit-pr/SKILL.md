@@ -50,12 +50,16 @@ sessions could both edit, such as a CLI entry point, a package index, or
    findings and ask which new finding repeats an earlier kind. If agents are
    unavailable, perform each review directly and disclose that limit. Model
    review is not runtime verification.
-4. Fix actionable findings and run applicable checks from `package.json`. Commit
-   the fixes, pin the new head, and send the fix delta (`OLD_HEAD..NEW_HEAD`)
-   and the full `BASE..NEW_HEAD` diff to the same reviewers again. The
-   author's re-read is not a review. Reuse successful checks only while their
-   inputs and relevant environment remain unchanged. Before pushing a fix to a
-   claim, status, or rule, search every doc that restates it and fix each copy.
+4. Fix actionable findings and decline optional ones, such as wording
+   preferences, with a one-line reason. Run applicable checks from
+   `package.json`, commit the fixes, and pin the new head. When the round had a
+   blocking finding, send the fix delta (`OLD_HEAD..NEW_HEAD`) and the full
+   `BASE..NEW_HEAD` diff to the reviewers whose findings it fixes; the author's
+   re-read is not a review. A round with no blocking finding is the last one:
+   its fixes need passing checks, not another round. Reuse successful checks
+   only while their inputs and relevant environment remain unchanged. Before
+   pushing a fix to a claim, status, or rule, search every doc that restates it
+   and fix each copy.
    When two rounds find the same kind of problem, such as a parser missing
    another input, fix their shared cause with the smallest change that covers it
    and add one test that iterates every input of that type, such as each diagram
@@ -130,11 +134,12 @@ instead of repeating failed calls.
 Watch pending checks with `gh pr checks --watch` as a background command with a
 timeout, then fetch review state again. That command does not watch reviews.
 Wait for child reviews the same way, or end the turn and let their completion
-resume it. Before any wait, commit work in progress on the implementation branch
-and record where it stands outside `/tmp`, which a reboot clears. During an
-active review session, start an actual bounded watcher for new or edited
-comments, reviews, thread state, and head changes. State its interval and
-duration. Handle events and resume the watch while the authorized session
+resume it. Read a child's current status before acting on or reporting it; a
+completion notice can arrive late or name the wrong outcome. Before any wait,
+commit work in progress on the implementation branch and record where it stands
+outside `/tmp`, which a reboot clears. During an active review session, start
+an actual bounded watcher for new or edited comments, reviews, thread state, and
+head changes. State its interval and duration. Handle events and resume the watch while the authorized session
 remains active. Do not hand off after one quiet fetch. If the watch expires,
 access fails, or the user pauses work, report that it stopped. No completed
 agent or skill keeps watching on its own.
