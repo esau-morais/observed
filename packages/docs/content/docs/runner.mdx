@@ -43,7 +43,7 @@ Coverage isn't collected yet. It comes back with change scope, which is the part
 
 The demo app, request lab, has two journeys. One clicks **Load items** and checks that it sends one request; the other checks the heading. The candidate sends two requests per click. A run captures both journeys on both revisions, so four captures, and finds the regression.
 
-Measured with `bun scripts/measure-request-lab.ts 5` on Bun 1.4.2, Linux, an AMD Ryzen 5 7600 with 32 GB of memory. Each value is the median of five runs, with dependencies in Bun's cache. The whole command includes writing the record to `refs/observed/evidence`.
+Measured with `bun scripts/measure-request-lab.ts 5` on Bun 1.4.2, Linux, an AMD Ryzen 5 7600 with 32 GB of memory. Each value is the median of five runs, with dependencies in Bun's cache.
 
 | Phase                                | Time   |
 | ------------------------------------ | ------ |
@@ -53,7 +53,7 @@ Measured with `bun scripts/measure-request-lab.ts 5` on Bun 1.4.2, Linux, an AMD
 | Judge                                | 0.17 s |
 | Whole command, from start to exit    | 5.06 s |
 
-The phases add up to less than the whole command. The rest is starting Bun, reading both `observed.json` files through Git, and writing the record.
+The phases add up to less than the whole command, which also includes starting Bun, reading both `observed.json` files through Git, and writing the record to `refs/observed/evidence`.
 
 On GitHub's `ubuntu-24.04` runner the whole command takes 6.93 s at the median of five runs, and 8.69 s on the first run, before Bun's cache holds the demo app's dependencies.
 

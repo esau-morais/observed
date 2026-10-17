@@ -60,7 +60,7 @@ const run = Command.make(
       process.exitCode = outcome.exitCode;
 
       if (candidate === null) {
-        yield* Console.log(`No record: the working tree is not a commit.`);
+        yield* Console.log('No record: the working tree is not a commit.');
         return;
       }
 

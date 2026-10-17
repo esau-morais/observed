@@ -132,7 +132,7 @@ for (let run = 1; run <= runs; run += 1) {
       !/failed +One request per load action · base 1 · candidate 2/.test(printed.stdout)
     ) {
       problems.push(
-        `receipt after run 1: exit ${printed.exitCode}\n${printed.stdout}${printed.stderr}`,
+        `receipt after run 1: exit ${printed.exitCode}\n${printed.stdout}\n${printed.stderr}`,
       );
     }
   }
