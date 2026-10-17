@@ -3,5 +3,6 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["scripts", "*.config.ts"]
+  "include": ["scripts", "*.config.ts"],
+  "exclude": ["**/fixtures"]
 }

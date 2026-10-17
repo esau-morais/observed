@@ -1,0 +1,71 @@
+---
+title: Gate corpus
+description: Pairs of revisions with known outcomes, and the checker that reads their raw files.
+---
+
+The gate corpus is a set of small apps, each committed as a base and a candidate whose outcome is known in advance. `observed run` captures and judges every pair. A separate checker then compares the result with the raw files Playwright and the app wrote. The checker imports no Observed code, so a judge or collector bug can't hide behind its own output.
+
+## Run it
+
+Install Chromium for Playwright once, then pick a new directory for every run:
+
+```sh
+bun install --frozen-lockfile
+bunx playwright install --with-deps chromium  # from packages/runner
+bun run gates /tmp/corpus-01
+bun run gates:missing /tmp/corpus-01/correct-change/run /tmp/missing-01
+bun run gates:faults /tmp/faults-01
+```
+
+To run one pair, add its ID, such as `bun run gates /tmp/corpus-02 request-fault`. To check a kept pair again without running Observed:
+
+```sh
+bun run gates:check /tmp/corpus-01/request-fault/run \
+  /tmp/corpus-01/request-fault/expected.json \
+  /tmp/corpus-01/request-fault/exit.json
+```
+
+For each pair the runner creates a Git repository, commits the base and the candidate, and then commits the expectation, before anything is captured. `required-hashes.json` pins the expectation, the checker and the tool's own commit. The pair directory keeps the commits, the command output, the exit code, every capture and the checker's result. `summary.json` lists the results, and the command exits 1 if any pair fails.
+
+## Pairs
+
+| Gate | Pair                                                                                                                                                             | What the checker reads                                                                                                               |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | `correct-change`                                                                                                                                                 | Exit 0, both checks passed, request count from the raw HAR, text from Playwright's raw read                                          |
+| 2    | `request-fault`, `text-fault`                                                                                                                                    | Exit 2, the regression, and each measurement against the raw HAR or text                                                             |
+| 2    | `performance-fault`                                                                                                                                              | Every raw timing reading, its median, and the 1000 ms budget                                                                         |
+| 2    | `api-status-fault`                                                                                                                                               | The status the app logged for the operation, 200 then 503                                                                            |
+| 2    | `browser-errors-fault`                                                                                                                                           | The raw page error, 0 then 1                                                                                                         |
+| 2    | `accessibility-fault`                                                                                                                                            | One new axe-core `label` violation on `#item-name`                                                                                   |
+| 2    | `react-renders-fault`                                                                                                                                            | App updates 1 then 2 in the raw recording, matched by a layout-effect counter on the page                                            |
+| 2    | `playwright-fault`                                                                                                                                               | The raw attempt status in Playwright's JSON report, passed then failed                                                               |
+| 2    | `observation-change`                                                                                                                                             | Different screenshot bytes and a final page tree matching the raw snapshot, with both checks still passing and exit 0                |
+| 4    | `startup-failure`                                                                                                                                                | A real base process that exits before it is ready: its log, its exit code, unknown base checks and exit 1                            |
+| 4    | `failed-base`, `deleted-artifact`, `old-schema`, `unsupported-evidence-version`, `stale-capture-and-window`, `unknown-collector-kind`, `stale-revision-identity` | The exact reason each copy of a real capture is unusable, unknown checks and exit 1. These run through `gates:missing`               |
+| 5    | `relaxed-check`, `removed-check`, `rewritten-journey`, `removed-journey`                                                                                         | The base's expectation still judges, the proposal is kept apart, and the raw HAR backs the counts                                    |
+| 6    | `intentional-copy`                                                                                                                                               | The checker decodes both screenshots itself; the change touches only the description line, and the reported pixels and regions agree |
+| 7    | `outside-source`                                                                                                                                                 | Only `README.md` changes, and both checks pass with exit 0                                                                           |
+
+Screenshots, timelines and coverage are observations: they never fail a check. Their pairs must keep the named checks passing and exit 0.
+
+## Seeded faults
+
+`gates:faults` needs a clean, committed checkout and GNU `timeout`. It first runs every pair, the missing-evidence probes and two availability probes on the unchanged commit. Then it clones that commit once per fault, changes exactly one expression in the judge or the runner, and runs the probe that must catch it:
+
+| Fault                       | Change                                                     | Caught by           |
+| --------------------------- | ---------------------------------------------------------- | ------------------- |
+| `passing-above-unavailable` | A passing journey hides another journey's unavailable base | Availability probes |
+| `unavailable-as-passing`    | An unavailable journey concludes as no regression          | Availability probes |
+| `regression-as-passed`      | A regression verdict becomes passed                        | `request-fault`     |
+| `collector-drops-requests`  | The runner records no requests in `observations.json`      | `request-fault`     |
+
+A fault counts as caught only when the checker reports exactly the failures listed for it in `fault-cases.ts`. A crash, an unreadable file or an extra failure does not count. `summary.json` says `complete: true` and `passed: true` only when every fault was caught.
+
+CI runs `gates:faults` in the Corpus workflow on pull requests that touch the judge, the runner, the CLI or the corpus, and on every push to main. It is not a required check.
+
+## Not covered
+
+- Change scope and the change map stay on the `legacy` branch until gap closing, so pairs no longer assert which changed lines ran. That also removes the coverage pair and the generated-journey pairs.
+- Pairs don't check the wording of `observed receipt`. The receipt has its own tests in the judge.
+- A pair that changes `source`, `setup` or `start` does not exist yet.
+- One fault per check kind is covered, not every option of every kind.
