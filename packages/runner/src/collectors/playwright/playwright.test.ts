@@ -172,6 +172,24 @@ test('rejects a trace zip with a corrupted entry instead of summarizing it', asy
   expect(() => readZip(bytes.subarray(0, bytes.length - 30), 1024)).toThrow(ZipError);
 });
 
+test('names the Playwright version from the trace when the report records none', async () => {
+  const { workspace, report } = await workspaceWithAttachments();
+  const parsed = await run(parseJsonReport(report));
+  const value = await run(
+    collectReport({
+      report: { ...parsed, version: null },
+      exitCode: 1,
+      root: workspace,
+      workspace,
+      directory: await temporary(),
+      concealed: [],
+      addArtifact: () => {},
+    }),
+  );
+
+  expect(value.version).toBe('1.58.0');
+});
+
 test('rejects a report that is not a Playwright report rather than importing nothing', async () => {
   expect(await runExit(parseJsonReport('{"suites": []}'))).toMatchObject({ _tag: 'Failure' });
 });

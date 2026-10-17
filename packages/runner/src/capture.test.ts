@@ -30,8 +30,6 @@ const recipe = Schema.decodeUnknownSync(recipeSchema)(
   }),
 );
 
-// CI commonly expands an unavailable secret to an empty string, which would
-// send a different request than the journey names.
 test('fails the capture when a collector variable is missing or empty', async () => {
   vi.stubEnv('API_TOKEN', '');
   vi.stubEnv('E2E_PASSWORD', undefined);

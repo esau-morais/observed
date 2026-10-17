@@ -456,14 +456,15 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
     text: json(shots),
   });
 
-  const recordCleanup = (id: string, file: string) => (contextClosed: boolean) =>
-    Effect.gen(function* () {
-      yield* fs.makeDirectory(path.dirname(path.join(directory, file)), { recursive: true });
-      yield* fs.writeFileString(path.join(directory, file), json({ contextClosed }), {
-        flag: 'wx',
-      });
-      options.addArtifact({ id, path: file, description: 'Owned browser context shutdown' });
-    }).pipe(Effect.orDie);
+  const recordCleanup = (id: string) => {
+    const file = `${id}.json`;
+    options.addArtifact({ id, path: file, description: 'Owned browser context shutdown' });
+
+    return (contextClosed: boolean) =>
+      fs
+        .writeFileString(path.join(directory, file), json({ contextClosed }), { flag: 'wx' })
+        .pipe(Effect.orDie);
+  };
 
   // These run after the recorded window, so nothing they send counts in the
   // journey's observations. The app's Playwright command runs last.
@@ -481,10 +482,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
             fillValues: options.fillValues,
             concealed,
             addArtifact: options.addArtifact,
-            onClose: recordCleanup(
-              'performance-browser-cleanup',
-              'performance/browser-cleanup.json',
-            ),
+            onClose: recordCleanup('performance-browser-cleanup'),
           }),
           performanceConditions(collector),
         );
@@ -504,7 +502,7 @@ export const captureBrowser = Effect.fn('captureBrowser')(function* (options: {
                 description: 'React recording from the page',
                 text,
               }).pipe(Effect.orDie),
-            onClose: recordCleanup('react-browser-cleanup', 'react-browser-cleanup.json'),
+            onClose: recordCleanup('react-browser-cleanup'),
           }),
           { devtoolsHook: 'minimal' },
         );
